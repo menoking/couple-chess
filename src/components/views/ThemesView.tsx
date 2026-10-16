@@ -2,6 +2,8 @@ import { Plus, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DEFAULT_THEMES } from '../../data/defaultThemes';
 import { Theme, ThemeAudience, ThemeMode } from '../../types';
+import { ThemeTags } from '../ThemeTags';
+import { themePriority } from '../../utils/themeTags';
 
 interface ThemesViewProps {
   themes: Theme[];
@@ -59,15 +61,21 @@ export function ThemesView({ themes, onCreateTheme, onEditTheme }: ThemesViewPro
   const filteredThemes = useMemo(() => {
     const normalizedKeyword = keyword.trim().toLowerCase();
 
-    return themes.filter(theme => {
+    return themes
+      .filter(theme => {
       const matchesKeyword =
         normalizedKeyword.length === 0 ||
         theme.name.toLowerCase().includes(normalizedKeyword) ||
         theme.desc.toLowerCase().includes(normalizedKeyword);
       const matchesAudience = audienceFilter === 'all' || theme.audience === audienceFilter;
 
-      return matchesKeyword && matchesAudience && matchesModeFilter(theme, modeFilter);
-    });
+        return matchesKeyword && matchesAudience && matchesModeFilter(theme, modeFilter);
+      })
+      .sort((a, b) => {
+        const pa = themePriority(a, themes.indexOf(a));
+        const pb = themePriority(b, themes.indexOf(b));
+        return pa.group - pb.group || pa.level - pb.level || pa.index - pb.index;
+      });
   }, [audienceFilter, keyword, modeFilter, themes]);
 
   const builtInThemes = filteredThemes.filter(theme => defaultThemeIds.has(theme.id));
@@ -80,8 +88,8 @@ export function ThemesView({ themes, onCreateTheme, onEditTheme }: ThemesViewPro
       className="ios-card p-4 border border-white/5 ios-btn cursor-pointer"
       onClick={() => onEditTheme(theme.id)}
     >
-      <div className="flex justify-between gap-4">
-        <div className="min-w-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <div className="text-white font-semibold truncate">{theme.name}</div>
           <div className="text-xs text-gray-500 mt-1 line-clamp-2">{theme.desc || '无描述'}</div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -95,8 +103,10 @@ export function ThemesView({ themes, onCreateTheme, onEditTheme }: ThemesViewPro
             ))}
           </div>
         </div>
-        <div className="h-7 shrink-0 bg-white/10 px-2 py-1 rounded text-[10px] text-gray-300">
-          {theme.tasks.length}卡
+        <div className="flex shrink-0 items-start gap-2">
+          <ThemeTags tags={theme.tags} />
+          <div className="h-7 shrink-0 bg-white/10 px-2 py-1 rounded text-[10px] text-gray-300">
+            {theme.tasks.length}�?          </div>
         </div>
       </div>
     </div>

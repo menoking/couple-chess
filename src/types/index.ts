@@ -41,6 +41,18 @@ export interface TaskCard {
   moveDelta: number;
 }
 
+export type ThemeTag =
+  | {
+      kind: 'special';
+      type: 'intensity';
+      label: string;
+      level: 1 | 2 | 3 | 4 | 5;
+    }
+  | {
+      kind: 'plain';
+      label: string;
+    };
+
 export interface Theme {
   id: string;
   name: string;
@@ -48,6 +60,7 @@ export interface Theme {
   audience: ThemeAudience;
   modes: ThemeMode[];
   tasks: TaskCard[];
+  tags: ThemeTag[];
 }
 
 export interface PathCoord {

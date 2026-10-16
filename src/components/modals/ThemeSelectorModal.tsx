@@ -1,6 +1,8 @@
 import { Theme } from '../../types';
 import { Check } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
+import { ThemeTags } from '../ThemeTags';
+import { themePriority } from '../../utils/themeTags';
 
 interface ThemeSelectorModalProps {
   isOpen: boolean;
@@ -44,6 +46,19 @@ export function ThemeSelectorModal({
     };
   }, [isOpen]);
 
+  const sortedThemes = useMemo(
+    () =>
+      themes
+        .map((theme, index) => ({ theme, priority: themePriority(theme, index) }))
+        .sort((a, b) =>
+          a.priority.group - b.priority.group ||
+          a.priority.level - b.priority.level ||
+          a.priority.index - b.priority.index
+        )
+        .map(item => item.theme),
+    [themes]
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -63,7 +78,7 @@ export function ThemeSelectorModal({
               当前没有可选主题，请到题库中新建或编辑主题的适用模式
             </div>
           )}
-          {themes.map(theme => (
+          {sortedThemes.map(theme => (
             <div
               key={theme.id}
               onClick={() => {
@@ -72,8 +87,8 @@ export function ThemeSelectorModal({
               }}
               className="p-4 bg-[#2C2C2E] rounded-xl active:bg-[#3A3A3C] transition-colors cursor-pointer border border-white/5"
             >
-              <div className="flex justify-between gap-4">
-                <div className="min-w-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
                     <span className="text-white font-medium truncate">{theme.name}</span>
                     <span className="shrink-0 text-[10px] text-gray-500">{theme.tasks.length}卡</span>
@@ -90,9 +105,12 @@ export function ThemeSelectorModal({
                     ))}
                   </div>
                 </div>
-                {selectedThemeId === theme.id && (
-                  <Check className="text-[#0A84FF] shrink-0 mt-0.5" size={20} />
-                )}
+                <div className="flex shrink-0 items-start gap-2">
+                  <ThemeTags tags={theme.tags} />
+                  {selectedThemeId === theme.id && (
+                    <Check className="text-[#0A84FF] shrink-0 mt-0.5" size={20} />
+                  )}
+                </div>
               </div>
             </div>
           ))}

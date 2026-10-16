@@ -11,6 +11,7 @@ import {
   TaskEventData,
   TaskExecutor,
   Theme,
+  ThemeTag,
   ThemeMode
 } from '../types';
 import { loadFromStorage, saveToStorage } from '../utils/localStorage';
@@ -122,6 +123,18 @@ function normalizeTask(input: unknown): TaskCard | null {
   };
 }
 
+function normalizeThemeTag(input: unknown): ThemeTag | null {
+  if (!isRecord(input) || typeof input.label !== 'string' || !input.label.trim()) return null;
+  const label = input.label.trim();
+  if (input.kind === 'special' && input.type === 'intensity') {
+    const level = Number(input.level);
+    if (level >= 1 && level <= 5 && Number.isInteger(level)) {
+      return { kind: 'special', type: 'intensity', label, level: level as 1 | 2 | 3 | 4 | 5 };
+    }
+  }
+  return { kind: 'plain', label };
+}
+
 function getTaskKey(task: TaskCard) {
   return `${task.text}__${task.executor}__${task.moveDelta}`;
 }
@@ -228,6 +241,10 @@ function normalizeThemes(input: unknown): Theme[] {
       const modes = Array.isArray(modesValue)
         ? modesValue.filter((mode): mode is ThemeMode => THEME_MODES.has(mode as ThemeMode))
         : [];
+      const tagsValue = record.tags;
+      const tags = Array.isArray(tagsValue)
+        ? tagsValue.map(normalizeThemeTag).filter((tag): tag is ThemeTag => !!tag)
+        : [];
 
       return {
         id,
@@ -238,7 +255,8 @@ function normalizeThemes(input: unknown): Theme[] {
             ? audienceValue
             : defaultTheme?.audience ?? 'common',
         modes: modes.length > 0 ? modes : defaultTheme?.modes ?? DEFAULT_THEME_MODES,
-        tasks
+        tasks,
+        tags: tags.length > 0 ? tags : defaultTheme?.tags ?? [{ kind: 'plain', label: '自定义' }]
       } satisfies Theme;
     })
     .reduce<Theme[]>((acc, theme) => {
@@ -544,7 +562,8 @@ export function useGameState() {
             desc,
             audience: input.audience,
             modes: input.modes.length > 0 ? input.modes : DEFAULT_THEME_MODES,
-            tasks: []
+            tasks: [],
+            tags: [{ kind: 'plain', label: '自定义' }]
           }
         ]
       };

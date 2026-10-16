@@ -1,4 +1,15 @@
-import { Theme, ThemeMode } from '../types';
+import { Theme, ThemeMode, ThemeTag } from '../types';
+import { REVIEW_THEME_DATA } from './reviewThemes';
+
+const intensityLabels = ['低尺度', '轻度', '中尺度', '高尺度', '大尺度'] as const;
+const intensityTag = (level: 1 | 2 | 3 | 4 | 5): ThemeTag => ({
+  kind: 'special',
+  type: 'intensity',
+  label: intensityLabels[level - 1],
+  level
+});
+
+const plainTag = (label: string): ThemeTag => ({ kind: 'plain', label });
 
 const DEFAULT_THEME_MODES: ThemeMode[] = ['board', 'card', 'mineTheme'];
 
@@ -9,6 +20,7 @@ const MINE_MODE_THEMES: Theme[] = [
     desc: '扫雷模式专用真心话题库',
     audience: 'common',
     modes: ['mineTruth'],
+    tags: [intensityTag(1)],
     tasks: [
       { text: '说出最近一次因为对方心动的具体瞬间', executor: 'both', moveDelta: 0 },
       { text: '回答：你最希望对方今晚主动做的一件小事是什么？', executor: 'both', moveDelta: 0 },
@@ -28,6 +40,7 @@ const MINE_MODE_THEMES: Theme[] = [
     desc: '扫雷模式专用大冒险题库',
     audience: 'common',
     modes: ['mineDare'],
+    tags: [intensityTag(2)],
     tasks: [
       { text: '看着对方眼睛，用认真语气夸对方三个优点', executor: 'both', moveDelta: 0 },
       { text: '给对方一个不少于20秒的拥抱', executor: 'both', moveDelta: 0 },
@@ -50,6 +63,7 @@ const DICE_MODE_THEMES: Theme[] = [
     desc: '亲密骰子模式专用动作词库',
     audience: 'common',
     modes: ['diceAction'],
+    tags: [intensityTag(2)],
     tasks: [
       { text: '按摩', executor: 'both', moveDelta: 0 },
       { text: '轻抚', executor: 'both', moveDelta: 0 },
@@ -67,6 +81,7 @@ const DICE_MODE_THEMES: Theme[] = [
     desc: '亲密骰子模式专用部位词库',
     audience: 'common',
     modes: ['diceBody'],
+    tags: [intensityTag(2)],
     tasks: [
       { text: '耳朵', executor: 'both', moveDelta: 0 },
       { text: '肚脐', executor: 'both', moveDelta: 0 },
@@ -84,6 +99,7 @@ const DICE_MODE_THEMES: Theme[] = [
     desc: '亲密骰子模式羞羞专用部位词库',
     audience: 'common',
     modes: ['diceBody'],
+    tags: [intensityTag(4)],
     tasks: [
       { text: '阴茎/阴道', executor: 'both', moveDelta: 0 },
       { text: '脖子', executor: 'both', moveDelta: 0 },
@@ -94,7 +110,7 @@ const DICE_MODE_THEMES: Theme[] = [
   }
 ];
 
-const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes'> & { modes?: ThemeMode[] }> = [
+const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes' | 'tags'> & { modes?: ThemeMode[]; tags?: ThemeTag[] }> = [
   {
     "id": "sweet",
     "name": "甜蜜日常",
@@ -7146,12 +7162,52 @@ const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes'> & { modes?: ThemeMode[] }>
   }
 ];
 
-export const DEFAULT_THEMES: Theme[] = [
+const DEFAULT_INTENSITY_LEVELS: Record<string, 1 | 2 | 3 | 4 | 5> = {
+  sweet: 1,
+  love: 2,
+  couple: 3,
+  intimate: 4,
+  advanced: 5,
+  'qlyx2-1': 1,
+  'qlyx2-2': 1,
+  'qlyx2-3': 3,
+  'qlyx2-4': 4,
+  'qlyx2-5': 3,
+  'qlyx2-6': 4,
+  'qlyx2-7': 5,
+  'qlyx2-8': 5,
+  'qlyx2-9': 4,
+  'qlyx2-10': 1,
+  'qlyx2-11': 4,
+  'qlyx2-12': 2,
+  'qlyx2-13': 3
+};
+
+const BUILT_IN_THEMES: Theme[] = [
   ...MINE_MODE_THEMES,
   ...DICE_MODE_THEMES,
   ...DEFAULT_THEME_SEEDS.map(theme => ({
     ...theme,
-    modes: theme.modes || DEFAULT_THEME_MODES
+    modes: theme.modes || DEFAULT_THEME_MODES,
+    tags: theme.tags || [intensityTag(DEFAULT_INTENSITY_LEVELS[theme.id] || 1)]
   }))
 ];
+
+const REVIEW_THEME_TAGS: Record<string, string[]> = {
+  mycards_sensual_opening_v2: ['开场'],
+  mycards_foreplay_ladder_v2: ['前戏'],
+  mycards_edge_control_v2: ['边缘'],
+  mycards_private_exploration_v2: ['探索'],
+  mycards_roleplay_commands_v2: ['角色扮演'],
+  mycards_sensory_blindspot_v2: ['感官'],
+  mycards_late_night_truth_v2: ['真心话'],
+  mycards_spicy_dare_v2: ['挑战']
+};
+
+const REVIEW_THEMES: Theme[] = REVIEW_THEME_DATA.map(theme => ({
+  ...theme,
+  tags: [plainTag('混合'), ...(REVIEW_THEME_TAGS[theme.id] || []).map(plainTag)]
+})) as Theme[];
+
+export const DEFAULT_THEMES: Theme[] = [...REVIEW_THEMES, ...BUILT_IN_THEMES];
 
