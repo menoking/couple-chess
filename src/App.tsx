@@ -15,6 +15,7 @@ import { MemoryModeView } from './components/views/MemoryModeView';
 import { BlindBoxModeView } from './components/views/BlindBoxModeView';
 import { TimedModeView } from './components/views/TimedModeView';
 import { StoryModeView } from './components/views/StoryModeView';
+import { RhythmModeView } from './components/views/RhythmModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -461,6 +462,13 @@ function App() {
 
       {state.view === 'story' && (
         <StoryModeView
+          players={state.players}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'rhythm' && (
+        <RhythmModeView
           players={state.players}
           onBack={handleBackFromGame}
         />

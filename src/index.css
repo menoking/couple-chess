@@ -386,6 +386,29 @@ body {
   transform: rotateY(180deg);
 }
 
+@keyframes beat-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  10% {
+    transform: scale(1.14);
+    opacity: 0.35;
+  }
+  35% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+}
+
+.beat-pulse-ring {
+  animation: beat-pulse 600ms linear infinite;
+}
+
 @keyframes task-card-pop {
   0% {
     opacity: 0;
