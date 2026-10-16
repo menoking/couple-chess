@@ -12,6 +12,7 @@ import { RouletteModeView } from './components/views/RouletteModeView';
 import { BingoModeView } from './components/views/BingoModeView';
 import { QuizModeView } from './components/views/QuizModeView';
 import { MemoryModeView } from './components/views/MemoryModeView';
+import { BlindBoxModeView } from './components/views/BlindBoxModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -166,6 +167,14 @@ function App() {
   const handlePoseDone = () => {
     setPoseImageSrc(null);
     endTurn();
+  };
+
+  const handleSwapThemes = () => {
+    const first = state.players[0];
+    const second = state.players[1];
+    if (!first || !second) return;
+    if (first.themeId) selectTheme(second.id, first.themeId);
+    if (second.themeId) selectTheme(first.id, second.themeId);
   };
 
   const handleWin = (id: number) => {
@@ -425,6 +434,17 @@ function App() {
           themes={state.themes}
           currentTurn={state.turn}
           onEndTurn={endTurn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'blindbox' && (
+        <BlindBoxModeView
+          players={state.players}
+          themes={state.themes}
+          currentTurn={state.turn}
+          onEndTurn={endTurn}
+          onSwapThemes={handleSwapThemes}
           onBack={handleBackFromGame}
         />
       )}
