@@ -10,6 +10,7 @@ import { PoseModeView } from './components/views/PoseModeView';
 import { DiceModeView } from './components/views/DiceModeView';
 import { RouletteModeView } from './components/views/RouletteModeView';
 import { BingoModeView } from './components/views/BingoModeView';
+import { QuizModeView } from './components/views/QuizModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -406,6 +407,13 @@ function App() {
           onCompleteCell={completeBingoCell}
           onRestart={restartBingo}
           onEndTurn={endTurn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'quiz' && (
+        <QuizModeView
+          players={state.players}
           onBack={handleBackFromGame}
         />
       )}
