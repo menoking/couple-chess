@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Layers3, User, UserRound } from 'lucide-react';
+import { ArrowLeft, Layers3, User, UserRound, X } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 
 interface CardModeViewProps {
@@ -170,17 +170,31 @@ export function CardModeView({
                   return (
                     <div
                       key={`${player.id}-${index}`}
-                      title={task.text}
-                      className={`relative min-h-12 overflow-hidden rounded-xl border p-2 text-[10px] leading-tight transition-all duration-500 ${
+                      aria-label={isDrawn ? '已抽取卡片' : '未抽取卡片'}
+                      className={`relative aspect-[4/5] overflow-hidden rounded-xl border transition-all duration-500 ${
                         isDrawn
-                          ? 'border-white/5 bg-black/40 text-gray-700 opacity-30 grayscale'
+                          ? 'border-white/5 bg-black/40 opacity-25 grayscale'
                           : player.id === 0
-                            ? 'border-[#0A84FF]/30 bg-[#0A84FF]/10 text-blue-100'
-                            : 'border-[#FF375F]/30 bg-[#FF375F]/10 text-pink-100'
+                            ? 'border-[#0A84FF]/40 bg-[#0A84FF]/15'
+                            : 'border-[#FF375F]/40 bg-[#FF375F]/15'
                       }`}
                     >
-                      <span className="line-clamp-3">{task.text}</span>
-                      {isDrawn && <span className="absolute inset-0 flex items-center justify-center text-lg text-gray-600">×</span>}
+                      <div
+                        className={`absolute inset-1 rounded-lg border ${
+                          player.id === 0 ? 'border-[#0A84FF]/30' : 'border-[#FF375F]/30'
+                        }`}
+                        style={{
+                          backgroundImage:
+                            player.id === 0
+                              ? 'repeating-linear-gradient(135deg, rgba(10,132,255,.16) 0 2px, transparent 2px 7px)'
+                              : 'repeating-linear-gradient(135deg, rgba(255,55,95,.16) 0 2px, transparent 2px 7px)'
+                        }}
+                      />
+                      {isDrawn && (
+                        <span className="absolute inset-0 flex items-center justify-center text-gray-500">
+                          <X size={18} strokeWidth={3} />
+                        </span>
+                      )}
                     </div>
                   );
                 })
