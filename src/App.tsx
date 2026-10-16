@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Github } from 'lucide-react';
 import { useGameState } from './hooks/useGameState';
-import { MineTaskChoice, TaskEventData, ThemeMode } from './types';
+import { GameMode, MineTaskChoice, TaskEventData, ThemeMode } from './types';
 import { HomeView } from './components/views/HomeView';
 import { GameView } from './components/views/GameView';
 import { CardModeView } from './components/views/CardModeView';
@@ -20,6 +20,35 @@ import { BottomNav } from './components/BottomNav';
 import { ThemeCreateModal } from './components/modals/ThemeCreateModal';
 import { ThemeEditorModal } from './components/modals/ThemeEditorModal';
 import { AiImportModal } from './components/modals/AiImportModal';
+
+/** 需要双方选择“抽卡”类主题的玩法。 */
+const CARD_THEME_MODES = new Set<GameMode>([
+  'card',
+  'roulette',
+  'bingo',
+  'memory',
+  'blindbox',
+  'timed',
+  'events',
+  'survival',
+  'territory',
+  'auction'
+]);
+
+const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
+  board: 'board',
+  card: 'card',
+  roulette: 'card',
+  bingo: 'card',
+  memory: 'card',
+  blindbox: 'card',
+  timed: 'card',
+  events: 'card',
+  survival: 'card',
+  territory: 'card',
+  auction: 'card',
+  mine: 'mineTheme'
+};
 
 function App() {
   const {
@@ -72,15 +101,7 @@ function App() {
       ? selectedPlayerId === 0
         ? 'diceAction'
         : 'diceBody'
-      : state.gameMode === 'card'
-        ? 'card'
-        : state.gameMode === 'roulette'
-          ? 'card'
-        : state.gameMode === 'bingo'
-          ? 'card'
-        : state.gameMode === 'mine'
-          ? 'mineTheme'
-          : 'board';
+      : MODE_THEME_MODE[state.gameMode] ?? 'board';
   const selectableThemes = state.themes.filter(
     t =>
       (state.gameMode === 'dice' || t.audience === 'common' || t.audience === selectedPlayer.role) &&
@@ -98,15 +119,11 @@ function App() {
         alert('请先选择支持“上骰子动作”和“下骰子部位”的主题包');
         return;
       }
-      if (state.gameMode === 'roulette') {
+      if (CARD_THEME_MODES.has(state.gameMode)) {
         alert('请先为双方选择支持抽卡的任务包');
         return;
       }
-      if (state.gameMode === 'bingo') {
-        alert('请先为双方选择支持抽卡的任务包');
-        return;
-      }
-      alert(state.gameMode === 'card' ? '请先为双方选择支持抽卡的任务包' : '请先为双方选择支持飞行棋的任务包');
+      alert('请先为双方选择支持飞行棋的任务包');
     }
   };
 

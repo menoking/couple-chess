@@ -2,7 +2,45 @@ export type TileType = 'blank' | 'lucky' | 'trap';
 
 export type PlayerRole = 'male' | 'female';
 
-export type GameMode = 'board' | 'card' | 'pose' | 'mine' | 'dice' | 'roulette' | 'bingo';
+export type GameMode =
+  | 'board'
+  | 'card'
+  | 'pose'
+  | 'mine'
+  | 'dice'
+  | 'roulette'
+  | 'bingo'
+  | 'quiz'
+  | 'memory'
+  | 'blindbox'
+  | 'timed'
+  | 'story'
+  | 'rhythm'
+  | 'events'
+  | 'survival'
+  | 'territory'
+  | 'auction';
+
+export type GameView =
+  | 'home'
+  | 'game'
+  | 'card'
+  | 'pose'
+  | 'mine'
+  | 'dice'
+  | 'roulette'
+  | 'bingo'
+  | 'quiz'
+  | 'memory'
+  | 'blindbox'
+  | 'timed'
+  | 'story'
+  | 'rhythm'
+  | 'events'
+  | 'survival'
+  | 'territory'
+  | 'auction'
+  | 'themes';
 
 export interface BingoCell {
   task: TaskCard;
@@ -93,7 +131,7 @@ export interface PathCoord {
 }
 
 export interface GameState {
-  view: 'home' | 'game' | 'card' | 'pose' | 'mine' | 'dice' | 'roulette' | 'bingo' | 'themes';
+  view: GameView;
   gameMode: GameMode;
   turn: number;
   players: Player[];

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { GameMode, Player, Theme } from '../../types';
-import { Bomb, ChevronLeft, ChevronRight, Dice5, Dices, Disc3, Grid3x3, ImageIcon, Layers3, User, UserRound } from 'lucide-react';
+import { Bomb, BookOpen, Brain, ChevronLeft, ChevronRight, Dice5, Dices, Disc3, Flag, Gift, Gavel, Grid3x3, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, Music, Shuffle, Timer, User, UserRound } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -54,12 +54,112 @@ const gameModes: Array<{
     icon: Grid3x3
   },
   {
+    id: 'quiz',
+    title: '默契问答',
+    desc: '双方分别作答后同时揭晓，比谁更懂对方',
+    icon: MessageCircleQuestion
+  },
+  {
+    id: 'memory',
+    title: '记忆翻牌',
+    desc: '翻开配对任务卡，完成匹配的互动任务',
+    icon: Brain
+  },
+  {
+    id: 'blindbox',
+    title: '盲盒抽奖',
+    desc: '抽取奖励、任务、免罚、双倍等特殊卡片',
+    icon: Gift
+  },
+  {
+    id: 'timed',
+    title: '限时挑战',
+    desc: '倒计时内连续完成任务，按数量和难度计分',
+    icon: Timer
+  },
+  {
+    id: 'story',
+    title: '故事接龙',
+    desc: '双方轮流抽取情节卡，共同推进情侣故事',
+    icon: BookOpen
+  },
+  {
+    id: 'rhythm',
+    title: '节奏挑战',
+    desc: '跟随节拍完成互动，失误后执行惩罚',
+    icon: Music
+  },
+  {
+    id: 'events',
+    title: '随机事件',
+    desc: '抽卡过程中触发交换身份、任务升级等事件',
+    icon: Shuffle
+  },
+  {
+    id: 'survival',
+    title: '合作生存',
+    desc: '共享生命值，连续完成任务抵御事件',
+    icon: HeartPulse
+  },
+  {
+    id: 'territory',
+    title: '领地争夺',
+    desc: '占领棋盘区域，完成任务获得攻城机会',
+    icon: Flag
+  },
+  {
+    id: 'auction',
+    title: '拍卖竞价',
+    desc: '双方竞价争夺任务，出价越高奖励越丰厚',
+    icon: Gavel
+  },
+  {
     id: 'pose',
     title: '姿势模式',
     desc: '轮流抽取姿势图片',
     icon: ImageIcon
   }
 ];
+
+const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
+  card: '开始抽卡',
+  pose: '开始抽姿势',
+  roulette: '开始转盘',
+  bingo: '开始 Bingo',
+  dice: '开始骰子',
+  mine: '开始扫雷',
+  quiz: '开始问答',
+  memory: '开始翻牌',
+  blindbox: '开始开盲盒',
+  timed: '开始挑战',
+  story: '开始接龙',
+  rhythm: '开始挑战',
+  events: '开始抽卡',
+  survival: '开始生存',
+  territory: '开始争夺',
+  auction: '开始拍卖'
+};
+
+const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
+  dice: '选择上骰子动作主题和下骰子部位主题',
+  card: '选择游戏模式和双方抽卡题库',
+  roulette: '选择游戏模式和双方抽卡题库',
+  bingo: '选择游戏模式和双方抽卡题库',
+  memory: '选择游戏模式和双方抽卡题库',
+  blindbox: '选择游戏模式和双方抽卡题库',
+  timed: '选择游戏模式和双方抽卡题库',
+  events: '选择游戏模式和双方抽卡题库',
+  survival: '选择游戏模式和双方抽卡题库',
+  territory: '选择游戏模式和双方抽卡题库',
+  auction: '选择游戏模式和双方抽卡题库',
+  mine: '选择游戏模式和双方扫雷主题题库',
+  quiz: '无需题库，直接开始默契问答',
+  story: '无需题库，直接开始故事接龙',
+  rhythm: '无需题库，直接开始节奏挑战'
+};
+
+/** 自备内容、不需要选择主题的玩法。 */
+const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'rhythm']);
 
 const MODE_SCROLL_HINT_THRESHOLD = 24;
 
@@ -71,15 +171,8 @@ export function HomeView({
   onSelectTheme,
   onStartGame
 }: HomeViewProps) {
-  const shouldShowThemeSelectors = gameMode !== 'pose';
-  const themeHint =
-    gameMode === 'dice'
-      ? '选择上骰子动作主题和下骰子部位主题'
-      : gameMode === 'card' || gameMode === 'roulette' || gameMode === 'bingo'
-      ? '选择游戏模式和双方抽卡题库'
-      : gameMode === 'mine'
-        ? '选择游戏模式和双方扫雷主题题库'
-        : '选择游戏模式和双方任务主题包';
+  const shouldShowThemeSelectors = !THEME_FREE_MODES.has(gameMode);
+  const themeHint = MODE_THEME_HINTS[gameMode] ?? '选择游戏模式和双方任务主题包';
   const modeScrollerRef = useRef<HTMLDivElement>(null);
   const dragStartXRef = useRef(0);
   const dragStartScrollLeftRef = useRef(0);
@@ -337,19 +430,7 @@ export function HomeView({
           onClick={onStartGame}
         >
           <span>
-            {gameMode === 'card'
-              ? '开始抽卡'
-              : gameMode === 'pose'
-                ? '开始抽姿势'
-                : gameMode === 'roulette'
-                  ? '开始转盘'
-                : gameMode === 'bingo'
-                  ? '开始 Bingo'
-                : gameMode === 'dice'
-                  ? '开始骰子'
-                  : gameMode === 'mine'
-                    ? '开始扫雷'
-                    : '开始游戏'}
+            {MODE_START_LABELS[gameMode] ?? '开始游戏'}
           </span>
           <ChevronRight size={20} />
         </button>

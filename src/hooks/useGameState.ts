@@ -6,6 +6,7 @@ import {
   BingoLine,
   GameMode,
   GameState,
+  GameView,
   MineRevealResult,
   MineTaskChoice,
   MineTile,
@@ -42,6 +43,92 @@ const THEME_MODES = new Set<ThemeMode>([
   'diceBody'
 ]);
 const DEFAULT_THEME_MODES: ThemeMode[] = ['board', 'card', 'mineTheme'];
+
+const GAME_MODE_VALUES: GameMode[] = [
+  'board',
+  'card',
+  'pose',
+  'mine',
+  'dice',
+  'roulette',
+  'bingo',
+  'quiz',
+  'memory',
+  'blindbox',
+  'timed',
+  'story',
+  'rhythm',
+  'events',
+  'survival',
+  'territory',
+  'auction'
+];
+
+const VIEW_VALUES: GameView[] = [
+  'home',
+  'game',
+  'card',
+  'pose',
+  'mine',
+  'dice',
+  'roulette',
+  'bingo',
+  'quiz',
+  'memory',
+  'blindbox',
+  'timed',
+  'story',
+  'rhythm',
+  'events',
+  'survival',
+  'territory',
+  'auction',
+  'themes'
+];
+
+const MODE_VIEW: Record<GameMode, GameView> = {
+  board: 'game',
+  card: 'card',
+  pose: 'pose',
+  mine: 'mine',
+  dice: 'dice',
+  roulette: 'roulette',
+  bingo: 'bingo',
+  quiz: 'quiz',
+  memory: 'memory',
+  blindbox: 'blindbox',
+  timed: 'timed',
+  story: 'story',
+  rhythm: 'rhythm',
+  events: 'events',
+  survival: 'survival',
+  territory: 'territory',
+  auction: 'auction'
+};
+
+const VIEW_MODE: Record<string, GameMode> = {
+  home: 'board',
+  game: 'board',
+  card: 'card',
+  pose: 'pose',
+  mine: 'mine',
+  dice: 'dice',
+  roulette: 'roulette',
+  bingo: 'bingo',
+  quiz: 'quiz',
+  memory: 'memory',
+  blindbox: 'blindbox',
+  timed: 'timed',
+  story: 'story',
+  rhythm: 'rhythm',
+  events: 'events',
+  survival: 'survival',
+  territory: 'territory',
+  auction: 'auction'
+};
+
+/** 自备内容、不需要选择主题的玩法。 */
+const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'rhythm']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -358,35 +445,20 @@ function normalizeGameState(saved: unknown): GameState | null {
   });
 
   const bingoBoard = normalizeBingoBoard(s.bingoBoard);
-  const normalizedView =
-    s.view === 'home' ||
-    s.view === 'game' ||
-    s.view === 'card' ||
-    s.view === 'pose' ||
-    s.view === 'mine' ||
-    s.view === 'dice' ||
-    s.view === 'roulette' ||
-    s.view === 'bingo' ||
-    s.view === 'themes'
-      ? s.view
+
+  const viewValue =
+    typeof s.view === 'string' && VIEW_VALUES.includes(s.view as GameView)
+      ? (s.view as GameView)
       : 'home';
+  const safeView: GameView = viewValue === 'bingo' && !bingoBoard ? 'home' : viewValue;
+  const gameModeValue =
+    typeof s.gameMode === 'string' && GAME_MODE_VALUES.includes(s.gameMode as GameMode)
+      ? (s.gameMode as GameMode)
+      : VIEW_MODE[viewValue] ?? 'board';
 
   return {
-    view: normalizedView === 'bingo' && !bingoBoard ? 'home' : normalizedView,
-    gameMode:
-      s.gameMode === 'roulette' || s.view === 'roulette'
-        ? 'roulette'
-        : s.gameMode === 'bingo' || s.view === 'bingo'
-        ? 'bingo'
-        : s.gameMode === 'dice' || s.view === 'dice'
-        ? 'dice'
-        : s.gameMode === 'pose' || s.view === 'pose'
-        ? 'pose'
-        : s.gameMode === 'card' || s.view === 'card'
-          ? 'card'
-          : s.gameMode === 'mine' || s.view === 'mine'
-            ? 'mine'
-            : 'board',
+    view: safeView,
+    gameMode: gameModeValue,
     turn: s.turn === 0 || s.turn === 1 ? s.turn : 0,
     players,
     themes,
@@ -457,11 +529,11 @@ function canStartDiceMode(players: Player[], themes: Theme[]) {
 }
 
 function canStartGameMode(mode: GameMode, players: Player[], themes: Theme[]) {
-  if (mode === 'pose') return true;
-  if (mode === 'card' || mode === 'roulette' || mode === 'bingo') return canStartWithThemeMode(players, themes, 'card');
+  if (THEME_FREE_MODES.has(mode)) return true;
   if (mode === 'mine') return canStartMineMode(players, themes);
   if (mode === 'dice') return canStartDiceMode(players, themes);
-  return canStartWithThemes(players, themes);
+  if (mode === 'board') return canStartWithThemes(players, themes);
+  return canStartWithThemeMode(players, themes, 'card');
 }
 
 function createRandomTaskEvent(
@@ -750,20 +822,7 @@ export function useGameState() {
 
     setState(prev => ({
       ...prev,
-      view:
-        prev.gameMode === 'dice'
-          ? 'dice'
-          : prev.gameMode === 'roulette'
-            ? 'roulette'
-          : prev.gameMode === 'bingo'
-            ? 'bingo'
-          : prev.gameMode === 'pose'
-          ? 'pose'
-          : prev.gameMode === 'card'
-            ? 'card'
-            : prev.gameMode === 'mine'
-              ? 'mine'
-              : 'game',
+      view: MODE_VIEW[prev.gameMode],
       turn: Math.random() < 0.5 ? 0 : 1,
       players: prev.players.map(p => ({ ...p, step: 0 })),
       boardMap: generateBoardMap(),
