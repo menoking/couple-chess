@@ -20,6 +20,7 @@ import { EventsModeView } from './components/views/EventsModeView';
 import { SurvivalModeView } from './components/views/SurvivalModeView';
 import { TerritoryModeView } from './components/views/TerritoryModeView';
 import { AuctionModeView } from './components/views/AuctionModeView';
+import { GridChessModeView } from './components/views/GridChessModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -42,7 +43,8 @@ const CARD_THEME_MODES = new Set<GameMode>([
   'events',
   'survival',
   'territory',
-  'auction'
+  'auction',
+  'gridchess'
 ]);
 
 const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
@@ -57,6 +59,7 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
   survival: 'card',
   territory: 'card',
   auction: 'card',
+  gridchess: 'card',
   mine: 'mineTheme'
 };
 
@@ -510,6 +513,14 @@ function App() {
 
       {state.view === 'auction' && (
         <AuctionModeView
+          players={state.players}
+          themes={state.themes}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'gridchess' && (
+        <GridChessModeView
           players={state.players}
           themes={state.themes}
           onBack={handleBackFromGame}

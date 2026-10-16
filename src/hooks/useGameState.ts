@@ -61,7 +61,8 @@ const GAME_MODE_VALUES: GameMode[] = [
   'events',
   'survival',
   'territory',
-  'auction'
+  'auction',
+  'gridchess'
 ];
 
 const VIEW_VALUES: GameView[] = [
@@ -83,6 +84,7 @@ const VIEW_VALUES: GameView[] = [
   'survival',
   'territory',
   'auction',
+  'gridchess',
   'themes'
 ];
 
@@ -103,7 +105,8 @@ const MODE_VIEW: Record<GameMode, GameView> = {
   events: 'events',
   survival: 'survival',
   territory: 'territory',
-  auction: 'auction'
+  auction: 'auction',
+  gridchess: 'gridchess'
 };
 
 const VIEW_MODE: Record<string, GameMode> = {
@@ -124,7 +127,8 @@ const VIEW_MODE: Record<string, GameMode> = {
   events: 'events',
   survival: 'survival',
   territory: 'territory',
-  auction: 'auction'
+  auction: 'auction',
+  gridchess: 'gridchess'
 };
 
 /** 自备内容、不需要选择主题的玩法。 */

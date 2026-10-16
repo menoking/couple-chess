@@ -114,6 +114,12 @@ const gameModes: Array<{
     icon: Gavel
   },
   {
+    id: 'gridchess',
+    title: '格子棋',
+    desc: '抢格定胜负，胜者决定对方抽多大尺度卡片',
+    icon: Grid3x3
+  },
+  {
     id: 'pose',
     title: '姿势模式',
     desc: '轮流抽取姿势图片',
@@ -137,7 +143,8 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   events: '开始抽卡',
   survival: '开始生存',
   territory: '开始争夺',
-  auction: '开始拍卖'
+  auction: '开始拍卖',
+  gridchess: '开始下棋'
 };
 
 const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
@@ -152,6 +159,7 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   survival: '选择游戏模式和双方抽卡题库',
   territory: '选择游戏模式和双方抽卡题库',
   auction: '选择游戏模式和双方抽卡题库',
+  gridchess: '选择游戏模式和双方抽卡题库',
   mine: '选择游戏模式和双方扫雷主题题库',
   quiz: '无需题库，直接开始默契问答',
   story: '无需题库，直接开始故事接龙',
