@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { GameMode, Player, Theme } from '../../types';
-import { Bomb, ChevronLeft, ChevronRight, Dice5, Dices, Disc3, ImageIcon, Layers3, User, UserRound } from 'lucide-react';
+import { Bomb, ChevronLeft, ChevronRight, Dice5, Dices, Disc3, Grid3x3, ImageIcon, Layers3, User, UserRound } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -48,6 +48,12 @@ const gameModes: Array<{
     icon: Disc3
   },
   {
+    id: 'bingo',
+    title: '情侣 Bingo',
+    desc: '任务排成 Bingo 盘，完成连线拿奖励',
+    icon: Grid3x3
+  },
+  {
     id: 'pose',
     title: '姿势模式',
     desc: '轮流抽取姿势图片',
@@ -69,7 +75,7 @@ export function HomeView({
   const themeHint =
     gameMode === 'dice'
       ? '选择上骰子动作主题和下骰子部位主题'
-      : gameMode === 'card' || gameMode === 'roulette'
+      : gameMode === 'card' || gameMode === 'roulette' || gameMode === 'bingo'
       ? '选择游戏模式和双方抽卡题库'
       : gameMode === 'mine'
         ? '选择游戏模式和双方扫雷主题题库'
@@ -337,6 +343,8 @@ export function HomeView({
                 ? '开始抽姿势'
                 : gameMode === 'roulette'
                   ? '开始转盘'
+                : gameMode === 'bingo'
+                  ? '开始 Bingo'
                 : gameMode === 'dice'
                   ? '开始骰子'
                   : gameMode === 'mine'

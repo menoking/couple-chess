@@ -2,7 +2,31 @@ export type TileType = 'blank' | 'lucky' | 'trap';
 
 export type PlayerRole = 'male' | 'female';
 
-export type GameMode = 'board' | 'card' | 'pose' | 'mine' | 'dice' | 'roulette';
+export type GameMode = 'board' | 'card' | 'pose' | 'mine' | 'dice' | 'roulette' | 'bingo';
+
+export interface BingoCell {
+  task: TaskCard;
+  themeId: string;
+  completedBy: number | null;
+}
+
+export interface BingoLine {
+  cells: number[];
+  completed: boolean;
+}
+
+export interface BingoBoard {
+  size: number;
+  cells: BingoCell[];
+  lines: BingoLine[];
+}
+
+export interface BingoCellResult {
+  newLines: number;
+  rewardTask: TaskCard | null;
+  rewardThemeName: string | null;
+  boardComplete: boolean;
+}
 
 export type ThemeMode =
   | 'board'
@@ -69,7 +93,7 @@ export interface PathCoord {
 }
 
 export interface GameState {
-  view: 'home' | 'game' | 'card' | 'pose' | 'mine' | 'dice' | 'roulette' | 'themes';
+  view: 'home' | 'game' | 'card' | 'pose' | 'mine' | 'dice' | 'roulette' | 'bingo' | 'themes';
   gameMode: GameMode;
   turn: number;
   players: Player[];
@@ -77,6 +101,7 @@ export interface GameState {
   boardMap: TileType[];
   pathCoords: PathCoord[];
   mineBoard: MineTile[];
+  bingoBoard: BingoBoard | null;
   isRolling: boolean;
 }
 

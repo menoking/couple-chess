@@ -1,8 +1,16 @@
-import { MineTile, MineTileType, TileType, PathCoord } from '../types';
+import { BingoBoard, BingoCell, BingoLine, MineTile, MineTileType, TaskCard, TileType, PathCoord } from '../types';
 
 const GRID_SIZE = 7;
 const TILES_COUNT = 49;
 const MINE_TILES_COUNT = 36;
+export const BINGO_BOARD_SIZE = 4;
+
+export interface BingoDeck {
+  themeId: string;
+  tasks: TaskCard[];
+}
+
+const BINGO_FALLBACK_TASK: TaskCard = { text: '亲一下对方，说一句喜欢', executor: 'both', moveDelta: 0 };
 
 export function generateSpiralPath(): PathCoord[] {
   const path: PathCoord[] = [];
@@ -85,4 +93,51 @@ export function calculateNewPosition(current: number, steps: number): number {
 
 export function rollDice(): number {
   return Math.floor(Math.random() * 6) + 1;
+}
+
+export function getBingoLines(size: number): number[][] {
+  const lines: number[][] = [];
+
+  for (let r = 0; r < size; r++) {
+    lines.push(Array.from({ length: size }, (_, c) => r * size + c));
+  }
+  for (let c = 0; c < size; c++) {
+    lines.push(Array.from({ length: size }, (_, r) => r * size + c));
+  }
+  lines.push(Array.from({ length: size }, (_, i) => i * size + i));
+  lines.push(Array.from({ length: size }, (_, i) => i * size + (size - 1 - i)));
+
+  return lines;
+}
+
+export function generateBingoBoard(decks: BingoDeck[], size: number = BINGO_BOARD_SIZE): BingoBoard {
+  const candidates: BingoCell[] = [];
+  const seen = new Set<string>();
+
+  for (const deck of decks) {
+    for (const task of deck.tasks) {
+      const key = `${task.text}__${task.executor}__${task.moveDelta}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      candidates.push({ task, themeId: deck.themeId, completedBy: null });
+    }
+  }
+
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+
+  const total = size * size;
+  const picked: BingoCell[] = [];
+  while (picked.length < total && candidates.length > 0) {
+    picked.push(...candidates.slice(0, total - picked.length));
+  }
+  while (picked.length < total) {
+    picked.push({ task: { ...BINGO_FALLBACK_TASK }, themeId: decks[0]?.themeId ?? '', completedBy: null });
+  }
+
+  const lines: BingoLine[] = getBingoLines(size).map(cells => ({ cells, completed: false }));
+
+  return { size, cells: picked, lines };
 }

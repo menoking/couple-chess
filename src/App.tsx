@@ -9,6 +9,7 @@ import { MineModeView } from './components/views/MineModeView';
 import { PoseModeView } from './components/views/PoseModeView';
 import { DiceModeView } from './components/views/DiceModeView';
 import { RouletteModeView } from './components/views/RouletteModeView';
+import { BingoModeView } from './components/views/BingoModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -36,6 +37,8 @@ function App() {
     drawCardTask,
     revealMineTile,
     chooseMineBombTask,
+    completeBingoCell,
+    restartBingo,
     movePlayer,
     endTurn,
     setIsRolling,
@@ -73,6 +76,8 @@ function App() {
         ? 'card'
         : state.gameMode === 'roulette'
           ? 'card'
+        : state.gameMode === 'bingo'
+          ? 'card'
         : state.gameMode === 'mine'
           ? 'mineTheme'
           : 'board';
@@ -94,6 +99,10 @@ function App() {
         return;
       }
       if (state.gameMode === 'roulette') {
+        alert('请先为双方选择支持抽卡的任务包');
+        return;
+      }
+      if (state.gameMode === 'bingo') {
         alert('请先为双方选择支持抽卡的任务包');
         return;
       }
@@ -366,6 +375,19 @@ function App() {
           players={state.players}
           themes={state.themes}
           currentTurn={state.turn}
+          onEndTurn={endTurn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'bingo' && state.bingoBoard && (
+        <BingoModeView
+          players={state.players}
+          themes={state.themes}
+          bingoBoard={state.bingoBoard}
+          currentTurn={state.turn}
+          onCompleteCell={completeBingoCell}
+          onRestart={restartBingo}
           onEndTurn={endTurn}
           onBack={handleBackFromGame}
         />

@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
+  BingoBoard,
+  BingoCell,
+  BingoCellResult,
+  BingoLine,
   GameMode,
   GameState,
   MineRevealResult,
@@ -15,7 +19,7 @@ import {
   ThemeMode
 } from '../types';
 import { loadFromStorage, saveToStorage } from '../utils/localStorage';
-import { generateSpiralPath, generateBoardMap, calculateNewPosition, generateMineBoard } from '../utils/gameLogic';
+import { generateSpiralPath, generateBoardMap, calculateNewPosition, generateMineBoard, generateBingoBoard, BINGO_BOARD_SIZE, BingoDeck } from '../utils/gameLogic';
 import { DEFAULT_THEMES } from '../data/defaultThemes';
 
 const STORAGE_KEY = 'couples-ludo-game-state';
@@ -287,6 +291,59 @@ function normalizeMineBoard(input: unknown): MineTile[] {
   return mineBoard.length === MINE_BOARD_SIZE ? mineBoard : generateMineBoard();
 }
 
+function buildBingoDecks(players: Player[], themes: Theme[]): BingoDeck[] {
+  return players.map(player => {
+    const theme = themes.find(t => t.id === player.themeId);
+    const tasks = theme && isThemeAllowed(theme, player.role, 'card') ? theme.tasks : [];
+    return { themeId: theme?.id ?? '', tasks };
+  });
+}
+
+function normalizeBingoBoard(input: unknown): BingoBoard | null {
+  if (!isRecord(input)) return null;
+  const sizeValue = input.size;
+  const size = sizeValue === 3 || sizeValue === 4 || sizeValue === 5 ? sizeValue : BINGO_BOARD_SIZE;
+  const cellsValue = input.cells;
+  const linesValue = input.lines;
+  if (!Array.isArray(cellsValue) || !Array.isArray(linesValue)) return null;
+
+  const cells = cellsValue
+    .slice(0, size * size)
+    .map(cell => {
+      if (!isRecord(cell)) return null;
+      const task = normalizeTask(cell.task);
+      if (!task) return null;
+      const completedByValue = cell.completedBy;
+      const completedBy = typeof completedByValue === 'number' ? completedByValue : null;
+      return {
+        task,
+        themeId: typeof cell.themeId === 'string' ? cell.themeId : '',
+        completedBy
+      } satisfies BingoCell;
+    })
+    .filter((cell): cell is BingoCell => !!cell);
+
+  if (cells.length !== size * size) return null;
+
+  const lines = linesValue
+    .map(line => {
+      if (!isRecord(line) || !Array.isArray(line.cells)) return null;
+      const lineCells = line.cells.filter(
+        (index): index is number =>
+          typeof index === 'number' && Number.isInteger(index) && index >= 0 && index < cells.length
+      );
+      if (lineCells.length !== size) return null;
+      return {
+        cells: lineCells,
+        completed: lineCells.every(index => cells[index].completedBy !== null)
+      } satisfies BingoLine;
+    })
+    .filter((line): line is BingoLine => !!line);
+
+  if (lines.length === 0) return null;
+  return { size, cells, lines };
+}
+
 function normalizeGameState(saved: unknown): GameState | null {
   if (!isRecord(saved)) return null;
   const s = saved;
@@ -300,23 +357,28 @@ function normalizeGameState(saved: unknown): GameState | null {
     return p;
   });
 
+  const bingoBoard = normalizeBingoBoard(s.bingoBoard);
+  const normalizedView =
+    s.view === 'home' ||
+    s.view === 'game' ||
+    s.view === 'card' ||
+    s.view === 'pose' ||
+    s.view === 'mine' ||
+    s.view === 'dice' ||
+    s.view === 'roulette' ||
+    s.view === 'bingo' ||
+    s.view === 'themes'
+      ? s.view
+      : 'home';
+
   return {
-    view:
-      s.view === 'home' ||
-      s.view === 'game' ||
-      s.view === 'card' ||
-      s.view === 'pose' ||
-      s.view === 'mine' ||
-      s.view === 'dice' ||
-      s.view === 'roulette' ||
-      s.view === 'themes'
-        ? s.view
-        : 'home',
+    view: normalizedView === 'bingo' && !bingoBoard ? 'home' : normalizedView,
     gameMode:
       s.gameMode === 'roulette' || s.view === 'roulette'
         ? 'roulette'
-        :
-      s.gameMode === 'dice' || s.view === 'dice'
+        : s.gameMode === 'bingo' || s.view === 'bingo'
+        ? 'bingo'
+        : s.gameMode === 'dice' || s.view === 'dice'
         ? 'dice'
         : s.gameMode === 'pose' || s.view === 'pose'
         ? 'pose'
@@ -331,6 +393,7 @@ function normalizeGameState(saved: unknown): GameState | null {
     boardMap: Array.isArray(s.boardMap) ? s.boardMap : generateBoardMap(),
     pathCoords: Array.isArray(s.pathCoords) ? s.pathCoords : generateSpiralPath(),
     mineBoard: normalizeMineBoard(s.mineBoard),
+    bingoBoard,
     isRolling: false
   };
 }
@@ -395,7 +458,7 @@ function canStartDiceMode(players: Player[], themes: Theme[]) {
 
 function canStartGameMode(mode: GameMode, players: Player[], themes: Theme[]) {
   if (mode === 'pose') return true;
-  if (mode === 'card' || mode === 'roulette') return canStartWithThemeMode(players, themes, 'card');
+  if (mode === 'card' || mode === 'roulette' || mode === 'bingo') return canStartWithThemeMode(players, themes, 'card');
   if (mode === 'mine') return canStartMineMode(players, themes);
   if (mode === 'dice') return canStartDiceMode(players, themes);
   return canStartWithThemes(players, themes);
@@ -508,6 +571,7 @@ export function useGameState() {
       boardMap: generateBoardMap(),
       pathCoords: generateSpiralPath(),
       mineBoard: generateMineBoard(),
+      bingoBoard: null,
       isRolling: false
     };
   });
@@ -679,6 +743,11 @@ export function useGameState() {
   const startGame = useCallback(() => {
     if (!canStartGameMode(state.gameMode, state.players, state.themes)) return false;
 
+    const bingoBoard =
+      state.gameMode === 'bingo'
+        ? generateBingoBoard(buildBingoDecks(state.players, state.themes), BINGO_BOARD_SIZE)
+        : null;
+
     setState(prev => ({
       ...prev,
       view:
@@ -686,6 +755,8 @@ export function useGameState() {
           ? 'dice'
           : prev.gameMode === 'roulette'
             ? 'roulette'
+          : prev.gameMode === 'bingo'
+            ? 'bingo'
           : prev.gameMode === 'pose'
           ? 'pose'
           : prev.gameMode === 'card'
@@ -698,6 +769,7 @@ export function useGameState() {
       boardMap: generateBoardMap(),
       pathCoords: generateSpiralPath(),
       mineBoard: generateMineBoard(),
+      bingoBoard,
       isRolling: false
     }));
     return true;
@@ -738,6 +810,61 @@ export function useGameState() {
 
     return createMineTaskEvent(state.players, state.themes, activePlayer.id, choice, opponent.id);
   }, [state.players, state.themes, state.turn]);
+
+  const completeBingoCell = useCallback((index: number): BingoCellResult | null => {
+    const board = state.bingoBoard;
+    const activePlayer = state.players[state.turn];
+    if (!board || !activePlayer) return null;
+    if (index < 0 || index >= board.cells.length) return null;
+    if (board.cells[index].completedBy !== null) return null;
+
+    const cells = board.cells.map((cell, cellIndex) =>
+      cellIndex === index ? { ...cell, completedBy: activePlayer.id } : cell
+    );
+    const previousCompleted = board.lines.filter(line => line.completed).length;
+    const lines = board.lines.map(line => ({
+      ...line,
+      completed: line.cells.every(cellIndex => cells[cellIndex].completedBy !== null)
+    }));
+    const newLines = lines.filter(line => line.completed).length - previousCompleted;
+
+    let rewardTask: TaskCard | null = null;
+    let rewardThemeName: string | null = null;
+    if (newLines > 0) {
+      const opponent = state.players[state.turn === 0 ? 1 : 0];
+      const opponentTheme = opponent ? state.themes.find(t => t.id === opponent.themeId) : undefined;
+      const ownTheme = state.themes.find(t => t.id === activePlayer.themeId);
+      const rewardTheme = opponentTheme && opponentTheme.tasks.length > 0 ? opponentTheme : ownTheme;
+      if (rewardTheme && rewardTheme.tasks.length > 0) {
+        rewardTask = chooseRandomTask(rewardTheme);
+        rewardThemeName = rewardTheme.name;
+      }
+    }
+
+    const nextBoard: BingoBoard = { ...board, cells, lines };
+    setState(prev => ({ ...prev, bingoBoard: nextBoard }));
+
+    return {
+      newLines,
+      rewardTask,
+      rewardThemeName,
+      boardComplete: cells.every(cell => cell.completedBy !== null)
+    };
+  }, [state.bingoBoard, state.players, state.themes, state.turn]);
+
+  const restartBingo = useCallback(() => {
+    setState(prev => {
+      if (prev.gameMode !== 'bingo') return prev;
+      if (!canStartWithThemeMode(prev.players, prev.themes, 'card')) return prev;
+      return {
+        ...prev,
+        turn: Math.random() < 0.5 ? 0 : 1,
+        players: prev.players.map(p => ({ ...p, step: 0 })),
+        bingoBoard: generateBingoBoard(buildBingoDecks(prev.players, prev.themes), BINGO_BOARD_SIZE),
+        isRolling: false
+      };
+    });
+  }, []);
 
   const movePlayer = useCallback((steps: number) => {
     setState(prev => {
@@ -881,6 +1008,7 @@ export function useGameState() {
       boardMap: generateBoardMap(),
       pathCoords: generateSpiralPath(),
       mineBoard: generateMineBoard(),
+      bingoBoard: null,
       isRolling: false
     }));
   }, []);
@@ -900,6 +1028,8 @@ export function useGameState() {
     drawCardTask,
     revealMineTile,
     chooseMineBombTask,
+    completeBingoCell,
+    restartBingo,
     movePlayer,
     endTurn,
     setIsRolling,
