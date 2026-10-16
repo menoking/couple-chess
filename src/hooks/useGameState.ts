@@ -308,10 +308,14 @@ function normalizeGameState(saved: unknown): GameState | null {
       s.view === 'pose' ||
       s.view === 'mine' ||
       s.view === 'dice' ||
+      s.view === 'roulette' ||
       s.view === 'themes'
         ? s.view
         : 'home',
     gameMode:
+      s.gameMode === 'roulette' || s.view === 'roulette'
+        ? 'roulette'
+        :
       s.gameMode === 'dice' || s.view === 'dice'
         ? 'dice'
         : s.gameMode === 'pose' || s.view === 'pose'
@@ -391,7 +395,7 @@ function canStartDiceMode(players: Player[], themes: Theme[]) {
 
 function canStartGameMode(mode: GameMode, players: Player[], themes: Theme[]) {
   if (mode === 'pose') return true;
-  if (mode === 'card') return canStartWithThemeMode(players, themes, 'card');
+  if (mode === 'card' || mode === 'roulette') return canStartWithThemeMode(players, themes, 'card');
   if (mode === 'mine') return canStartMineMode(players, themes);
   if (mode === 'dice') return canStartDiceMode(players, themes);
   return canStartWithThemes(players, themes);
@@ -680,6 +684,8 @@ export function useGameState() {
       view:
         prev.gameMode === 'dice'
           ? 'dice'
+          : prev.gameMode === 'roulette'
+            ? 'roulette'
           : prev.gameMode === 'pose'
           ? 'pose'
           : prev.gameMode === 'card'

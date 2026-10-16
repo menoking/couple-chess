@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Layers3, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 
@@ -20,6 +21,20 @@ export function CardModeView({
 }: CardModeViewProps) {
   const activePlayer = players[currentTurn];
   const activeTheme = themes.find(t => t.id === activePlayer.themeId);
+  const [drawnKeys, setDrawnKeys] = useState<Set<string>>(() => new Set());
+  const maleThemeId = players[0]?.themeId;
+  const femaleThemeId = players[1]?.themeId;
+
+  useEffect(() => {
+    setDrawnKeys(new Set());
+  }, [maleThemeId, femaleThemeId]);
+
+  const themeDecks = useMemo(
+    () => players.map(player => ({ player, theme: themes.find(theme => theme.id === player.themeId) })),
+    [players, themes]
+  );
+  const totalCards = themeDecks.reduce((sum, deck) => sum + (deck.theme?.tasks.length || 0), 0);
+  const remainingCards = Math.max(0, totalCards - drawnKeys.size);
 
   const handleDrawTask = () => {
     const task = onDrawTask();
@@ -27,6 +42,11 @@ export function CardModeView({
       alert('当前玩家还没有可抽取的任务');
       return;
     }
+    setDrawnKeys(previous => {
+      const next = new Set(previous);
+      next.add(`${task.taskSourceId}:${task.task}:${task.moveDelta}`);
+      return next;
+    });
     onTaskTrigger(task);
   };
 
@@ -132,6 +152,40 @@ export function CardModeView({
                 </div>
               );
             })}
+          </div>
+
+          <div className="ios-card border border-white/5 p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-widest text-gray-500">任务牌堆</div>
+                <div className="mt-1 text-sm text-gray-300">已抽 {drawnKeys.size} 张 · 剩余 {remainingCards} 张</div>
+              </div>
+              <div className="text-2xl font-bold text-white">{remainingCards}</div>
+            </div>
+            <div className="grid grid-cols-4 gap-2">
+              {themeDecks.flatMap(({ player, theme }) =>
+                (theme?.tasks || []).map((task, index) => {
+                  const key = `${theme?.id}:${task.text}:${task.moveDelta}`;
+                  const isDrawn = drawnKeys.has(key);
+                  return (
+                    <div
+                      key={`${player.id}-${index}`}
+                      title={task.text}
+                      className={`relative min-h-12 overflow-hidden rounded-xl border p-2 text-[10px] leading-tight transition-all duration-500 ${
+                        isDrawn
+                          ? 'border-white/5 bg-black/40 text-gray-700 opacity-30 grayscale'
+                          : player.id === 0
+                            ? 'border-[#0A84FF]/30 bg-[#0A84FF]/10 text-blue-100'
+                            : 'border-[#FF375F]/30 bg-[#FF375F]/10 text-pink-100'
+                      }`}
+                    >
+                      <span className="line-clamp-3">{task.text}</span>
+                      {isDrawn && <span className="absolute inset-0 flex items-center justify-center text-lg text-gray-600">×</span>}
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         </div>
 

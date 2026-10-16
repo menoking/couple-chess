@@ -8,6 +8,7 @@ import { CardModeView } from './components/views/CardModeView';
 import { MineModeView } from './components/views/MineModeView';
 import { PoseModeView } from './components/views/PoseModeView';
 import { DiceModeView } from './components/views/DiceModeView';
+import { RouletteModeView } from './components/views/RouletteModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -70,6 +71,8 @@ function App() {
         : 'diceBody'
       : state.gameMode === 'card'
         ? 'card'
+        : state.gameMode === 'roulette'
+          ? 'card'
         : state.gameMode === 'mine'
           ? 'mineTheme'
           : 'board';
@@ -88,6 +91,10 @@ function App() {
       }
       if (state.gameMode === 'dice') {
         alert('请先选择支持“上骰子动作”和“下骰子部位”的主题包');
+        return;
+      }
+      if (state.gameMode === 'roulette') {
+        alert('请先为双方选择支持抽卡的任务包');
         return;
       }
       alert(state.gameMode === 'card' ? '请先为双方选择支持抽卡的任务包' : '请先为双方选择支持飞行棋的任务包');
@@ -346,6 +353,16 @@ function App() {
 
       {state.view === 'dice' && (
         <DiceModeView
+          players={state.players}
+          themes={state.themes}
+          currentTurn={state.turn}
+          onEndTurn={endTurn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'roulette' && (
+        <RouletteModeView
           players={state.players}
           themes={state.themes}
           currentTurn={state.turn}
