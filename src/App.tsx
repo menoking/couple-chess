@@ -19,6 +19,7 @@ import { RhythmModeView } from './components/views/RhythmModeView';
 import { EventsModeView } from './components/views/EventsModeView';
 import { SurvivalModeView } from './components/views/SurvivalModeView';
 import { TerritoryModeView } from './components/views/TerritoryModeView';
+import { AuctionModeView } from './components/views/AuctionModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -503,6 +504,14 @@ function App() {
           themes={state.themes}
           currentTurn={state.turn}
           onEndTurn={endTurn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'auction' && (
+        <AuctionModeView
+          players={state.players}
+          themes={state.themes}
           onBack={handleBackFromGame}
         />
       )}
