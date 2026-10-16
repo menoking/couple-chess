@@ -18,6 +18,7 @@ import { StoryModeView } from './components/views/StoryModeView';
 import { RhythmModeView } from './components/views/RhythmModeView';
 import { EventsModeView } from './components/views/EventsModeView';
 import { SurvivalModeView } from './components/views/SurvivalModeView';
+import { TerritoryModeView } from './components/views/TerritoryModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -488,6 +489,16 @@ function App() {
 
       {state.view === 'survival' && (
         <SurvivalModeView
+          players={state.players}
+          themes={state.themes}
+          currentTurn={state.turn}
+          onEndTurn={endTurn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'territory' && (
+        <TerritoryModeView
           players={state.players}
           themes={state.themes}
           currentTurn={state.turn}
