@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CheckCircle2, Disc3, RotateCw, Sparkles, User, UserRound } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Disc3, RotateCw, ShieldAlert, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, TaskCard, Theme } from '../../types';
+import { loadFromStorage, saveToStorage } from '../../utils/localStorage';
 
 interface RouletteModeViewProps {
   players: Player[];
@@ -10,10 +11,40 @@ interface RouletteModeViewProps {
   onBack: () => void;
 }
 
-const executors = ['男方', '女方', '双方'];
-const actions = ['拥抱', '亲吻', '抚摸', '耳语', '轻咬', '角色扮演'];
-const targets = ['额头', '耳朵', '颈侧', '肩背', '手臂', '腿部'];
-const durations = ['15 秒', '30 秒', '45 秒', '1 分钟', '2 分钟'];
+interface OptionGroup {
+  label?: string;
+  items: string[];
+}
+
+const executors: OptionGroup[] = [{ items: ['男方', '女方', '双方'] }];
+
+const actions: OptionGroup[] = [
+  { items: ['拥抱', '亲吻', '抚摸', '耳语', '轻咬', '吹气', '揉捏', '按摩', '舔舐', '吮吸', '挑逗', '角色扮演'] }
+];
+
+const targetGroups: OptionGroup[] = [
+  {
+    label: '轻柔区',
+    items: ['额头', '眼睛', '脸颊', '耳朵', '耳垂', '鼻尖', '颈侧', '后颈', '锁骨', '肩背', '手臂', '手掌', '手指']
+  },
+  {
+    label: '亲密区',
+    items: ['胸口', '胸部', '腹部', '腰侧', '背部', '膝盖', '小腿', '脚踝', '脚底', '腿根']
+  },
+  {
+    label: '私密区',
+    items: ['臀部', '大腿内侧', '私密部位']
+  }
+];
+
+const durations: OptionGroup[] = [{ items: ['15 秒', '30 秒', '45 秒', '90 秒', '1 分钟', '2 分钟', '3 分钟'] }];
+
+const SPIN_DURATION = 1250;
+const TICK_INTERVAL = 90;
+
+function flatten(groups: OptionGroup[]): string[] {
+  return groups.flatMap(group => group.items);
+}
 
 function pick<T>(items: T[], previous: T | null) {
   if (items.length < 2) return items[0];
@@ -22,43 +53,96 @@ function pick<T>(items: T[], previous: T | null) {
   return next;
 }
 
+function findGroupLabel(groups: OptionGroup[], value: string): string | null {
+  for (const group of groups) {
+    if (group.items.includes(value)) return group.label ?? null;
+  }
+  return null;
+}
+
+type RouletteIntensity = 'gentle' | 'wild';
+
+const INTENSITY_STORAGE_KEY = 'couples-ludo-roulette-intensity';
+const WILD_PRIVATE_RATE = 0.3;
+
+const allTargets = flatten(targetGroups);
+const nonPrivateTargets = flatten([targetGroups[0], targetGroups[1]]);
+const privateTargets = flatten([targetGroups[2]]);
+
+function pickTarget(previous: string | null, isWild: boolean): string {
+  if (isWild && Math.random() < WILD_PRIVATE_RATE) {
+    return pick(privateTargets, previous && privateTargets.includes(previous) ? previous : null);
+  }
+  const pool = isWild ? nonPrivateTargets : allTargets;
+  return pick(pool, pool.includes(previous ?? '') ? previous : null);
+}
+
 function WheelCard({
   title,
   value,
-  options,
+  groups,
   color,
-  spinning
+  spinning,
+  spinToken,
+  tick,
+  highlightLabel
 }: {
   title: string;
   value: string | null;
-  options: string[];
+  groups: OptionGroup[];
   color: string;
   spinning: boolean;
+  spinToken: number;
+  tick: number;
+  highlightLabel?: string;
 }) {
-  const rotation = spinning ? 360 + Math.floor(Math.random() * 360) : 0;
+  const flatItems = useMemo(() => flatten(groups), [groups]);
+  const [rotation, setRotation] = useState(0);
+
+  useEffect(() => {
+    if (spinToken === 0) return;
+    setRotation(prev => prev + 720 + Math.floor(Math.random() * 360));
+  }, [spinToken]);
+
+  const display = spinning ? flatItems[tick % flatItems.length] : value;
 
   return (
     <div className="flex min-w-0 flex-1 flex-col items-center gap-2">
       <div className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color }}>
         {title}
       </div>
-      <div
-        className="relative flex h-[96px] w-[96px] items-center justify-center rounded-full border-4 bg-[#1C1C1E] shadow-lg transition-transform duration-[1200ms] ease-out"
-        style={{ borderColor: `${color}66`, transform: `rotate(${rotation}deg)` }}
-      >
+      <div className="relative h-[96px] w-[96px]">
         <div
-          className="absolute inset-2 rounded-full opacity-50"
-          style={{
-            background: `conic-gradient(from 0deg, ${color}22, transparent 25%, ${color}22 50%, transparent 75%, ${color}22)`,
-            transform: 'rotate(-18deg)'
-          }}
-        />
-        <div className="relative z-10 max-w-[68px] text-center text-[12px] font-bold leading-tight text-white">
-          {value || '准备'}
+          className="absolute inset-0 rounded-full border-4 border-[#1C1C1E] bg-[#1C1C1E] shadow-lg transition-transform duration-[1200ms] ease-out"
+          style={{ borderColor: `${color}66`, transform: `rotate(${rotation}deg)` }}
+        >
+          <div
+            className="absolute inset-2 rounded-full opacity-50"
+            style={{
+              background: `conic-gradient(from 0deg, ${color}22, transparent 25%, ${color}22 50%, transparent 75%, ${color}22)`
+            }}
+          />
+        </div>
+        <div className="absolute inset-[13px] flex items-center justify-center rounded-full bg-[#1C1C1E]">
+          <div className="max-w-[68px] text-center text-[12px] font-bold leading-tight text-white">
+            {display || '准备'}
+          </div>
         </div>
       </div>
-      <div className="max-w-[104px] text-center text-[10px] leading-tight text-gray-500">
-        {options.join(' · ')}
+      <div className="w-full max-w-[150px] space-y-1">
+        {groups.map((group, groupIndex) => (
+          <div key={group.label ?? groupIndex} className="text-center">
+            {group.label && (
+              <div
+                className="text-[9px] font-bold"
+                style={{ color: group.label === highlightLabel ? '#FF375F' : color }}
+              >
+                {group.label}
+              </div>
+            )}
+            <div className="text-[10px] leading-tight text-gray-500">{group.items.join(' · ')}</div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -76,38 +160,60 @@ export function RouletteModeView({
   const [result, setResult] = useState({ executor: '', action: '', target: '', duration: '' });
   const [bonusTask, setBonusTask] = useState<TaskCard | null>(null);
   const [round, setRound] = useState(0);
+  const [spinToken, setSpinToken] = useState(0);
+  const [tick, setTick] = useState(0);
+  const [intensity, setIntensity] = useState<RouletteIntensity>(() =>
+    loadFromStorage<RouletteIntensity>(INTENSITY_STORAGE_KEY, 'gentle')
+  );
+  const isWild = intensity === 'wild';
   const timerRef = useRef<number | null>(null);
+  const tickRef = useRef<number | null>(null);
   const selectedTheme = themes.find(theme => theme.id === activePlayer?.themeId);
   const hasResult = !!result.executor;
+  const targetTier = useMemo(
+    () => (result.target ? findGroupLabel(targetGroups, result.target) : null),
+    [result.target]
+  );
+
+  useEffect(() => {
+    saveToStorage(INTENSITY_STORAGE_KEY, intensity);
+  }, [intensity]);
 
   useEffect(() => () => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    if (tickRef.current !== null) window.clearInterval(tickRef.current);
   }, []);
 
   const resultText = useMemo(() => {
     if (!hasResult) return '';
-    const subject = result.executor === '双方' ? '双方' : result.executor;
-    return `${subject}${result.action}${result.target}，持续${result.duration}`;
+    return `${result.executor}${result.action}${result.target}，持续${result.duration}`;
   }, [hasResult, result]);
 
   const spin = () => {
     if (isSpinning) return;
     const next = {
-      executor: pick(executors, result.executor || null),
-      action: pick(actions, result.action || null),
-      target: pick(targets, result.target || null),
-      duration: pick(durations, result.duration || null)
+      executor: pick(flatten(executors), result.executor || null),
+      action: pick(flatten(actions), result.action || null),
+      target: pickTarget(result.target || null, isWild),
+      duration: pick(flatten(durations), result.duration || null)
     };
     setIsSpinning(true);
     setBonusTask(null);
+    setSpinToken(value => value + 1);
+    setTick(0);
     if (navigator.vibrate) navigator.vibrate([15, 30, 15]);
+    tickRef.current = window.setInterval(() => setTick(value => value + 1), TICK_INTERVAL);
     timerRef.current = window.setTimeout(() => {
       setResult(next);
       setRound(value => value + 1);
       const tasks = selectedTheme?.tasks || [];
       setBonusTask(tasks.length > 0 ? tasks[Math.floor(Math.random() * tasks.length)] : null);
       setIsSpinning(false);
-    }, 1250);
+      if (tickRef.current !== null) {
+        window.clearInterval(tickRef.current);
+        tickRef.current = null;
+      }
+    }, SPIN_DURATION);
   };
 
   return (
@@ -136,19 +242,48 @@ export function RouletteModeView({
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 no-scrollbar">
           <div className="mb-5 rounded-3xl border border-[#FF9F0A]/20 bg-[#1C1C1E]/80 p-5 shadow-2xl shadow-orange-950/20">
-            <div className="mb-5 flex items-center justify-between">
+            <div className="mb-4 flex items-center justify-between">
               <div>
                 <div className="text-lg font-bold text-white">转出一项亲密任务</div>
-                <div className="mt-1 text-xs text-gray-500">每轮组合执行者、动作、部位和时长</div>
+                <div className="mt-1 text-xs text-gray-500">随机组合执行者、动作、部位与时长</div>
               </div>
               <div className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold text-gray-400">第 {round + 1} 轮</div>
             </div>
 
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-white">尺度档位</div>
+                <div className="mt-0.5 text-[10px] leading-tight text-gray-500">
+                  {isWild ? '私密区概率提升至 30%' : '各区域按正常概率出现'}
+                </div>
+              </div>
+              <div className="flex shrink-0 rounded-full border border-white/10 bg-white/5 p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setIntensity('gentle')}
+                  className={`ios-btn rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
+                    isWild ? 'text-gray-400' : 'bg-white text-black'
+                  }`}
+                >
+                  轻柔
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntensity('wild')}
+                  className={`ios-btn rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
+                    isWild ? 'bg-gradient-to-r from-[#FF9F0A] to-[#FF375F] text-white' : 'text-gray-400'
+                  }`}
+                >
+                  狂热
+                </button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-x-3 gap-y-5">
-              <WheelCard title="谁来做" value={result.executor || null} options={executors} color="#64B5FF" spinning={isSpinning} />
-              <WheelCard title="做什么" value={result.action || null} options={actions} color="#FF7A96" spinning={isSpinning} />
-              <WheelCard title="哪里" value={result.target || null} options={targets} color="#D08BFF" spinning={isSpinning} />
-              <WheelCard title="多久" value={result.duration || null} options={durations} color="#FFB340" spinning={isSpinning} />
+              <WheelCard title="谁来做" value={result.executor || null} groups={executors} color="#64B5FF" spinning={isSpinning} spinToken={spinToken} tick={tick} />
+              <WheelCard title="做什么" value={result.action || null} groups={actions} color="#FF7A96" spinning={isSpinning} spinToken={spinToken} tick={tick} />
+              <WheelCard title="哪里" value={result.target || null} groups={targetGroups} color="#D08BFF" spinning={isSpinning} spinToken={spinToken} tick={tick} highlightLabel={isWild ? '私密区' : undefined} />
+              <WheelCard title="多久" value={result.duration || null} groups={durations} color="#FFB340" spinning={isSpinning} spinToken={spinToken} tick={tick} />
             </div>
 
             <button
@@ -167,6 +302,11 @@ export function RouletteModeView({
               <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-5 text-center">
                 <div className="text-xs font-bold uppercase tracking-[0.2em] text-[#FF9F0A]">本轮结果</div>
                 <div className="mt-3 text-xl font-bold leading-relaxed text-white">{resultText}</div>
+                {targetTier === '私密区' && (
+                  <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-[#FF375F]/15 px-3 py-1 text-[10px] font-bold text-[#FF375F]">
+                    <ShieldAlert size={12} />私密尺度 · 任何一方不适应都可以直接跳过
+                  </div>
+                )}
               </div>
               {bonusTask && (
                 <div className="rounded-3xl border border-[#BF5AF2]/25 bg-[#BF5AF2]/10 p-5">
@@ -196,4 +336,3 @@ export function RouletteModeView({
     </div>
   );
 }
-
