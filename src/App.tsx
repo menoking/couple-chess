@@ -13,6 +13,7 @@ import { BingoModeView } from './components/views/BingoModeView';
 import { QuizModeView } from './components/views/QuizModeView';
 import { MemoryModeView } from './components/views/MemoryModeView';
 import { BlindBoxModeView } from './components/views/BlindBoxModeView';
+import { TimedModeView } from './components/views/TimedModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -445,6 +446,14 @@ function App() {
           currentTurn={state.turn}
           onEndTurn={endTurn}
           onSwapThemes={handleSwapThemes}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'timed' && (
+        <TimedModeView
+          players={state.players}
+          themes={state.themes}
           onBack={handleBackFromGame}
         />
       )}
