@@ -851,9 +851,8 @@ export function useGameState() {
     setState(prev => ({
       ...prev,
       view: 'home',
-      gameMode: 'board',
       turn: 0,
-      players: initialPlayers.map(p => ({ ...p, themeId: null, step: 0 })),
+      players: prev.players.map(player => ({ ...player, step: 0 })),
       boardMap: generateBoardMap(),
       pathCoords: generateSpiralPath(),
       mineBoard: generateMineBoard(),

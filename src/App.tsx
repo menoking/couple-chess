@@ -142,7 +142,7 @@ function App() {
   };
 
   const handleBackFromGame = () => {
-    if (confirm('离开游戏？进度不会保存')) {
+    if (confirm('返回主页？本局进度将清空，已选主题会保留。')) {
       setIsMineBombChoiceOpen(false);
       setTaskData(null);
       setPoseImageSrc(null);
