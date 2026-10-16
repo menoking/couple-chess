@@ -90,6 +90,10 @@ export function BingoModeView({
     onEndTurn();
   };
 
+  const handleClose = () => {
+    setPendingIndex(null);
+  };
+
   const handleRewardDone = () => {
     setReward(null);
     onEndTurn();
@@ -260,6 +264,7 @@ export function BingoModeView({
         taskData={taskData}
         onAccept={handleAccept}
         onReject={handleReject}
+        onClose={handleClose}
       />
     </div>
   );

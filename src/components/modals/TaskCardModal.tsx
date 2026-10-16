@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { TaskEventData } from '../../types';
-import { Flame, Heart, Lock, HandshakeIcon, MessageCircleQuestion, Sparkles } from 'lucide-react';
+import { Flame, Heart, Lock, HandshakeIcon, MessageCircleQuestion, Sparkles, X } from 'lucide-react';
 
 interface TaskCardModalProps {
   isOpen: boolean;
   taskData: TaskEventData | null;
   onAccept: () => void;
   onReject: () => void;
+  onClose?: () => void;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -18,7 +19,7 @@ const iconMap: Record<string, React.ReactNode> = {
   sparkles: <Sparkles size={40} />
 };
 
-export function TaskCardModal({ isOpen, taskData, onAccept, onReject }: TaskCardModalProps) {
+export function TaskCardModal({ isOpen, taskData, onAccept, onReject, onClose }: TaskCardModalProps) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [visibleTaskData, setVisibleTaskData] = useState<TaskEventData | null>(null);
 
@@ -62,7 +63,21 @@ export function TaskCardModal({ isOpen, taskData, onAccept, onReject }: TaskCard
     <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto px-4 py-[max(0.5rem,env(safe-area-inset-top))]">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
 
-      <div className="mobile-task-modal-card relative w-full max-w-sm max-h-full perspective-1000 task-card-pop">
+      <div className="w-full max-w-sm">
+        {onClose && (
+          <div className="mb-2 flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="关闭任务卡"
+              className="ios-btn flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#3A3A3C] text-gray-300 shadow-lg"
+            >
+              <X size={16} strokeWidth={3} />
+            </button>
+          </div>
+        )}
+
+        <div className="mobile-task-modal-card relative w-full max-h-full perspective-1000 task-card-pop">
         <div className={`flip-card-inner ${isFlipped ? 'flipped' : ''}`}>
           <div
             className="flip-card-front bg-[#1C1C1E] border border-white/10 p-6 flex flex-col items-center justify-center shadow-2xl cursor-pointer"
@@ -116,6 +131,7 @@ export function TaskCardModal({ isOpen, taskData, onAccept, onReject }: TaskCard
               </button>
             </div>
           </div>
+        </div>
         </div>
       </div>
     </div>
