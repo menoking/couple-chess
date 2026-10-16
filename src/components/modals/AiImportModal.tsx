@@ -69,7 +69,7 @@ export function AiImportModal({ isOpen, themeName, onClose, onImport }: AiImport
   return (
     <div className="fixed inset-0 z-[140]">
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="absolute bottom-0 left-0 right-0 bg-[#1C1C1E] rounded-t-[32px] p-6">
+      <div className="mobile-bottom-sheet absolute bottom-0 left-0 right-0 bg-[#1C1C1E] rounded-t-[32px] p-6">
         <div className="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-6" />
 
         <div className="flex items-center justify-between mb-4">
@@ -96,7 +96,7 @@ export function AiImportModal({ isOpen, themeName, onClose, onImport }: AiImport
           </button>
         </div>
 
-        <div className="space-y-4 max-h-[70vh] overflow-y-auto no-scrollbar pb-10">
+        <div className="space-y-4 max-h-[70dvh] overflow-y-auto no-scrollbar pb-10">
           <div className="space-y-2">
             <div className="text-xs text-gray-400">提示词（复制后可按喜好修改）</div>
             <textarea

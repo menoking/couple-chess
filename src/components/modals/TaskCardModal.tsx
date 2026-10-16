@@ -59,10 +59,10 @@ export function TaskCardModal({ isOpen, taskData, onAccept, onReject }: TaskCard
         : `完成后后退 ${Math.abs(visibleTaskData.moveDelta)} 格`;
 
   return (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center px-6">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto px-4 py-[max(0.5rem,env(safe-area-inset-top))]">
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
 
-      <div className="relative w-full max-w-sm h-[420px] perspective-1000 task-card-pop">
+      <div className="mobile-task-modal-card relative w-full max-w-sm max-h-full perspective-1000 task-card-pop">
         <div className={`flip-card-inner ${isFlipped ? 'flipped' : ''}`}>
           <div
             className="flip-card-front bg-[#1C1C1E] border border-white/10 p-6 flex flex-col items-center justify-center shadow-2xl cursor-pointer"
@@ -80,13 +80,13 @@ export function TaskCardModal({ isOpen, taskData, onAccept, onReject }: TaskCard
            
           </div>
 
-          <div className="flip-card-back bg-[#1C1C1E] border border-white/10 p-6 shadow-2xl">
+          <div className="flip-card-back overflow-y-auto bg-[#1C1C1E] border border-white/10 p-[clamp(0.75rem,3dvh,1.5rem)] shadow-2xl">
             <div className="flex-1 flex flex-col items-center justify-center w-full">
               <div className={visibleTaskData.color}>
                 {iconMap[visibleTaskData.icon] || iconMap.favorite}
               </div>
-              <h3 className="text-xl font-bold text-white mb-6 mt-4">{visibleTaskData.title}</h3>
-              <div className="text-xs text-gray-400 text-center leading-relaxed mb-6">
+              <h3 className="text-xl font-bold text-white mb-3 mt-3">{visibleTaskData.title}</h3>
+              <div className="text-xs text-gray-400 text-center leading-relaxed mb-3">
                 <div>{visibleTaskData.subtitle}</div>
                 <div>
                   由 <span className={executorClassName}>{executorLabel}</span> 执行
@@ -103,13 +103,13 @@ export function TaskCardModal({ isOpen, taskData, onAccept, onReject }: TaskCard
 
             <div className="w-full flex gap-3 mt-auto">
               <button
-                className="flex-1 h-12 rounded-full bg-[#3A3A3C] text-[#FF453A] font-bold text-sm ios-btn border border-transparent hover:border-[#FF453A]/30"
+                className="flex-1 min-h-10 rounded-full bg-[#3A3A3C] text-[#FF453A] font-bold text-xs ios-btn border border-transparent hover:border-[#FF453A]/30"
                 onClick={onReject}
               >
                 {rejectLabel}
               </button>
               <button
-                className="flex-1 h-12 rounded-full bg-white text-black font-bold text-sm ios-btn shadow-lg"
+                className="flex-1 min-h-10 rounded-full bg-white text-black font-bold text-xs ios-btn shadow-lg"
                 onClick={onAccept}
               >
                 接受任务

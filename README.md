@@ -1,15 +1,20 @@
 # 情侣飞行棋 (Couples Ludo)
 
+<!-- Replace the repository URL below if this project moves to another GitHub owner. -->
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fmenoking%2Fcouple-flying-chess)
+
 这是一个专为情侣设计的互动飞行棋 Web 应用。不仅保留了经典飞行棋的乐趣，还加入了自定义任务卡、主题管理以及 AI 辅助导入等现代化功能，增进情侣间的互动与趣味。
 
 在线预览：[https://youlookfunny.github.io](https://youlookfunny.github.io)
 原项目地址（本人添加玩法）：[https://github.com/woniu9524/couple-flying-chess](https://github.com/woniu9524/couple-flying-chess)
+
 ## ✨ 功能特性
 
 - **自定义主题**: 用户可以创建属于自己的游戏主题，设置特定的惩罚或奖励任务。
 - **性别适用范围**: 支持设置主题的适用对象（通用、仅限男方、仅限女方），在游戏配置阶段智能过滤。
-- **AI 智能导入**: 支持通过 AI 生成任务列表，并一键导入到主题中，快速丰富游戏内容。
-- **本地存储**: 游戏进度和自定义主题自动保存到浏览器本地存储（LocalStorage），随时继续游戏。
+- **AI 辅助导入**: 复制提示词到 AI 工具生成任务，再粘贴 JSON 导入主题；应用本身不直接调用 AI 服务。
+- **多种游戏模式**: 包含飞行棋、任务卡牌、扫雷、双骰子和姿势图片模式。
+- **本地存储**: 游戏状态和自定义主题保存在当前浏览器的 LocalStorage 中；刷新后可从最近保存的状态继续。
 - **移动端适配**: 采用响应式设计，完美适配手机端操作体验。
 
 ## 🛠️ 技术栈
@@ -24,15 +29,15 @@
 
 ### 环境要求
 
-- Node.js (推荐 v16+)
+- Node.js 20.9 或更高版本
 - npm 或 pnpm
 
 ### 安装步骤
 
 1. 克隆项目到本地：
    ```bash
-   git clone <repository-url>
-   cd ludo
+   git clone https://github.com/menoking/couple-flying-chess.git
+   cd couple-flying-chess
    ```
 
 2. 安装依赖：
@@ -50,6 +55,14 @@
    ```
 
 4. 打开浏览器访问 `http://localhost:5173` 即可开始体验。
+
+### 部署到 Vercel
+
+1. 点击页面顶部的 **Deploy with Vercel** 按钮，并登录 GitHub 和 Vercel。
+2. 在 Vercel 中确认要导入的 GitHub 仓库及项目名称。
+3. 点击 **Deploy**。Vercel 会使用仓库中的 `vercel.json` 安装依赖、运行生产构建并发布 `dist/` 目录。
+
+部署按钮使用当前远程仓库 `menoking/couple-flying-chess`。请先将需要部署的提交推送到该 GitHub 仓库；若仓库迁移至其他 owner，请同时更新按钮链接。
 
 ## 📂 项目结构
 
@@ -69,12 +82,12 @@ src/
 
 ## 🎮 玩法说明
 
-1. **配置阶段**: 双方玩家选择各自的代表角色（男方/女方）及游戏主题。
-2. **主题管理**: 在“主题库”中可以新建主题，手动添加任务或通过 AI 批量导入任务。
-3. **游戏进行**: 轮流掷骰子移动棋子，触发格子事件或完成任务卡挑战。
-4. **胜利条件**: 率先到达终点的玩家获胜。
+1. **配置阶段**: 选择飞行棋、任务卡牌、扫雷、双骰子或姿势图片模式；需要题库的模式还需为双方选择主题。
+2. **主题管理**: 在“主题库”中创建主题、设置任务，并可将 AI 生成的 JSON 任务列表导入。
+3. **游戏进行**: 按所选模式掷骰走棋、抽卡、翻开扫雷方格、组合双骰结果或抽取姿势图片。
+4. **胜利条件**: 飞行棋模式中，先到终点的玩家获胜；其他模式按各自的回合规则继续游玩。
 
 
 ## 📄 许可证
 
-MIT License
+当前仓库未包含 `LICENSE` 文件；请以实际发布版本附带的许可证为准。

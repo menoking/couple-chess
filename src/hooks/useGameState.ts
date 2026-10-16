@@ -209,17 +209,19 @@ function normalizePlayers(input: unknown): Player[] {
 
 function normalizeThemes(input: unknown): Theme[] {
   const incoming = Array.isArray(input) ? input : [];
-  const source = incoming.length > 0 ? [...incoming, ...DEFAULT_THEMES] : DEFAULT_THEMES;
+  const source = [...DEFAULT_THEMES, ...incoming];
 
   return source
     .map(t => {
       const record = isRecord(t) ? t : {};
+      const id = typeof record.id === 'string' ? record.id : `theme_${Date.now()}`;
+      const defaultTheme = DEFAULT_THEMES.find(theme => theme.id === id);
       const tasksValue = record.tasks;
       const tasks = Array.isArray(tasksValue)
         ? tasksValue
             .map(normalizeTask)
             .filter((x): x is TaskCard => !!x)
-        : [];
+        : defaultTheme?.tasks ?? [];
 
       const audienceValue = record.audience;
       const modesValue = record.modes;
@@ -227,19 +229,15 @@ function normalizeThemes(input: unknown): Theme[] {
         ? modesValue.filter((mode): mode is ThemeMode => THEME_MODES.has(mode as ThemeMode))
         : [];
 
-      const id = typeof record.id === 'string' ? record.id : `theme_${Date.now()}`;
-      const defaultTheme = DEFAULT_THEMES.find(theme => theme.id === id);
-      if (defaultTheme) return defaultTheme;
-
       return {
         id,
-        name: typeof record.name === 'string' ? record.name : '未命名主题',
-        desc: typeof record.desc === 'string' ? record.desc : '',
+        name: typeof record.name === 'string' ? record.name : defaultTheme?.name ?? '未命名主题',
+        desc: typeof record.desc === 'string' ? record.desc : defaultTheme?.desc ?? '',
         audience:
           audienceValue === 'common' || audienceValue === 'male' || audienceValue === 'female'
             ? audienceValue
-            : 'common',
-        modes: modes.length > 0 ? modes : DEFAULT_THEME_MODES,
+            : defaultTheme?.audience ?? 'common',
+        modes: modes.length > 0 ? modes : defaultTheme?.modes ?? DEFAULT_THEME_MODES,
         tasks
       } satisfies Theme;
     })
@@ -311,7 +309,7 @@ function normalizeGameState(saved: unknown): GameState | null {
     boardMap: Array.isArray(s.boardMap) ? s.boardMap : generateBoardMap(),
     pathCoords: Array.isArray(s.pathCoords) ? s.pathCoords : generateSpiralPath(),
     mineBoard: normalizeMineBoard(s.mineBoard),
-    isRolling: !!s.isRolling
+    isRolling: false
   };
 }
 

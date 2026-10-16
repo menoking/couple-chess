@@ -15,7 +15,7 @@ export function BottomNav({ activeView, onNavigate }: BottomNavProps) {
     activeView === 'dice';
 
   return (
-    <nav className="h-[84px] ios-glass border-t border-white/5 flex items-start justify-around pt-3 shrink-0 z-50">
+    <nav className="app-bottom-nav ios-glass border-t border-white/5 flex items-start justify-around pt-3 shrink-0 z-50">
       <button
         className={`group flex flex-col items-center gap-1 w-16 transition-opacity ${
           isGameActive ? 'opacity-100' : 'opacity-50'

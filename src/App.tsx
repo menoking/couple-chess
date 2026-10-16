@@ -152,14 +152,14 @@ function App() {
   };
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex justify-center bg-black">
+    <div className="app-viewport w-screen overflow-hidden flex justify-center bg-black">
       <div className="fixed inset-0 z-0">
         <div className="w-full h-full bg-gradient-to-br from-gray-900 via-black to-gray-900 opacity-60" />
         <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
       </div>
 
       <div className="relative z-10 w-full max-w-[430px] h-full flex flex-col bg-black/20">
-        <header className="pt-12 pb-2 px-6 shrink-0 flex justify-between items-start">
+        <header className="app-header pb-2 px-6 shrink-0 flex justify-between items-start">
           <div>
             <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">
               Couple's Game
@@ -251,7 +251,7 @@ function App() {
       />
 
       <WinModal
-        isOpen={!!winnerId}
+        isOpen={winnerId !== null}
         winnerName={winnerId !== null ? state.players[winnerId].name : ''}
         onRestart={() => {
           resetGame();

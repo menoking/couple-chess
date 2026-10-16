@@ -60,10 +60,16 @@ export function GameView({
 
       const moveDelayMs = 220;
       let movedSteps = 0;
+      let currentStep = players[currentTurn].step;
+      let direction: 1 | -1 = currentStep === 48 ? -1 : 1;
 
       const stepOnce = () => {
-        onMove(1);
+        currentStep += direction;
+        onMove(direction);
         movedSteps += 1;
+
+        if (currentStep === 48) direction = -1;
+        if (currentStep === 0) direction = 1;
 
         if (movedSteps < diceResult) {
           setTimeout(stepOnce, moveDelayMs);
@@ -94,14 +100,14 @@ export function GameView({
   const turnNumber = Math.floor(Math.max(...players.map(p => p.step)) / 4) + 1;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 bg-black flex flex-col">
       <div className="absolute inset-0 z-0">
         <div className="w-full h-full bg-gradient-to-br from-gray-900 via-black to-gray-900 opacity-60" />
         <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full max-w-[430px] mx-auto w-full">
-        <header className="pt-12 pb-2 px-4 flex items-center gap-4 shrink-0">
+        <header className="mobile-screen-header py-2 px-4 flex items-center gap-3 shrink-0">
           <button
             onClick={onBack}
             className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center ios-btn border border-white/5"
@@ -138,7 +144,7 @@ export function GameView({
           <div className="w-10" />
         </header>
 
-        <div className="flex-1 flex items-center justify-center px-4">
+        <div className="game-board-space flex-1 min-h-0 flex items-center justify-center px-4">
           <GameBoard
             boardMap={boardMap}
             pathCoords={pathCoords}
@@ -147,9 +153,9 @@ export function GameView({
           />
         </div>
 
-        <div className="mx-4 mb-4 h-[244px] ios-glass rounded-[32px] flex flex-col items-center pt-8 pb-8 px-6 border border-white/10 shadow-2xl shrink-0">
+        <div className="mx-4 mb-2 h-[clamp(176px,30dvh,244px)] ios-glass rounded-[clamp(20px,4dvh,32px)] flex flex-col items-center justify-center py-4 px-6 border border-white/10 shadow-2xl shrink-0">
           <div
-            className={`text-sm font-medium mb-6 text-center animate-pulse ${
+            className={`text-sm font-medium mb-3 text-center animate-pulse ${
               currentTurn === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]'
             }`}
           >

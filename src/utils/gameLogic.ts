@@ -76,13 +76,11 @@ export function generateMineBoard(): MineTile[] {
 }
 
 export function calculateNewPosition(current: number, steps: number): number {
-  let target = current + steps;
+  const pathLength = 48;
+  const roundTripLength = pathLength * 2;
+  const position = ((current + steps) % roundTripLength + roundTripLength) % roundTripLength;
 
-  if (target >= 48) {
-    target = 48 - (target - 48);
-  }
-
-  return target;
+  return position <= pathLength ? position : roundTripLength - position;
 }
 
 export function rollDice(): number {

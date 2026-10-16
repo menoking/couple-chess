@@ -31,14 +31,14 @@ export function CardModeView({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 bg-black flex flex-col">
       <div className="absolute inset-0 z-0">
         <div className="w-full h-full bg-gradient-to-br from-gray-900 via-black to-gray-900 opacity-60" />
         <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full max-w-[430px] mx-auto w-full">
-        <header className="pt-12 pb-2 px-4 flex items-center gap-4 shrink-0">
+        <header className="mobile-screen-header py-2 px-4 flex items-center gap-3 shrink-0">
           <button
             onClick={onBack}
             className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center ios-btn border border-white/5"
@@ -76,7 +76,7 @@ export function CardModeView({
           <div className="w-10" />
         </header>
 
-        <div className="flex-1 min-h-0 px-6 py-6 flex flex-col justify-center gap-4">
+        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-6 py-3 flex flex-col justify-center gap-3">
           <div className="ios-card border border-white/5 p-5">
             <div className="text-xs text-gray-500 uppercase tracking-widest mb-3">当前回合</div>
             <div className="flex items-center gap-4">
@@ -138,19 +138,19 @@ export function CardModeView({
         <button
           type="button"
           onClick={handleDrawTask}
-          className="mx-4 mb-4 h-[244px] ios-glass rounded-[32px] flex flex-col items-center justify-center px-6 border border-white/10 shadow-2xl shrink-0 ios-btn"
+          className="mx-4 mb-2 h-[clamp(176px,30dvh,244px)] ios-glass rounded-[clamp(20px,4dvh,32px)] flex flex-col items-center justify-center px-6 border border-white/10 shadow-2xl shrink-0 ios-btn"
         >
           <div
-            className={`text-sm font-medium text-center animate-pulse mb-6 ${
+            className={`text-sm font-medium text-center animate-pulse mb-3 ${
               currentTurn === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]'
             }`}
           >
             {activePlayer.name}回合：点击卡牌抽取任务
           </div>
-          <div className="w-20 h-20 rounded-[24px] bg-white/5 flex items-center justify-center mb-5">
+          <div className="w-16 h-16 rounded-[20px] bg-white/5 flex items-center justify-center mb-3">
             <Layers3
               className={activePlayer.id === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]'}
-              size={38}
+              size={32}
             />
           </div>
           <div className="text-2xl font-bold text-white">抽取任务</div>

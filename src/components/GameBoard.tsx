@@ -49,7 +49,7 @@ export function GameBoard({ boardMap, pathCoords, players, currentTurn }: GameBo
   };
 
   return (
-    <div className="w-full max-w-[360px] aspect-square relative">
+    <div className="game-board-grid relative">
       <div className="absolute inset-0 grid grid-cols-7 gap-1.5">
         {Array.from({ length: 7 }).map((_, r) =>
           Array.from({ length: 7 }).map((_, c) => renderTile(r, c))

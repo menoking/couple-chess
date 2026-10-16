@@ -63,13 +63,13 @@ export function ThemeCreateModal({ isOpen, onClose, onCreate }: ThemeCreateModal
   return (
     <div className="fixed inset-0 z-[120]">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="absolute bottom-0 left-0 right-0 bg-[#1C1C1E] rounded-t-[32px] p-6">
+      <div className="mobile-bottom-sheet absolute bottom-0 left-0 right-0 bg-[#1C1C1E] rounded-t-[32px] p-6">
         <div className="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-6" />
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-bold text-white">新建主题</h3>
         </div>
 
-        <div className="space-y-4 max-h-[72vh] overflow-y-auto no-scrollbar pb-8">
+        <div className="space-y-4 max-h-[72dvh] overflow-y-auto no-scrollbar pb-8">
           <div className="space-y-2">
             <div className="text-xs text-gray-400">主题名称</div>
             <input

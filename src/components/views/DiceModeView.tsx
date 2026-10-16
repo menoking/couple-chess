@@ -214,14 +214,14 @@ export function DiceModeView({
             : `${activePlayer.name}掷骰子`;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black flex flex-col">
+    <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 bg-black flex flex-col">
       <div className="absolute inset-0 z-0">
         <div className="w-full h-full bg-gradient-to-br from-gray-900 via-black to-gray-900 opacity-60" />
         <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
       </div>
 
       <div className="relative z-10 flex flex-col h-full max-w-[430px] mx-auto w-full">
-        <header className="pt-11 pb-2 px-4 flex items-center gap-4 shrink-0">
+        <header className="mobile-screen-header py-2 px-4 flex items-center gap-3 shrink-0">
           <button
             onClick={onBack}
             className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center ios-btn border border-white/5"
@@ -260,7 +260,7 @@ export function DiceModeView({
           <div className="w-10" />
         </header>
 
-        <div className="flex-1 min-h-0 px-5 py-3 overflow-hidden flex flex-col gap-3">
+        <div className="flex-1 min-h-0 px-5 py-2 overflow-y-auto no-scrollbar flex flex-col gap-2">
           <div className="ios-card border border-white/5 p-3 shrink-0">
             <div className="grid grid-cols-2 gap-2">
               <div className="rounded-2xl bg-black/20 border border-white/5 px-3 py-2 min-w-0">
@@ -278,7 +278,7 @@ export function DiceModeView({
             </div>
           </div>
 
-          <div className="ios-card border border-white/5 p-4 flex-1 min-h-[226px] flex flex-col justify-center gap-5">
+          <div className="ios-card border border-white/5 p-3 flex-1 min-h-[190px] flex flex-col justify-center gap-3">
             <WordDice
               kind="action"
               title="上骰子"
@@ -298,7 +298,7 @@ export function DiceModeView({
             />
           </div>
 
-          <div className="h-[148px] shrink-0 rounded-[24px] border border-white/10 bg-white/[0.04] p-4 flex flex-col items-center justify-center text-center">
+          <div className="h-[clamp(112px,19dvh,148px)] shrink-0 rounded-[20px] border border-white/10 bg-white/[0.04] p-3 flex flex-col items-center justify-center text-center">
             {hasResult ? (
               <>
                 <div className="flex items-center gap-2 text-[#30D158] text-xs font-semibold mb-2">

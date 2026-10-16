@@ -52,12 +52,12 @@ export function ThemeSelectorModal({
         className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
-      <div className="absolute bottom-0 left-0 right-0 bg-[#1C1C1E] rounded-t-[32px] p-6 transform transition-transform duration-300">
+      <div className="mobile-bottom-sheet absolute bottom-0 left-0 right-0 bg-[#1C1C1E] rounded-t-[32px] p-6 transform transition-transform duration-300">
         <div className="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-6" />
         <div className="flex justify-between items-center mb-6">
           <h3 className="text-xl font-bold text-white">选择主题</h3>
         </div>
-        <div className="space-y-2 max-h-[55vh] overflow-y-auto no-scrollbar pb-8">
+        <div className="space-y-2 max-h-[55dvh] overflow-y-auto no-scrollbar pb-8">
           {themes.length === 0 && (
             <div className="text-sm text-gray-500 bg-[#2C2C2E] rounded-xl p-4 border border-white/5">
               当前没有可选主题，请到题库中新建或编辑主题的适用模式
