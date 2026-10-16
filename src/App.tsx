@@ -11,6 +11,7 @@ import { DiceModeView } from './components/views/DiceModeView';
 import { RouletteModeView } from './components/views/RouletteModeView';
 import { BingoModeView } from './components/views/BingoModeView';
 import { QuizModeView } from './components/views/QuizModeView';
+import { MemoryModeView } from './components/views/MemoryModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -414,6 +415,16 @@ function App() {
       {state.view === 'quiz' && (
         <QuizModeView
           players={state.players}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'memory' && (
+        <MemoryModeView
+          players={state.players}
+          themes={state.themes}
+          currentTurn={state.turn}
+          onEndTurn={endTurn}
           onBack={handleBackFromGame}
         />
       )}
