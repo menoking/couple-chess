@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { GameMode, Player, Theme } from '../../types';
 import { Bomb, BookOpen, Brain, ChevronRight, CircleDot, Dice5, Dices, Disc3, Flag, Gift, Gavel, Grid3x3, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, Music, Shuffle, Timer, User, UserRound } from 'lucide-react';
 
@@ -131,6 +131,40 @@ export function HomeView({
   const [activeCategory, setActiveCategory] = useState<string>(() => findCategoryOf(gameMode));
   const activeModes = CATEGORIES.find(category => category.id === activeCategory)?.modes ?? CATEGORIES[0].modes;
 
+  // PC 端鼠标拖拽横向滑动
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const dragState = useRef({ dragging: false, startX: 0, startScrollLeft: 0, moved: false });
+
+  const onMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    dragState.current = { dragging: true, startX: e.clientX, startScrollLeft: scroller.scrollLeft, moved: false };
+  };
+
+  const onMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const s = dragState.current;
+    if (!s.dragging) return;
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    const dx = e.clientX - s.startX;
+    if (Math.abs(dx) > 4) s.moved = true;
+    scroller.scrollLeft = s.startScrollLeft - dx;
+  };
+
+  const onMouseUp = () => {
+    dragState.current.dragging = false;
+  };
+
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const scroller = scrollerRef.current;
+    if (!scroller) return;
+    // 纵向滚轮转为横向滑动
+    if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      scroller.scrollLeft += e.deltaY;
+    }
+  };
+
   return (
     <div className="h-full min-h-0 flex flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar space-y-6 pt-2 pb-4">
@@ -160,7 +194,15 @@ export function HomeView({
         </div>
 
         {/* 分类内玩法横向滑动 */}
-        <div className="-mx-1 overflow-x-auto no-scrollbar px-1 pb-1 snap-x snap-mandatory">
+        <div
+          ref={scrollerRef}
+          className="-mx-1 overflow-x-auto no-scrollbar px-1 pb-1 snap-x snap-mandatory cursor-grab select-none active:cursor-grabbing"
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseUp}
+          onWheel={onWheel}
+        >
           <div className="flex gap-3">
             {activeModes.map(mode => {
               const Icon = mode.icon;
@@ -169,7 +211,13 @@ export function HomeView({
                 <button
                   key={mode.id}
                   type="button"
-                  onClick={() => onSelectMode(mode.id)}
+                  onClick={() => {
+                    if (dragState.current.moved) {
+                      dragState.current.moved = false;
+                      return;
+                    }
+                    onSelectMode(mode.id);
+                  }}
                   className={`min-h-[108px] basis-[calc((100%_-_0.75rem)/2)] min-w-[168px] shrink-0 snap-start rounded-[20px] border p-4 text-left transition-all ios-btn ${
                     isActive
                       ? 'bg-white text-black border-white shadow-lg'
