@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { GameMode, Player, Theme } from '../../types';
-import { Bomb, BookOpen, Brain, ChevronRight, CircleDot, Dice5, Dices, Disc3, Flag, Gift, Gavel, Grid3x3, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, Music, Shuffle, Timer, User, UserRound } from 'lucide-react';
+import { Bomb, BookOpen, Brain, ChevronRight, CircleDot, Crown, Dice5, Dices, Disc3, Flag, Flame, Gift, Gavel, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, Music, Shuffle, Theater, Timer, User, UserRound, Zap } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -66,6 +66,18 @@ const CATEGORIES: ModeCategory[] = [
       { id: 'blindbox', title: '盲盒抽奖', desc: '抽奖励、任务、免罚、双倍卡', icon: Gift },
       { id: 'territory', title: '领地争夺', desc: '占领棋盘区域，攻城夺地', icon: Flag }
     ]
+  },
+  {
+    id: 'spicy',
+    label: '刺激',
+    modes: [
+      { id: 'trutndare', title: '真心话大冒险', desc: '狂暴版：禁区、当众、三连事件', icon: Flame },
+      { id: 'gamble', title: '赌局轮盘', desc: '赌上今晚主权，输家听差遣', icon: Crown },
+      { id: 'edge', title: '高潮边缘', desc: '推对方到临界点，先崩者输', icon: Heart },
+      { id: 'penaltygrid', title: '惩罚九宫格', desc: '失败落子，先连线者主导整晚', icon: Grid3x3 },
+      { id: 'secretdouble', title: '秘密翻倍', desc: '任务卡加码翻倍，赌命二选一', icon: Zap },
+      { id: 'roleplay', title: '角色扮演', desc: '抽剧本即兴演，权力反转台词', icon: Theater }
+    ]
   }
 ];
 
@@ -86,7 +98,13 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   survival: '开始生存',
   territory: '开始争夺',
   auction: '开始拍卖',
-  gridchess: '开始点格棋'
+  gridchess: '开始点格棋',
+  trutndare: '开始狂暴版',
+  gamble: '开始赌局',
+  edge: '开始对决',
+  penaltygrid: '开始九宫格',
+  secretdouble: '开始翻倍',
+  roleplay: '开始演戏'
 };
 
 const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
@@ -102,14 +120,20 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   territory: '选择游戏模式和双方抽卡题库',
   auction: '选择游戏模式和双方抽卡题库',
   gridchess: '选择游戏模式和双方抽卡题库',
+  trutndare: '选择游戏模式和双方抽卡题库',
+  penaltygrid: '选择游戏模式和双方抽卡题库',
+  secretdouble: '选择游戏模式和双方抽卡题库',
   mine: '选择游戏模式和双方扫雷主题题库',
   quiz: '无需题库，直接开始默契问答',
   story: '无需题库，直接开始故事接龙',
-  rhythm: '无需题库，直接开始节奏挑战'
+  rhythm: '无需题库，直接开始节奏挑战',
+  gamble: '无需题库，直接开始赌局轮盘',
+  edge: '无需题库，直接开始定力对决',
+  roleplay: '无需题库，直接开始角色扮演'
 };
 
 /** 自备内容、不需要选择主题的玩法。 */
-const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'rhythm']);
+const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'rhythm', 'gamble', 'edge', 'roleplay']);
 
 function findCategoryOf(modeId: GameMode): string {
   for (const category of CATEGORIES) {

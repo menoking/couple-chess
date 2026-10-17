@@ -20,7 +20,13 @@ export type GameMode =
   | 'survival'
   | 'territory'
   | 'auction'
-  | 'gridchess';
+  | 'gridchess'
+  | 'trutndare'
+  | 'gamble'
+  | 'edge'
+  | 'penaltygrid'
+  | 'secretdouble'
+  | 'roleplay';
 
 export type GameView =
   | 'home'
@@ -42,6 +48,12 @@ export type GameView =
   | 'territory'
   | 'auction'
   | 'gridchess'
+  | 'trutndare'
+  | 'gamble'
+  | 'edge'
+  | 'penaltygrid'
+  | 'secretdouble'
+  | 'roleplay'
   | 'themes';
 
 export interface BingoCell {

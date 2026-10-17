@@ -62,7 +62,13 @@ const GAME_MODE_VALUES: GameMode[] = [
   'survival',
   'territory',
   'auction',
-  'gridchess'
+  'gridchess',
+  'trutndare',
+  'gamble',
+  'edge',
+  'penaltygrid',
+  'secretdouble',
+  'roleplay'
 ];
 
 const VIEW_VALUES: GameView[] = [
@@ -85,6 +91,12 @@ const VIEW_VALUES: GameView[] = [
   'territory',
   'auction',
   'gridchess',
+  'trutndare',
+  'gamble',
+  'edge',
+  'penaltygrid',
+  'secretdouble',
+  'roleplay',
   'themes'
 ];
 
@@ -106,7 +118,13 @@ const MODE_VIEW: Record<GameMode, GameView> = {
   survival: 'survival',
   territory: 'territory',
   auction: 'auction',
-  gridchess: 'gridchess'
+  gridchess: 'gridchess',
+  trutndare: 'trutndare',
+  gamble: 'gamble',
+  edge: 'edge',
+  penaltygrid: 'penaltygrid',
+  secretdouble: 'secretdouble',
+  roleplay: 'roleplay'
 };
 
 const VIEW_MODE: Record<string, GameMode> = {
@@ -128,11 +146,17 @@ const VIEW_MODE: Record<string, GameMode> = {
   survival: 'survival',
   territory: 'territory',
   auction: 'auction',
-  gridchess: 'gridchess'
+  gridchess: 'gridchess',
+  trutndare: 'trutndare',
+  gamble: 'gamble',
+  edge: 'edge',
+  penaltygrid: 'penaltygrid',
+  secretdouble: 'secretdouble',
+  roleplay: 'roleplay'
 };
 
 /** 自备内容、不需要选择主题的玩法。 */
-const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'rhythm']);
+const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'rhythm', 'gamble', 'edge', 'roleplay']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);

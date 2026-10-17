@@ -21,6 +21,12 @@ import { SurvivalModeView } from './components/views/SurvivalModeView';
 import { TerritoryModeView } from './components/views/TerritoryModeView';
 import { AuctionModeView } from './components/views/AuctionModeView';
 import { GridChessModeView } from './components/views/GridChessModeView';
+import { TruthDareModeView } from './components/views/TruthDareModeView';
+import { GambleModeView } from './components/views/GambleModeView';
+import { EdgeModeView } from './components/views/EdgeModeView';
+import { PenaltyGridModeView } from './components/views/PenaltyGridModeView';
+import { SecretDoubleModeView } from './components/views/SecretDoubleModeView';
+import { RoleplayModeView } from './components/views/RoleplayModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -44,7 +50,10 @@ const CARD_THEME_MODES = new Set<GameMode>([
   'survival',
   'territory',
   'auction',
-  'gridchess'
+  'gridchess',
+  'trutndare',
+  'penaltygrid',
+  'secretdouble'
 ]);
 
 const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
@@ -60,6 +69,9 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
   territory: 'card',
   auction: 'card',
   gridchess: 'card',
+  trutndare: 'card',
+  penaltygrid: 'card',
+  secretdouble: 'card',
   mine: 'mineTheme'
 };
 
@@ -523,6 +535,57 @@ function App() {
         <GridChessModeView
           players={state.players}
           themes={state.themes}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'trutndare' && (
+        <TruthDareModeView
+          players={state.players}
+          themes={state.themes}
+          currentTurn={state.turn}
+          onEndTurn={endTurn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'gamble' && (
+        <GambleModeView
+          players={state.players}
+          themes={state.themes}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'edge' && (
+        <EdgeModeView
+          players={state.players}
+          themes={state.themes}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'penaltygrid' && (
+        <PenaltyGridModeView
+          players={state.players}
+          themes={state.themes}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'secretdouble' && (
+        <SecretDoubleModeView
+          players={state.players}
+          themes={state.themes}
+          currentTurn={state.turn}
+          onEndTurn={endTurn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'roleplay' && (
+        <RoleplayModeView
+          players={state.players}
           onBack={handleBackFromGame}
         />
       )}
