@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react';
-import { ArrowLeft, Flame, Grid3x3, RefreshCw, Skull, User, UserRound } from 'lucide-react';
-import { Player, TaskCard, TaskEventData, Theme } from '../../types';
-import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, pickRandom, shuffle, themeIntensity } from '../../utils/modeKit';
+import { useState } from 'react';
+import { ArrowLeft, CircleDot, RefreshCw, User, UserRound } from 'lucide-react';
+import { Player, TaskEventData, Theme } from '../../types';
+import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface GridChessModeViewProps {
@@ -10,177 +10,135 @@ interface GridChessModeViewProps {
   onBack: () => void;
 }
 
-const COLS = 5;
-const ROWS = 4;
-const TOTAL_CELLS = COLS * ROWS;
+const DOTS = 5;
+const CELLS_PER_SIDE = DOTS - 1;
+const TOTAL_BOXES = CELLS_PER_SIDE * CELLS_PER_SIDE;
 
-/** 每回合的格子争夺数量（奇数，保证每回合必有胜方）； Starter 逐轮交替。 */
-const ROUND_PLAN = [3, 5, 7, 5];
+// 横线总数：DOTS 行 × (DOTS-1) 条
+const H_LINES = DOTS * CELLS_PER_SIDE;
+// 竖线总数：DOTS 列 × (DOTS-1) 条
+const V_LINES = DOTS * CELLS_PER_SIDE;
+const TOTAL_LINES = H_LINES + V_LINES;
 
-interface Cell {
-  entry: ThemeTaskEntry;
-  level: number;
-  owner: number | null;
-  burnt: boolean;
+interface LineOwner {
+  ownerId: number | null;
 }
 
-function levelForCellsWon(cellsWon: number): number {
-  return Math.max(2, Math.min(5, 1 + cellsWon));
-}
-
-function GridChessGame({ players, themes, onExit }: { players: Player[]; themes: Theme[]; onExit: () => void }) {
-  const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
-
-  const board = useMemo<Cell[]>(() => {
-    const seen = new Set<string>();
-    const unique: ThemeTaskEntry[] = [];
-    for (const entry of pool) {
-      const key = `${entry.task.text}__${entry.task.executor}__${entry.task.moveDelta}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      unique.push(entry);
-    }
-    const picked: ThemeTaskEntry[] = [];
-    while (picked.length < TOTAL_CELLS && unique.length > 0) {
-      picked.push(...shuffle(unique).slice(0, TOTAL_CELLS - picked.length));
-    }
-    return picked.map(entry => ({
-      entry,
-      level: themeIntensity(themes.find(t => t.id === entry.themeId)),
-      owner: null,
-      burnt: false
-    }));
-  }, [pool, themes]);
-
-  const [cells, setCells] = useState<Cell[]>(board);
-  const [round, setRound] = useState(0);
-  const [decisions, setDecisions] = useState(0);
-  const [roundClaims, setRoundClaims] = useState<Array<{ playerId: number }>>([]);
-  const [roundResult, setRoundResult] = useState<{ winnerId: number; cellsWon: number; loserId: number } | null>(null);
+function DotsAndBoxesGame({
+  players,
+  themes,
+  onExit
+}: {
+  players: Player[];
+  themes: Theme[];
+  onExit: () => void;
+}) {
+  const [turn, setTurn] = useState(0);
+  const [horizontal, setHorizontal] = useState<LineOwner[]>(() => new Array(H_LINES).fill(null).map(() => ({ ownerId: null })));
+  const [vertical, setVertical] = useState<LineOwner[]>(() => new Array(V_LINES).fill(null).map(() => ({ ownerId: null })));
+  const [boxes, setBoxes] = useState<number[]>(() => new Array(TOTAL_BOXES).fill(-1));
   const [taskData, setTaskData] = useState<TaskEventData | null>(null);
-  const [pendingIndex, setPendingIndex] = useState<number | null>(null);
-  const [roundsWon, setRoundsWon] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [imposed, setImposed] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [tieRound, setTieRound] = useState(false);
   const [finished, setFinished] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
 
-  // 当前回合的出手方：Starter 逐轮交替，回合内轮流
-  const starterId = round % 2 === 0 ? players[0]?.id : players[1]?.id;
-  const claimerId = decisions % 2 === 0 ? starterId : players.find(p => p.id !== starterId)?.id ?? starterId;
-  const claimer = players.find(p => p.id === claimerId) || players[0];
-  const roundQuota = ROUND_PLAN[round] ?? 0;
+  const activePlayer = players[turn];
+  const drawnLines = horizontal.filter(l => l.ownerId !== null).length + vertical.filter(l => l.ownerId !== null).length;
+  const boxCounts = players.map(player => boxes.filter(owner => owner === player.id).length);
 
-  const drawLevelTask = (level: number): TaskCard | null => {
-    const candidates = pool.filter(entry => themeIntensity(themes.find(t => t.id === entry.themeId)) >= level);
-    const preferred = candidates.filter(entry => themeIntensity(themes.find(t => t.id === entry.themeId)) === level);
-    const entry = pickRandom(preferred.length > 0 ? preferred : candidates);
-    return entry ? entry.task : null;
+  const horizontalBoxes = (lineIndex: number): number[] => {
+    const r = Math.floor(lineIndex / CELLS_PER_SIDE);
+    const c = lineIndex % CELLS_PER_SIDE;
+    const result: number[] = [];
+    if (r > 0) result.push((r - 1) * CELLS_PER_SIDE + c);
+    if (r < DOTS - 1) result.push(r * CELLS_PER_SIDE + c);
+    return result;
   };
 
-  const finishRound = (claims: Array<{ playerId: number }>) => {
-    const first = claims.filter(c => c.playerId === players[0]?.id).length;
-    const second = claims.filter(c => c.playerId === players[1]?.id).length;
-    if (first === second) {
-      setTieRound(true);
+  // 竖线索引 = c * CELLS_PER_SIDE + r（c 列，r 行间隔）
+  const verticalBoxes = (lineIndex: number): number[] => {
+    const c = Math.floor(lineIndex / CELLS_PER_SIDE);
+    const r = lineIndex % CELLS_PER_SIDE;
+    const result: number[] = [];
+    if (c > 0) result.push(r * CELLS_PER_SIDE + (c - 1));
+    if (c < DOTS - 1) result.push(r * CELLS_PER_SIDE + c);
+    return result;
+  };
+
+  const isBoxClosed = (boxIndex: number, h: LineOwner[], v: LineOwner[]): boolean => {
+    const r = Math.floor(boxIndex / CELLS_PER_SIDE);
+    const c = boxIndex % CELLS_PER_SIDE;
+    // 上边：横线 r*CELLS_PER_SIDE + c
+    const top = h[r * CELLS_PER_SIDE + c].ownerId !== null;
+    // 下边：横线 (r+1)*CELLS_PER_SIDE + c
+    const bottom = h[(r + 1) * CELLS_PER_SIDE + c].ownerId !== null;
+    // 左边：竖线 c*CELLS_PER_SIDE + r
+    const left = v[c * CELLS_PER_SIDE + r].ownerId !== null;
+    // 右边：竖线 (c+1)*CELLS_PER_SIDE + r
+    const right = v[(c + 1) * CELLS_PER_SIDE + r].ownerId !== null;
+    return top && bottom && left && right;
+  };
+
+  const drawLine = (kind: 'h' | 'v', lineIndex: number) => {
+    if (finished || taskData) return;
+    const isH = kind === 'h';
+    const currentLines = isH ? horizontal : vertical;
+    if (currentLines[lineIndex].ownerId !== null) return;
+
+    let nextH = horizontal;
+    let nextV = vertical;
+    if (isH) {
+      nextH = horizontal.map((l, i) => (i === lineIndex ? { ownerId: turn } : l));
+    } else {
+      nextV = vertical.map((l, i) => (i === lineIndex ? { ownerId: turn } : l));
+    }
+
+    const affectedBoxes = isH ? horizontalBoxes(lineIndex) : verticalBoxes(lineIndex);
+    const newlyClosed = affectedBoxes.filter(boxIdx => boxes[boxIdx] === -1 && isBoxClosed(boxIdx, nextH, nextV));
+
+    if (newlyClosed.length > 0) {
+      const nextBoxes = boxes.map((owner, i) => (newlyClosed.includes(i) ? turn : owner));
+      setHorizontal(nextH);
+      setVertical(nextV);
+      setBoxes(nextBoxes);
+
+      const pool = buildTaskPool(players, themes) ?? [];
+      const entry = pickRandom(pool);
+      if (entry) {
+        setTaskData(createViewTaskEvent({ entry, title: `闭合 ${newlyClosed.length} 格 · 任务`, executorPlayerId: turn }));
+      }
       return;
     }
-    const winnerId = first > second ? players[0]?.id ?? 0 : players[1]?.id ?? 1;
-    const loserId = winnerId === players[0]?.id ? players[1]?.id ?? 1 : players[0]?.id ?? 0;
-    const cellsWon = Math.max(first, second);
-    setRoundResult({ winnerId, cellsWon, loserId });
-    setRoundsWon(prev => ({ ...prev, [winnerId]: (prev[winnerId] ?? 0) + 1 }));
+
+    setHorizontal(nextH);
+    setVertical(nextV);
+    setTurn(turn === 0 ? 1 : 0);
   };
 
-  const tapCell = (index: number) => {
-    if (taskData || roundResult || finished) return;
-    const cell = cells[index];
-    if (!cell || cell.owner !== null || cell.burnt) return;
-    setPendingIndex(index);
-    setTaskData(createViewTaskEvent({ entry: cell.entry, title: '格子任务', executorPlayerId: claimerId }));
-  };
-
-  const resolveClaim = (accepted: boolean) => {
-    if (pendingIndex === null) return;
-    const nextCells = cells.map((cell, i) => {
-      if (i !== pendingIndex) return cell;
-      return accepted ? { ...cell, owner: claimerId } : { ...cell, burnt: true };
-    });
-    const nextDecisions = decisions + 1;
-    const nextClaims = accepted ? [...roundClaims, { playerId: claimerId }] : roundClaims;
-
-    setCells(nextCells);
+  const finishTask = () => {
     setTaskData(null);
-    setPendingIndex(null);
-
-    if (nextDecisions >= roundQuota) {
-      finishRound(nextClaims);
-      setDecisions(0);
-      setRoundClaims([]);
-      return;
-    }
-    setDecisions(nextDecisions);
-    setRoundClaims(nextClaims);
-  };
-
-  const openImposedTask = () => {
-    if (!roundResult) return;
-    const level = levelForCellsWon(roundResult.cellsWon);
-    const task = drawLevelTask(level);
-    if (!task) {
-      setNotice('题库中没有足够高尺度的任务，本回合作废');
-      nextRound();
-      return;
-    }
-    setTaskData(
-      createViewTaskEvent({
-        entry: { task, themeId: '', themeName: '尺度卡', playerId: roundResult.loserId },
-        title: `尺度任务 · ${'★'.repeat(level)}`,
-        executorPlayerId: roundResult.loserId
-      })
-    );
-  };
-
-  const resolveImposed = () => {
-    if (roundResult) {
-      setImposed(prev => ({ ...prev, [roundResult.loserId]: (prev[roundResult.loserId] ?? 0) + 1 }));
-    }
-    setTaskData(null);
-    nextRound();
-  };
-
-  const nextRound = () => {
-    setRoundResult(null);
-    setTieRound(false);
-    setNotice(null);
-    if (round + 1 >= ROUND_PLAN.length) {
+    if (boxes.every(owner => owner !== -1)) {
       setFinished(true);
-      return;
     }
-    setRound(value => value + 1);
-    setDecisions(0);
-    setRoundClaims([]);
+    // 闭合格子者获得额外回合，turn 保持不变
   };
 
   if (finished) {
-    const [first, second] = players;
-    const a = roundsWon[first?.id ?? 0] ?? 0;
-    const b = roundsWon[second?.id ?? 0] ?? 0;
+    const first = players[0];
+    const second = players[1];
+    const a = boxes.filter(owner => owner === first.id).length;
+    const b = boxes.filter(owner => owner === second.id).length;
     const winner = a === b ? null : a > b ? first : second;
     return (
       <div className="space-y-4">
         <div className="rounded-3xl border border-[#FFD60A]/25 bg-[#FFD60A]/10 p-6 text-center">
-          <Grid3x3 size={36} className="mx-auto text-[#FFD60A]" />
+          <CircleDot size={36} className="mx-auto text-[#FFD60A]" />
           <div className="mt-3 text-xl font-bold text-white">
-            {winner ? `${winner.name} 赢下更多回合！` : '势均力敌，平局！'}
+            {winner ? `${winner.name} 闭合更多格子！` : '平分秋色，平局！'}
           </div>
           <div className="mt-4 space-y-2">
             {players.map(player => (
               <div key={player.id} className="flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3">
                 <span className="text-sm font-bold" style={{ color: player.color }}>{player.name}</span>
-                <span className="text-xs text-gray-400">
-                  胜 {roundsWon[player.id] ?? 0} 回合 · 被罚 {imposed[player.id] ?? 0} 次
-                </span>
+                <span className="text-lg font-bold text-white">{boxes.filter(owner => owner === player.id).length} 格</span>
               </div>
             ))}
           </div>
@@ -200,113 +158,183 @@ function GridChessGame({ players, themes, onExit }: { players: Player[]; themes:
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold text-gray-400">
-          第 {round + 1} / {ROUND_PLAN.length} 回合 · 本轮抢 {roundQuota} 格
+          已画 {drawnLines} / {TOTAL_LINES} 条线
         </div>
         <div className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold">
-          {players.map(player => (
+          {players.map((player, index) => (
             <span key={player.id} style={{ color: player.color }}>
-              {player.name} 胜 {roundsWon[player.id] ?? 0}
+              {player.name} {boxCounts[index]} 格
             </span>
           ))}
         </div>
       </div>
 
-      {roundResult ? (
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-[#FF9F0A]/25 bg-[#FF9F0A]/10 p-6 text-center">
-            <Flame size={36} className="mx-auto text-[#FF9F0A]" />
-            <div className="mt-3 text-xl font-bold text-white">
-              {players.find(p => p.id === roundResult.winnerId)?.name} 以 {roundResult.cellsWon} 格获胜！
-            </div>
-            <div className="mt-2 text-sm text-gray-400">
-              {players.find(p => p.id === roundResult.loserId)?.name} 需完成{' '}
-              {'★'.repeat(levelForCellsWon(roundResult.cellsWon))} 尺度任务
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={openImposedTask}
-            className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
-          >
-            查看尺度任务
-          </button>
-        </div>
-      ) : tieRound ? (
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-6 text-center">
-            <div className="text-lg font-bold text-white">本回合打平</div>
-            <div className="mt-2 text-sm text-gray-400">双方抢到同样多的格子，无人获得尺度卡</div>
-          </div>
-          <button
-            type="button"
-            onClick={nextRound}
-            className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
-          >
-            进入下一回合
-          </button>
-        </div>
-      ) : (
-        <>
-          <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
-            {claimer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-            {claimer?.name || '当前玩家'} 出手：完成任务占领格子
-            <span className="text-[11px] font-normal text-gray-500">
-              已完成 {decisions}/{roundQuota}
-            </span>
-          </div>
+      <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
+        {activePlayer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
+        {activePlayer?.name || '当前玩家'} 的回合：连接两个相邻的点
+      </div>
 
-          <div className="grid grid-cols-5 gap-1.5">
-            {cells.map((cell, index) => {
-              const ownerPlayer = cell.owner !== null ? players.find(p => p.id === cell.owner) : undefined;
-              return (
-                <button
-                  key={index}
-                  type="button"
-                  disabled={!!taskData || cell.owner !== null || cell.burnt}
-                  onClick={() => tapCell(index)}
-                  aria-label={ownerPlayer ? `${ownerPlayer.name}的格子` : cell.burnt ? '已废弃' : '可占领格子'}
-                  className={`relative flex aspect-square items-center justify-center rounded-xl border transition-all ios-btn disabled:cursor-default ${
-                    cell.burnt
-                      ? 'border-white/5 bg-black/30'
-                      : cell.owner !== null
-                        ? 'border-white/10'
-                        : 'border-white/10 bg-white/[0.04] active:bg-white/10'
-                  }`}
-                  style={
-                    ownerPlayer
-                      ? { backgroundColor: `${ownerPlayer.color}2E`, borderColor: `${ownerPlayer.color}66` }
-                      : undefined
-                  }
-                >
-                  {ownerPlayer ? (
-                    <Grid3x3 size={14} style={{ color: ownerPlayer.color }} />
-                  ) : cell.burnt ? (
-                    <Skull size={13} className="text-gray-700" />
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
+      <DotsBoard
+        dots={DOTS}
+        horizontal={horizontal}
+        vertical={vertical}
+        boxes={boxes}
+        players={players}
+        onDrawLine={drawLine}
+      />
 
-          <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-[11px] leading-relaxed text-gray-500">
-            规则：每回合双方轮流抢格，完成任务即可占领（跳过则作废该格）。回合结束时抢到格子更多的一方获胜，可按胜出格数决定对方执行多大尺度的任务；格子越大尺度越高。共 {ROUND_PLAN.length} 回合。
-          </div>
-
-          {notice && (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-center text-sm font-bold text-white">
-              {notice}
-            </div>
-          )}
-        </>
-      )}
+      <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-[11px] leading-relaxed text-gray-500">
+        规则：轮流连接相邻的两个点画一条线。谁连成某个正方形的最后一条边，谁就赢得那个格子，并获得一次额外回合；闭合格子还会触发一张任务卡。全部格子闭合后，格子多者获胜。
+      </div>
 
       <TaskCardModal
         isOpen={!!taskData}
         taskData={taskData}
-        onAccept={() => (roundResult && pendingIndex === null ? resolveImposed() : resolveClaim(true))}
-        onReject={() => (roundResult && pendingIndex === null ? resolveImposed() : resolveClaim(false))}
-        onClose={() => (roundResult && pendingIndex === null ? resolveImposed() : resolveClaim(false))}
+        onAccept={finishTask}
+        onReject={finishTask}
+        onClose={finishTask}
       />
+    </div>
+  );
+}
+
+function DotsBoard({
+  dots,
+  horizontal,
+  vertical,
+  boxes,
+  players,
+  onDrawLine
+}: {
+  dots: number;
+  horizontal: LineOwner[];
+  vertical: LineOwner[];
+  boxes: number[];
+  players: Player[];
+  onDrawLine: (kind: 'h' | 'v', index: number) => void;
+}) {
+  const cells = dots - 1;
+  const dotSize = 12;
+  const cellSize = 64;
+  const boardWidth = cells * cellSize + dotSize;
+
+  const renderBoxes = () => {
+    const boxesArr = [];
+    for (let r = 0; r < cells; r++) {
+      for (let c = 0; c < cells; c++) {
+        const index = r * cells + c;
+        const ownerId = boxes[index];
+        const owner = ownerId !== -1 ? players.find(p => p.id === ownerId) : undefined;
+        if (!owner) continue;
+        boxesArr.push(
+          <div
+            key={`box-${index}`}
+            className="absolute flex items-center justify-center rounded-sm text-lg font-bold"
+            style={{
+              left: c * cellSize + dotSize,
+              top: r * cellSize + dotSize,
+              width: cellSize - dotSize,
+              height: cellSize - dotSize,
+              color: owner.color,
+              backgroundColor: `${owner.color}22`
+            }}
+          >
+            {owner.name.charAt(0)}
+          </div>
+        );
+      }
+    }
+    return boxesArr;
+  };
+
+  const renderHorizontal = () => {
+    const lines = [];
+    for (let r = 0; r < dots; r++) {
+      for (let c = 0; c < cells; c++) {
+        const index = r * cells + c;
+        const line = horizontal[index];
+        const owner = line.ownerId !== null ? players.find(p => p.id === line.ownerId) : undefined;
+        lines.push(
+          <button
+            key={`h-${index}`}
+            type="button"
+            onClick={() => onDrawLine('h', index)}
+            aria-label={owner ? `${owner.name}已连接` : '连接横线'}
+            className="absolute rounded-full transition-all"
+            style={{
+              left: c * cellSize + dotSize,
+              top: r * cellSize,
+              width: cellSize - 4,
+              height: 6,
+              backgroundColor: owner ? owner.color : 'rgba(255,255,255,0.15)'
+            }}
+          />
+        );
+      }
+    }
+    return lines;
+  };
+
+  const renderVertical = () => {
+    const lines = [];
+    for (let c = 0; c < dots; c++) {
+      for (let r = 0; r < cells; r++) {
+        const index = c * cells + r;
+        const line = vertical[index];
+        const owner = line.ownerId !== null ? players.find(p => p.id === line.ownerId) : undefined;
+        lines.push(
+          <button
+            key={`v-${index}`}
+            type="button"
+            onClick={() => onDrawLine('v', index)}
+            aria-label={owner ? `${owner.name}已连接` : '连接竖线'}
+            className="absolute rounded-full transition-all"
+            style={{
+              left: c * cellSize,
+              top: r * cellSize + dotSize,
+              width: 6,
+              height: cellSize - 4,
+              backgroundColor: owner ? owner.color : 'rgba(255,255,255,0.15)'
+            }}
+          />
+        );
+      }
+    }
+    return lines;
+  };
+
+  const renderDots = () => {
+    const dotsArr = [];
+    for (let r = 0; r <= cells; r++) {
+      for (let c = 0; c <= cells; c++) {
+        dotsArr.push(
+          <div
+            key={`dot-${r}-${c}`}
+            className="absolute rounded-full bg-white"
+            style={{
+              left: c * cellSize,
+              top: r * cellSize,
+              width: dotSize,
+              height: dotSize
+            }}
+          />
+        );
+      }
+    }
+    return dotsArr;
+  };
+
+  return (
+    <div className="flex justify-center">
+      <div
+        className="relative"
+        style={{ width: boardWidth, height: boardWidth }}
+      >
+        {renderBoxes()}
+        {renderHorizontal()}
+        {renderVertical()}
+        {renderDots()}
+      </div>
     </div>
   );
 }
@@ -328,16 +356,16 @@ export function GridChessModeView({ players, themes, onBack }: GridChessModeView
             <ArrowLeft className="text-white" size={20} />
           </button>
           <div className="flex-1 text-center">
-            <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#FFD60A]">Grid Chess</div>
-            <div className="mt-1 text-sm font-bold text-white">格子棋 · 胜者定尺度</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#FFD60A]">Dots & Boxes</div>
+            <div className="mt-1 text-sm font-bold text-white">点格棋 · 连接点闭合格子</div>
           </div>
           <div className="flex h-10 w-10 items-center justify-center text-gray-500">
-            <Grid3x3 size={22} />
+            <CircleDot size={22} />
           </div>
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 no-scrollbar">
-          <GridChessGame key={runId} players={players} themes={themes} onExit={onBack} />
+          <DotsAndBoxesGame key={runId} players={players} themes={themes} onExit={onBack} />
 
           <button
             type="button"

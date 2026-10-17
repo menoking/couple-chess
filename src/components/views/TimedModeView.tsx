@@ -52,6 +52,11 @@ function TimedGame({ players, themes, onExit }: { players: Player[]; themes: The
   const current = queue[index];
   const exhausted = index >= queue.length;
 
+  // 任务全部完成时也视为结束，停止倒计时
+  useEffect(() => {
+    if (exhausted) setOver(true);
+  }, [exhausted]);
+
   const complete = () => {
     if (!current) return;
     const theme = themes.find(t => t.id === current.themeId);

@@ -115,8 +115,8 @@ const gameModes: Array<{
   },
   {
     id: 'gridchess',
-    title: '格子棋',
-    desc: '抢格定胜负，胜者决定对方抽多大尺度卡片',
+    title: '点格棋',
+    desc: '连接相邻点闭合格子，闭合者得格并再走一步',
     icon: Grid3x3
   },
   {
@@ -144,7 +144,7 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   survival: '开始生存',
   territory: '开始争夺',
   auction: '开始拍卖',
-  gridchess: '开始下棋'
+  gridchess: '开始点格棋'
 };
 
 const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {

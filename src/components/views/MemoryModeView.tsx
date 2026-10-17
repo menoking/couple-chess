@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Brain, Check, RefreshCw, User, UserRound } from 'lucide-react';
-import { Player, TaskCard, Theme } from '../../types';
+import { ArrowLeft, Brain, Check, RefreshCw, Sparkles, User, UserRound } from 'lucide-react';
+import { Player, TaskCard, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, shuffle } from '../../utils/modeKit';
+import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface MemoryModeViewProps {
   players: Player[];
@@ -59,7 +60,7 @@ function MemoryGame({
   const [board, setBoard] = useState<Tile[]>(tiles);
   const [flips, setFlips] = useState<number[]>([]);
   const [locked, setLocked] = useState(false);
-  const [matchNotice, setMatchNotice] = useState<{ task: TaskCard; themeName: string; byId: number } | null>(null);
+  const [matchTask, setMatchTask] = useState<TaskEventData | null>(null);
   const [pairCounts, setPairCounts] = useState<Record<number, number>>({ 0: 0, 1: 0 });
   const [finished, setFinished] = useState(false);
   const timerRef = useRef<number | null>(null);
@@ -81,7 +82,6 @@ function MemoryGame({
     const nextFlips = [...flips, index];
     setBoard(prev => prev.map((item, i) => (i === index ? { ...item, flipped: true } : item)));
     setFlips(nextFlips);
-    setMatchNotice(null);
 
     if (nextFlips.length < 2) return;
 
@@ -95,12 +95,20 @@ function MemoryGame({
         )
       );
       setPairCounts(prev => ({ ...prev, [byId]: (prev[byId] ?? 0) + 1 }));
-      setMatchNotice({ task: matched.task, themeName: matched.themeName, byId });
       setFlips([]);
-      if (foundPairs + 1 >= totalPairs) {
-        setFinished(true);
-        setMatchNotice(null);
-      }
+      // 配对成功后弹出真正的任务卡
+      setMatchTask({
+        type: 'card',
+        initiatorPlayerId: byId,
+        executorPlayerId: byId,
+        title: '配对成功 · 任务',
+        subtitle: `任务来自「${matched.themeName}」`,
+        icon: 'sparkles',
+        color: byId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
+        task: matched.task.text,
+        taskSourceId: matched.themeId,
+        moveDelta: 0
+      });
       return;
     }
 
@@ -111,6 +119,14 @@ function MemoryGame({
       setLocked(false);
       onEndTurn();
     }, MISMATCH_DELAY);
+  };
+
+  const handleMatchTaskDone = () => {
+    setMatchTask(null);
+    const nextFound = board.filter(tile => tile.matchedBy !== null).length / 2;
+    if (nextFound >= totalPairs) {
+      setFinished(true);
+    }
   };
 
   if (finished) {
@@ -188,9 +204,7 @@ function MemoryGame({
                     </span>
                   </>
                 ) : (
-                  <span className="px-1 text-[9px] font-bold leading-tight text-white line-clamp-4">
-                    {tile.task.text}
-                  </span>
+                  <Sparkles size={18} className="text-white/70" />
                 )
               ) : (
                 <Brain size={16} className="text-gray-600" />
@@ -200,17 +214,13 @@ function MemoryGame({
         })}
       </div>
 
-      {matchNotice && (
-        <div className="rounded-3xl border border-[#30D158]/25 bg-[#30D158]/10 p-5">
-          <div className="flex items-center gap-2 text-xs font-bold text-[#30D158]">
-            <Check size={15} />配对成功 · {matchNotice.themeName}
-          </div>
-          <div className="mt-2 text-sm leading-relaxed text-white">{matchNotice.task.text}</div>
-          <div className="mt-2 text-[11px] text-gray-500">
-            任务已由 {players.find(p => p.id === matchNotice.byId)?.name || '当前玩家'} 收下，继续翻牌
-          </div>
-        </div>
-      )}
+      <TaskCardModal
+        isOpen={!!matchTask}
+        taskData={matchTask}
+        onAccept={handleMatchTaskDone}
+        onReject={handleMatchTaskDone}
+        onClose={handleMatchTaskDone}
+      />
     </div>
   );
 }

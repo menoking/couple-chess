@@ -54,7 +54,7 @@ export function PoseCardModal({ isOpen, imageSrc, onAccept, onReject }: PoseCard
               <h3 className="text-xl font-bold text-white mb-5">姿势图示</h3>
               <div className="w-full flex-1 min-h-0 mb-5 flex items-center justify-center">
                 <img
-                  src={visibleImageSrc}
+                  src={encodeURI(visibleImageSrc)}
                   alt="随机姿势"
                   className="max-w-full max-h-full rounded-2xl object-contain"
                 />
