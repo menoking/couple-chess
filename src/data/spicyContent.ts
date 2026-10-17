@@ -39,6 +39,18 @@ export const SPICY_DARE_CHALLENGES: string[] = [
   '保持眼神对视 60 秒，同时说最撩的话'
 ];
 
+// 秘密翻倍「加码」时叠加的升级挑战，让任务真正变刺激
+export const SPICY_DOUBLE_UPGRADES: string[] = [
+  '保持眼神对视，全程不能移开',
+  '任务全程由对方口头指挥节奏',
+  '加入束缚或蒙眼元素，由对方决定',
+  '把动作放慢三倍，感受每一个细节',
+  '全程不许发出声音，否则重新开始',
+  '脱到只剩最后一件再执行',
+  '完成后必须亲口说出此刻最真实的感觉',
+  '允许对方临时加一个「更过分」的附加要求'
+];
+
 export const ROLEPLAY_SCRIPTS: RoleplayScript[] = [
   {
     personA: '深夜急诊的医生',
@@ -81,5 +93,75 @@ export const ROLEPLAY_SCRIPTS: RoleplayScript[] = [
     scene: '深夜的寝宫，烛光摇曳',
     plot: '国王今夜要点名宠幸，臣民不可违抗',
     forcedLine: '国王：跪下，今晚你属于我'
+  },
+  {
+    personA: '严厉的健身教练',
+    personB: '新报名的学员',
+    scene: '深夜空无一人的健身房',
+    plot: '教练要求加练体能，动作纠正越靠越近',
+    forcedLine: '教练：姿势不对，我亲自帮你摆正'
+  },
+  {
+    personA: '房东',
+    personB: '拖欠房租的房客',
+    scene: '深夜出租屋，房东突然上门',
+    plot: '房东提出各种方式抵房租，房客进退两难',
+    forcedLine: '房东：今晚拿什么抵，你自己说'
+  },
+  {
+    personA: '摄影师大导演',
+    personB: '试镜的新人',
+    scene: '深夜的摄影棚，只有一盏补光灯',
+    plot: '导演不断要求重拍更放开的镜头',
+    forcedLine: '导演：再来一条，这次再放开一点'
+  },
+  {
+    personA: '审讯的特工',
+    personB: '被抓到的间谍',
+    scene: '秘密基地，四周没有监控',
+    plot: '特工用尽手段逼问情报，双方暗中较劲',
+    forcedLine: '特工：你瞒不过我，乖乖交出来'
+  },
+  {
+    personA: '深夜图书馆的管理员',
+    personB: '赖着不走的读者',
+    scene: '闭馆后的图书馆，书架之间',
+    plot: '管理员以整理书架为由，把你堵在角落',
+    forcedLine: '管理员：闭馆了，你得留下来帮我'
+  },
+  {
+    personA: '私人健身私教',
+    personB: 'VIP 会员',
+    scene: '私教工作室，只服务你一个人',
+    plot: '私教全程贴身指导，语言逐渐暧昧',
+    forcedLine: '私教：放松，剩下的交给我'
+  },
+  {
+    personA: '摇滚明星',
+    personB: '狂热粉丝',
+    scene: '演唱会后台化妆间',
+    plot: '明星把粉丝单独留下，从偶像变占有',
+    forcedLine: '明星：既然这么喜欢我，证明给我看'
+  },
+  {
+    personA: '列车乘务长',
+    personB: '末班车乘客',
+    scene: '深夜空荡的卧铺车厢',
+    plot: '乘务长巡夜时发现你，一步步靠近',
+    forcedLine: '乘务长：到站还早，今晚我陪着你'
+  },
+  {
+    personA: '古堡主人',
+    personB: '迷路的旅人',
+    scene: '暴雨夜的古老城堡，只有一支烛光',
+    plot: '主人收留你，却不愿放你离开',
+    forcedLine: '主人：进来了，就别想着天亮前走'
+  },
+  {
+    personA: '审讯官',
+    personB: '被审讯的囚犯',
+    scene: '昏暗的牢房，铁链和手铐',
+    plot: '审讯官要你交代秘密，否则加倍惩罚',
+    forcedLine: '审讯官：再不说，今晚可没那么好过'
   }
 ];

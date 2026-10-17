@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { ArrowLeft, RefreshCw, Sparkles, User, UserRound, Zap } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, pickRandom, themeIntensity } from '../../utils/modeKit';
+import { SPICY_DOUBLE_UPGRADES } from '../../data/spicyContent';
 import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface SecretDoubleModeViewProps {
@@ -24,57 +25,102 @@ function SecretDoubleGame({
   onEndTurn: () => void;
 }) {
   const activePlayer = players[currentTurn] || players[0];
+  const opponent = players.find(p => p.id !== activePlayer?.id);
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
-  const [phase, setPhase] = useState<'pick' | 'double' | 'task' | 'reveal'>('pick');
+
+  const [phase, setPhase] = useState<'pick' | 'double' | 'task'>('pick');
   const [currentEntry, setCurrentEntry] = useState<ThemeTaskEntry | null>(null);
+  const [upgradedEntry, setUpgradedEntry] = useState<ThemeTaskEntry | null>(null);
+  const [upgradeNote, setUpgradeNote] = useState<string | null>(null);
   const [doubled, setDoubled] = useState(false);
   const [points, setPoints] = useState<Record<number, number>>({ 0: 0, 1: 0 });
   const [taskData, setTaskData] = useState<ReturnType<typeof createViewTaskEvent> | null>(null);
+  const [resultBanner, setResultBanner] = useState<string | null>(null);
 
   const draw = () => {
     const entry = pickRandom(pool);
     if (!entry) return;
     setCurrentEntry(entry);
-    setPhase('double');
+    setUpgradedEntry(null);
+    setUpgradeNote(null);
     setDoubled(false);
+    setResultBanner(null);
+    setPhase('double');
+  };
+
+  // 加码：从更高尺度的主题里重新抽任务；若无更高尺度，则叠加升级挑战
+  const buildUpgradedEntry = (): { entry: ThemeTaskEntry; note: string } => {
+    const currentTheme = themes.find(t => t.id === currentEntry?.themeId);
+    const currentLevel = themeIntensity(currentTheme);
+
+    // 找强度更高的主题任务
+    const higher = pool.filter(entry => themeIntensity(themes.find(t => t.id === entry.themeId)) > currentLevel);
+    if (higher.length > 0) {
+      const entry = pickRandom(higher) ?? higher[0];
+      const entryLevel = themeIntensity(themes.find(t => t.id === entry.themeId));
+      return {
+        entry,
+        note: `尺度升级：★${currentLevel} → ★${entryLevel}，任务换了更刺激的`
+      };
+    }
+
+    // 已是最强，叠加升级挑战
+    const upgrade = pickRandom(SPICY_DOUBLE_UPGRADES) ?? SPICY_DOUBLE_UPGRADES[0];
+    const baseEntry = currentEntry as ThemeTaskEntry;
+    const boosted: ThemeTaskEntry = {
+      ...baseEntry,
+      task: { ...baseEntry.task, text: `${baseEntry.task.text}（加码：${upgrade}）` }
+    };
+    return { entry: boosted, note: `已达最高尺度，叠加挑战：${upgrade}` };
   };
 
   const choose = (doDouble: boolean) => {
     setDoubled(doDouble);
     setPhase('task');
-    if (currentEntry) {
-      const executorId = doDouble ? (activePlayer.id === 0 ? 1 : 0) : activePlayer.id;
+    if (!currentEntry) return;
+
+    if (doDouble) {
+      const { entry, note } = buildUpgradedEntry();
+      setUpgradedEntry(entry);
+      setUpgradeNote(note);
+      const executorId = activePlayer.id === 0 ? 1 : 0;
       setTaskData(
-        createViewTaskEvent({
-          entry: currentEntry,
-          title: doDouble ? '加码任务 · 尺度翻倍' : '普通任务',
-          executorPlayerId: executorId
-        })
+        createViewTaskEvent({ entry, title: '加码任务', executorPlayerId: executorId })
+      );
+    } else {
+      setUpgradedEntry(currentEntry);
+      setUpgradeNote(null);
+      setTaskData(
+        createViewTaskEvent({ entry: currentEntry, title: '普通任务', executorPlayerId: activePlayer.id })
       );
     }
   };
 
   const resolve = (accepted: boolean) => {
-    if (!currentEntry) return;
-    const theme = themes.find(t => t.id === currentEntry.themeId);
+    const entry = upgradedEntry ?? currentEntry;
+    if (!entry) return;
+    const theme = themes.find(t => t.id === entry.themeId);
     const base = themeIntensity(theme);
     const gain = accepted ? (doubled ? base * 2 : base) : 0;
     if (accepted) {
       setPoints(prev => ({ ...prev, [activePlayer.id]: (prev[activePlayer.id] ?? 0) + gain }));
+      setResultBanner(doubled ? `加码完成！+${gain} 分（翻倍奖励）` : `完成 +${gain} 分`);
+    } else {
+      setResultBanner(doubled ? '加码任务放弃，血亏翻倍奖励' : '任务跳过');
     }
     setTaskData(null);
     setCurrentEntry(null);
+    setUpgradedEntry(null);
+    setUpgradeNote(null);
     setPhase('pick');
     onEndTurn();
   };
-
-  const opponent = players.find(p => p.id !== activePlayer?.id);
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold text-gray-400">
-          翻倍模式
+          秘密翻倍
         </div>
         <div className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold">
           {players.map(player => (
@@ -89,6 +135,12 @@ function SecretDoubleGame({
         {activePlayer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
         {activePlayer?.name || '当前玩家'} 的回合
       </div>
+
+      {resultBanner && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-center text-sm font-bold text-white">
+          {resultBanner}
+        </div>
+      )}
 
       {phase === 'pick' && (
         <button
@@ -112,7 +164,7 @@ function SecretDoubleGame({
             </div>
           </div>
           <div className="text-center text-sm text-gray-400">
-            要不要赌一把？加码后尺度翻倍、由{opponent?.name}执行，但完成奖励也翻倍
+            加码后会换一个<strong className="text-[#D08BFF]">更刺激的任务</strong>，由{opponent?.name}执行，完成奖励翻倍
           </div>
           <div className="flex gap-3">
             <button type="button" onClick={() => choose(false)} className="ios-btn h-14 flex-1 rounded-full bg-[#3A3A3C] text-base font-bold text-white">
@@ -126,13 +178,20 @@ function SecretDoubleGame({
       )}
 
       {phase === 'task' && taskData && (
-        <TaskCardModal
-          isOpen
-          taskData={taskData}
-          onAccept={() => resolve(true)}
-          onReject={() => resolve(false)}
-          onClose={() => resolve(false)}
-        />
+        <>
+          {upgradeNote && (
+            <div className="rounded-2xl border border-[#BF5AF2]/30 bg-[#BF5AF2]/10 p-3 text-center text-xs font-bold text-[#D08BFF]">
+              {upgradeNote}
+            </div>
+          )}
+          <TaskCardModal
+            isOpen
+            taskData={taskData}
+            onAccept={() => resolve(true)}
+            onReject={() => resolve(false)}
+            onClose={() => resolve(false)}
+          />
+        </>
       )}
     </div>
   );

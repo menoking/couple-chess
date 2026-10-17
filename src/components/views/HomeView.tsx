@@ -69,7 +69,7 @@ const CATEGORIES: ModeCategory[] = [
   },
   {
     id: 'spicy',
-    label: '刺激',
+    label: '挑战',
     modes: [
       { id: 'trutndare', title: '真心话大冒险', desc: '狂暴版：禁区、当众、三连事件', icon: Flame },
       { id: 'gamble', title: '赌局轮盘', desc: '赌上今晚主权，输家听差遣', icon: Crown },
