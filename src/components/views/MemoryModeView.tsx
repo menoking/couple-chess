@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Brain, Check, RefreshCw, Sparkles, User, UserRound } from 'lucide-react';
+import { ArrowLeft, Brain, Check, Crown, Flame, Gift, Heart, RefreshCw, Star, Sun, User, UserRound, Zap } from 'lucide-react';
 import { Player, TaskCard, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, shuffle } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
@@ -15,12 +15,16 @@ interface MemoryModeViewProps {
 const MAX_PAIRS = 8;
 const MISMATCH_DELAY = 900;
 
+// 每对卡片分配一个独特图案，同对相同、不同对不同
+const PAIR_ICONS = [Heart, Star, Crown, Flame, Gift, Sun, Zap, Brain] as const;
+
 interface Tile {
   pairId: number;
   task: TaskCard;
   themeId: string;
   themeName: string;
   ownerId: number;
+  icon: typeof PAIR_ICONS[number];
   flipped: boolean;
   matchedBy: number | null;
 }
@@ -51,8 +55,9 @@ function MemoryGame({
     const pairs = shuffle(unique).slice(0, MAX_PAIRS);
     const deck: Tile[] = [];
     pairs.forEach((entry, pairId) => {
-      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, flipped: false, matchedBy: null });
-      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, flipped: false, matchedBy: null });
+      const icon = PAIR_ICONS[pairId % PAIR_ICONS.length];
+      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, icon, flipped: false, matchedBy: null });
+      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, icon, flipped: false, matchedBy: null });
     });
     return shuffle(deck);
   }, [pool]);
@@ -204,7 +209,7 @@ function MemoryGame({
                     </span>
                   </>
                 ) : (
-                  <Sparkles size={18} className="text-white/70" />
+                  <TileIcon tile={tile} />
                 )
               ) : (
                 <Brain size={16} className="text-gray-600" />
@@ -222,6 +227,17 @@ function MemoryGame({
         onClose={handleMatchTaskDone}
       />
     </div>
+  );
+}
+
+function TileIcon({ tile }: { tile: Tile }) {
+  const Icon = tile.icon;
+  const colors = ['#FF9F0A', '#BF5AF2', '#30D158', '#FF375F', '#0A84FF', '#FFD60A', '#64D2FF', '#FF6B35'];
+  const color = colors[tile.pairId % colors.length];
+  return (
+    <span className="flex flex-col items-center gap-1">
+      <Icon size={20} style={{ color }} fill={color} />
+    </span>
   );
 }
 
