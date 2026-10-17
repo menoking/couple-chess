@@ -355,10 +355,17 @@ function normalizeThemes(input: unknown): Theme[] {
       } satisfies Theme;
     })
     .reduce<Theme[]>((acc, theme) => {
-      if (acc.some(t => t.id === theme.id)) {
-        if (DEFAULT_THEME_IDS.has(theme.id)) {
-          return acc.map(item => (item.id === theme.id ? theme : item));
+      // 内置主题：始终以最新的 DEFAULT_THEMES 定义为准，避免旧存档中的过期标签/任务覆盖新版本
+      if (DEFAULT_THEME_IDS.has(theme.id)) {
+        const existing = acc.find(t => t.id === theme.id);
+        const fresh = DEFAULT_THEMES.find(t => t.id === theme.id) ?? theme;
+        if (existing) {
+          return acc.map(item => (item.id === theme.id ? fresh : item));
         }
+        acc.push(fresh);
+        return acc;
+      }
+      if (acc.some(t => t.id === theme.id)) {
         return acc;
       }
       acc.push(theme);
