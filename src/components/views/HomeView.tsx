@@ -159,36 +159,38 @@ export function HomeView({
           ))}
         </div>
 
-        {/* 宫格网格 */}
-        <div className="grid grid-cols-3 gap-3">
-          {activeModes.map(mode => {
-            const Icon = mode.icon;
-            const isActive = mode.id === gameMode;
-            return (
-              <button
-                key={mode.id}
-                type="button"
-                onClick={() => onSelectMode(mode.id)}
-                className={`flex flex-col items-center gap-2 rounded-[20px] border p-4 text-center transition-all ios-btn ${
-                  isActive
-                    ? 'bg-white text-black border-white shadow-lg'
-                    : 'bg-[#1C1C1E] text-white border-white/5'
-                }`}
-              >
-                <div
-                  className={`flex h-11 w-11 items-center justify-center rounded-full ${
-                    isActive ? 'bg-black text-white' : 'bg-white/5 text-gray-300'
+        {/* 分类内玩法横向滑动 */}
+        <div className="-mx-1 overflow-x-auto no-scrollbar px-1 pb-1 snap-x snap-mandatory">
+          <div className="flex gap-3">
+            {activeModes.map(mode => {
+              const Icon = mode.icon;
+              const isActive = mode.id === gameMode;
+              return (
+                <button
+                  key={mode.id}
+                  type="button"
+                  onClick={() => onSelectMode(mode.id)}
+                  className={`min-h-[108px] basis-[calc((100%_-_0.75rem)/2)] min-w-[168px] shrink-0 snap-start rounded-[20px] border p-4 text-left transition-all ios-btn ${
+                    isActive
+                      ? 'bg-white text-black border-white shadow-lg'
+                      : 'bg-[#1C1C1E] text-white border-white/5'
                   }`}
                 >
-                  <Icon size={22} />
-                </div>
-                <div className="text-sm font-bold leading-tight">{mode.title}</div>
-                <div className={`text-[10px] leading-snug ${isActive ? 'text-black/60' : 'text-gray-500'}`}>
-                  {mode.desc}
-                </div>
-              </button>
-            );
-          })}
+                  <div
+                    className={`flex h-10 w-10 items-center justify-center rounded-full mb-3 ${
+                      isActive ? 'bg-black text-white' : 'bg-white/5 text-gray-300'
+                    }`}
+                  >
+                    <Icon size={22} />
+                  </div>
+                  <div className="text-sm font-bold leading-tight">{mode.title}</div>
+                  <div className={`text-xs leading-relaxed mt-1 ${isActive ? 'text-black/60' : 'text-gray-500'}`}>
+                    {mode.desc}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {shouldShowThemeSelectors && (

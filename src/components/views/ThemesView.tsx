@@ -106,7 +106,8 @@ export function ThemesView({ themes, onCreateTheme, onEditTheme }: ThemesViewPro
         <div className="flex shrink-0 items-start gap-2">
           <ThemeTags tags={theme.tags} />
           <div className="h-7 shrink-0 bg-white/10 px-2 py-1 rounded text-[10px] text-gray-300">
-            {theme.tasks.length}�?          </div>
+            {theme.tasks.length} 张
+          </div>
         </div>
       </div>
     </div>
