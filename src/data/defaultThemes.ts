@@ -1,7 +1,7 @@
 import { Theme, ThemeMode, ThemeTag } from '../types';
 import { REVIEW_THEME_DATA } from './reviewThemes';
 
-const intensityLabels = ['低尺度', '轻度', '中尺度', '高尺度', '大尺度'] as const;
+const intensityLabels = ['甜蜜', '暧昧', '激情', '诱惑', '深入'] as const;
 const intensityTag = (level: 1 | 2 | 3 | 4 | 5): ThemeTag => ({
   kind: 'special',
   type: 'intensity',
@@ -114,7 +114,7 @@ const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes' | 'tags'> & { modes?: Theme
   {
     "id": "sweet",
     "name": "甜蜜日常",
-    "desc": "床头夜话与温馨互动 (Level 1)",
+    "desc": "床头夜话与温馨互动",
     "audience": "common",
     "tasks": [
       {
@@ -302,7 +302,7 @@ const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes' | 'tags'> & { modes?: Theme
   {
     "id": "love",
     "name": "暧昧升温",
-    "desc": "感官挑逗与浪漫前戏 (Level 2)",
+    "desc": "感官挑逗与浪漫前戏",
     "audience": "common",
     "tasks": [
       {
@@ -485,7 +485,7 @@ const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes' | 'tags'> & { modes?: Theme
   {
     "id": "couple",
     "name": "干柴烈火",
-    "desc": "褪去衣物与肌肤相亲 (Level 3)",
+    "desc": "褪去衣物与肌肤相亲",
     "audience": "common",
     "tasks": [
       {
@@ -668,7 +668,7 @@ const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes' | 'tags'> & { modes?: Theme
   {
     "id": "intimate",
     "name": "极度诱惑",
-    "desc": "边缘性行为与深度取悦 (Level 4)",
+    "desc": "边缘性行为与深度取悦",
     "audience": "common",
     "tasks": [
       {
@@ -851,7 +851,7 @@ const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes' | 'tags'> & { modes?: Theme
   {
     "id": "advanced",
     "name": "灵肉合一",
-    "desc": "实战冲刺与特殊玩法 (Level 5)",
+    "desc": "实战冲刺与特殊玩法",
     "audience": "common",
     "tasks": [
       {
