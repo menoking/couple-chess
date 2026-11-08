@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Github } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Github, Moon, Sun } from 'lucide-react';
 import { useGameState } from './hooks/useGameState';
 import { GameMode, MineTaskChoice, TaskEventData, ThemeMode } from './types';
 import { HomeView } from './components/views/HomeView';
@@ -81,6 +81,26 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
 };
 
 function App() {
+  const [theme, setTheme] = useState<'dark' | 'light'>(() => {
+    try {
+      const saved = window.localStorage.getItem('cfc-theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    } catch {
+      // 忽略隐私模式下的存储异常
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('theme-light', theme === 'light');
+    document.documentElement.dataset.theme = theme;
+    try {
+      window.localStorage.setItem('cfc-theme', theme);
+    } catch {
+      // 忽略
+    }
+  }, [theme]);
+
   const {
     state,
     switchView,
@@ -238,15 +258,30 @@ function App() {
             <h1 className="text-3xl font-bold text-white tracking-tight">情侣飞行棋</h1>
           </div>
           <div className="flex flex-col items-end gap-2 mt-1">
-            <a
-              href="https://github.com/menoking/couple-chess"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-gray-400 hover:text-white transition-colors"
-              title="GitHub Repository"
-            >
-              <Github size={24} />
-            </a>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                className="ios-btn flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/10"
+                aria-label={theme === 'light' ? '切换到黑夜主题' : '切换到白天主题'}
+                title={theme === 'light' ? '切换到黑夜主题' : '切换到白天主题'}
+              >
+                {theme === 'light' ? (
+                  <Moon size={17} className="text-gray-400" />
+                ) : (
+                  <Sun size={17} className="text-[#FFD60A]" />
+                )}
+              </button>
+              <a
+                href="https://github.com/menoking/couple-chess"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-400 hover:text-white transition-colors"
+                title="GitHub Repository"
+              >
+                <Github size={22} />
+              </a>
+            </div>
             <span className="text-xs text-gray-500">
               由 Meno 改版
             </span>

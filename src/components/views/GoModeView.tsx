@@ -2,8 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, CircleDot, Flag, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
-import { GO_SIZE, GoBoard, createGoBoard, playMove, scoreGoBoard } from '../../utils/go';
+import { GoBoard, createGoBoard, playMove, scoreGoBoard } from '../../utils/go';
 import { TaskCardModal } from '../modals/TaskCardModal';
+import { DiceRollOff } from '../DiceRollOff';
 
 interface GoModeViewProps {
   players: Player[];
@@ -18,7 +19,10 @@ const CAPTURE_PER_CARD = 3;
 const WINNER_CARDS = 2;
 const LOSER_CARDS = 1;
 
-type Phase = 'play' | 'over';
+type Phase = 'roll' | 'play' | 'over';
+
+/** 九路棋盘星位（0 基坐标） */
+const STAR_POINTS = new Set([2 * 9 + 2, 2 * 9 + 6, 6 * 9 + 2, 6 * 9 + 6, 4 * 9 + 4]);
 
 interface PendingCard {
   playerId: number;
@@ -34,7 +38,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
   const [lastMove, setLastMove] = useState<number | null>(null);
   const [captures, setCaptures] = useState<Record<number, number>>({ 0: 0, 1: 0 });
   const [passes, setPasses] = useState(0);
-  const [phase, setPhase] = useState<Phase>('play');
+  const [phase, setPhase] = useState<Phase>('roll');
   const [surrenderedBy, setSurrenderedBy] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -118,6 +122,21 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
     setTurn(turn === 0 ? 1 : 0);
   };
 
+  if (phase === 'roll') {
+    return (
+      <DiceRollOff
+        players={players}
+        title="掷骰定先手"
+        hint="点数大的一方先落子，围棋先手更占优势"
+        confirmLabel="确认，我先手"
+        onComplete={winnerId => {
+          setTurn(winnerId === 1 ? 1 : 0);
+          setPhase('play');
+        }}
+      />
+    );
+  }
+
   if (phase === 'over') {
     const winnerId = surrenderedBy !== null
       ? (surrenderedBy === 0 ? 1 : 0)
@@ -187,15 +206,10 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
         {passes === 1 && <span className="text-[10px] text-[#FF9F0A]">·对方已停一手</span>}
       </div>
 
-      <div className="grid grid-cols-9 overflow-hidden rounded-2xl border-2 border-white/20 bg-[#1a1a1c]">
+      <div className="go-board grid grid-cols-9 overflow-hidden rounded-2xl border">
         {board.map((value, index) => {
-          const row = Math.floor(index / GO_SIZE);
-          const col = index % GO_SIZE;
           const owner = value !== null ? players.find(player => player.id === value) : undefined;
           const isLast = lastMove === index;
-
-          const borderTop = row % 3 === 0 && row !== 0 ? 'border-t border-t-white/30' : 'border-t border-t-white/12';
-          const borderLeft = col % 3 === 0 && col !== 0 ? 'border-l border-l-white/30' : 'border-l border-l-white/12';
 
           return (
             <button
@@ -203,14 +217,19 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
               type="button"
               onClick={() => handlePlace(index)}
               disabled={!!taskData}
-              className={`relative aspect-square ${borderTop} ${borderLeft} flex items-center justify-center`}
+              className="go-line relative flex aspect-square items-center justify-center border-l border-t"
             >
+              {!owner && STAR_POINTS.has(index) && (
+                <span className="absolute h-[13%] w-[13%] rounded-full bg-current opacity-20" />
+              )}
               {owner && (
                 <span
-                  className="h-[78%] w-[78%] rounded-full shadow-inner"
+                  className="h-[76%] w-[76%] rounded-full"
                   style={{
                     backgroundColor: owner.color,
-                    boxShadow: isLast ? '0 0 0 2px rgba(255,214,10,0.9)' : `inset 0 -2px 4px rgba(0,0,0,0.35)`
+                    boxShadow: isLast
+                      ? '0 0 0 2px rgba(255, 214, 10, 0.7)'
+                      : 'inset 0 -2px 3px rgba(0, 0, 0, 0.25), 0 1px 2px rgba(0, 0, 0, 0.2)'
                   }}
                 />
               )}
