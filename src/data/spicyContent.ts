@@ -39,6 +39,114 @@ export const SPICY_DARE_CHALLENGES: string[] = [
   '保持眼神对视 60 秒，同时说最撩的话'
 ];
 
+// 赌局轮盘：按赌注分档的任务池，赌注越高任务越刺激
+export interface GambleEntry {
+  /** 轮盘上显示的短标签 */
+  label: string;
+  /** 具体任务内容 */
+  task: string;
+}
+
+export interface GambleTier {
+  key: 'light' | 'medium' | 'heavy';
+  label: string;
+  stake: number;
+  hint: string;
+  entries: GambleEntry[];
+}
+
+export const GAMBLE_TIERS: GambleTier[] = [
+  {
+    key: 'light',
+    label: '轻注',
+    stake: 1,
+    hint: '轻松试探，输的人做个小动作',
+    entries: [
+      { label: '喂食', task: '亲手喂对方吃一口东西，看着对方吃完' },
+      { label: '夸赞', task: '连夸对方三个优点，不许重复也不许停顿' },
+      { label: '哄睡', task: '用一句话把对方哄睡，语气要温柔到对方信以为真' },
+      { label: '记忆', task: '十秒内说出对方今天穿的每一件衣物' },
+      { label: '捏肩', task: '给对方捏肩 60 秒，力度和位置由对方指挥' },
+      { label: '模仿', task: '学对方平时说话的语气，说一句情话' },
+      { label: '旧事', task: '说出你们第一次约会的确切地点和时间' },
+      { label: '形容', task: '用三个词形容对方此刻的样子，不许说"可爱"' }
+    ]
+  },
+  {
+    key: 'medium',
+    label: '中注',
+    stake: 2,
+    hint: '开始升温，需要一点勇气',
+    entries: [
+      { label: '写字', task: '隔着衣物用手指在对方背上写字，写对才过关' },
+      { label: '对视', task: '与对方对视 30 秒，先笑的人认输' },
+      { label: '耳语', task: '凑到对方耳边，说一句只有你们两个人听得懂的话' },
+      { label: '触觉', task: '闭上眼睛，靠触觉猜出对方刚才碰过的三个部位' },
+      { label: '拥抱', task: '给对方一个 20 秒的拥抱，中途不许松手' },
+      { label: '亲吻', task: '依次亲吻对方的手背、手腕和脖颈各一次' },
+      { label: '蒙眼', task: '蒙上眼睛，让对方喂你喝一口水，猜出是什么' },
+      { label: '坦白', task: '说出一个你从没告诉过对方的幻想关键词' }
+    ]
+  },
+  {
+    key: 'heavy',
+    label: '重注',
+    stake: 3,
+    hint: '赌上分寸，尺度明显加大',
+    entries: [
+      { label: '锁骨', task: '从对方的锁骨一路吻到耳后，持续 30 秒不停' },
+      { label: '脱衣', task: '由对方指定一件衣物，当场脱下' },
+      { label: '留痕', task: '让对方在你身上留下一处持续 5 秒的痕迹' },
+      { label: '盲触', task: '蒙眼接受对方 1 分钟的任意触碰，边界由你事先划定' },
+      { label: '朗读', task: '用最撩的语气读完对方临时指定的一段话' },
+      { label: '支配', task: '接下来 3 分钟，你的姿态由对方决定' },
+      { label: '描摹', task: '隔着衣物用双唇描摹对方的肩线' },
+      { label: '露骨', task: '十指相扣、额头相抵，说三句最露骨的情话' }
+    ]
+  }
+];
+
+// 高潮边缘：五级递进阶梯，每级动作具体、有明确时长
+export interface EdgeLevel {
+  level: number;
+  title: string;
+  action: string;
+  seconds: number;
+}
+
+export const EDGE_LADDER: EdgeLevel[] = [
+  {
+    level: 1,
+    title: '十指相扣',
+    action: '十指相扣、额头相抵，安静对视，谁先移开视线就算先破功',
+    seconds: 30
+  },
+  {
+    level: 2,
+    title: '手腕到锁骨',
+    action: '从对方手腕内侧一路吻到锁骨，中途不许停、不许笑场',
+    seconds: 45
+  },
+  {
+    level: 3,
+    title: '背脊描摹',
+    action: '隔着衣物用手掌沿着对方背脊缓慢描摹，速度由推进方控制',
+    seconds: 60
+  },
+  {
+    level: 4,
+    title: '耳后低语',
+    action: '亲吻对方耳后与脖颈，同时在耳边用最低的音量说一句挑逗的话',
+    seconds: 60
+  },
+  {
+    level: 5,
+    title: '指定停留',
+    action: '由被推进方指定身上任意一处（边界内），推进方用嘴唇停留 20 秒',
+    seconds: 20
+  }
+];
+
 // 秘密翻倍「加码」时叠加的升级挑战，让任务真正变刺激
 export const SPICY_DOUBLE_UPGRADES: string[] = [
   '保持眼神对视，全程不能移开',

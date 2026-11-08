@@ -15,7 +15,6 @@ import { MemoryModeView } from './components/views/MemoryModeView';
 import { BlindBoxModeView } from './components/views/BlindBoxModeView';
 import { TimedModeView } from './components/views/TimedModeView';
 import { StoryModeView } from './components/views/StoryModeView';
-import { RhythmModeView } from './components/views/RhythmModeView';
 import { EventsModeView } from './components/views/EventsModeView';
 import { SurvivalModeView } from './components/views/SurvivalModeView';
 import { TerritoryModeView } from './components/views/TerritoryModeView';
@@ -28,6 +27,7 @@ import { PenaltyGridModeView } from './components/views/PenaltyGridModeView';
 import { SecretDoubleModeView } from './components/views/SecretDoubleModeView';
 import { RoleplayModeView } from './components/views/RoleplayModeView';
 import { SudokuModeView } from './components/views/SudokuModeView';
+import { GoModeView } from './components/views/GoModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -55,7 +55,8 @@ const CARD_THEME_MODES = new Set<GameMode>([
   'trutndare',
   'penaltygrid',
   'secretdouble',
-  'sudoku'
+  'sudoku',
+  'go'
 ]);
 
 const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
@@ -75,6 +76,7 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
   penaltygrid: 'card',
   secretdouble: 'card',
   sudoku: 'card',
+  go: 'card',
   mine: 'mineTheme'
 };
 
@@ -237,7 +239,7 @@ function App() {
           </div>
           <div className="flex flex-col items-end gap-2 mt-1">
             <a
-              href="https://github.com/Youlookfunny/couple-flying-chess"
+              href="https://github.com/menoking/couple-chess"
               target="_blank"
               rel="noopener noreferrer"
               className="text-gray-400 hover:text-white transition-colors"
@@ -245,12 +247,9 @@ function App() {
             >
               <Github size={24} />
             </a>
-            <a
-              href="mailto:laiwozhe9527@gmail.com"
-              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-            >
-              问题反馈：laiwozhe9527@gmail.com
-            </a>
+            <span className="text-xs text-gray-500">
+              由 Meno 改版
+            </span>
           </div>
         </header>
 
@@ -489,13 +488,6 @@ function App() {
         />
       )}
 
-      {state.view === 'rhythm' && (
-        <RhythmModeView
-          players={state.players}
-          onBack={handleBackFromGame}
-        />
-      )}
-
       {state.view === 'events' && (
         <EventsModeView
           players={state.players}
@@ -595,6 +587,15 @@ function App() {
 
       {state.view === 'sudoku' && (
         <SudokuModeView
+          players={state.players}
+          themes={state.themes}
+          currentTurn={state.turn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'go' && (
+        <GoModeView
           players={state.players}
           themes={state.themes}
           currentTurn={state.turn}

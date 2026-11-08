@@ -57,7 +57,6 @@ const GAME_MODE_VALUES: GameMode[] = [
   'blindbox',
   'timed',
   'story',
-  'rhythm',
   'events',
   'survival',
   'territory',
@@ -69,7 +68,8 @@ const GAME_MODE_VALUES: GameMode[] = [
   'penaltygrid',
   'secretdouble',
   'roleplay',
-  'sudoku'
+  'sudoku',
+  'go'
 ];
 
 const VIEW_VALUES: GameView[] = [
@@ -86,7 +86,6 @@ const VIEW_VALUES: GameView[] = [
   'blindbox',
   'timed',
   'story',
-  'rhythm',
   'events',
   'survival',
   'territory',
@@ -99,6 +98,7 @@ const VIEW_VALUES: GameView[] = [
   'secretdouble',
   'roleplay',
   'sudoku',
+  'go',
   'themes'
 ];
 
@@ -115,7 +115,6 @@ const MODE_VIEW: Record<GameMode, GameView> = {
   blindbox: 'blindbox',
   timed: 'timed',
   story: 'story',
-  rhythm: 'rhythm',
   events: 'events',
   survival: 'survival',
   territory: 'territory',
@@ -127,7 +126,8 @@ const MODE_VIEW: Record<GameMode, GameView> = {
   penaltygrid: 'penaltygrid',
   secretdouble: 'secretdouble',
   roleplay: 'roleplay',
-  sudoku: 'sudoku'
+  sudoku: 'sudoku',
+  go: 'go'
 };
 
 const VIEW_MODE: Record<string, GameMode> = {
@@ -144,7 +144,6 @@ const VIEW_MODE: Record<string, GameMode> = {
   blindbox: 'blindbox',
   timed: 'timed',
   story: 'story',
-  rhythm: 'rhythm',
   events: 'events',
   survival: 'survival',
   territory: 'territory',
@@ -156,11 +155,12 @@ const VIEW_MODE: Record<string, GameMode> = {
   penaltygrid: 'penaltygrid',
   secretdouble: 'secretdouble',
   roleplay: 'roleplay',
-  sudoku: 'sudoku'
+  sudoku: 'sudoku',
+  go: 'go'
 };
 
 /** 自备内容、不需要选择主题的玩法。 */
-const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'rhythm', 'gamble', 'edge', 'roleplay']);
+const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'gamble', 'edge', 'roleplay']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);

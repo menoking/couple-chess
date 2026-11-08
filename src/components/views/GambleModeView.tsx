@@ -1,8 +1,7 @@
-import { useState } from 'react';
-import { ArrowLeft, Coins, Crown, RefreshCw, User, UserRound } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Coins, Flame, RefreshCw, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
-import { pickRandom } from '../../utils/modeKit';
-import { SPICY_PENALTIES } from '../../data/spicyContent';
+import { GAMBLE_TIERS, GambleTier } from '../../data/spicyContent';
 
 interface GambleModeViewProps {
   players: Player[];
@@ -10,138 +9,196 @@ interface GambleModeViewProps {
   onBack: () => void;
 }
 
-interface BetOption {
-  label: string;
-  icon: string;
-  risk: number; // 赔率（越高越刺激）
+const CELL_WIDTH = 100;
+const STRIP_START_INDEX = 4;
+const SPIN_DURATION = 1900;
+
+type Phase = 'bet' | 'spin' | 'result';
+
+interface RoundResult {
+  tier: GambleTier;
+  task: string;
+  loserId: number;
+  winnerId: number;
+  points: number;
 }
 
-const WHEEL_SECTIONS: BetOption[] = [
-  { label: '轻吻', icon: '💋', risk: 1 },
-  { label: '拥抱', icon: '🤗', risk: 1 },
-  { label: '情话', icon: '💬', risk: 1 },
-  { label: '摸头', icon: '👐', risk: 1 },
-  { label: '舔耳', icon: '👂', risk: 2 },
-  { label: '吻痕', icon: '💘', risk: 2 },
-  { label: '脱一件', icon: '👗', risk: 3 },
-  { label: '当众亲', icon: '😈', risk: 3 },
-  { label: '主权转让', icon: '👑', risk: 5 },
-  { label: '任你差遣', icon: '🔓', risk: 5 }
-];
-
 function GambleGame({ players }: { players: Player[] }) {
-  const [phase, setPhase] = useState<'bet' | 'spin' | 'result'>('bet');
-  const [spinning, setSpinning] = useState(false);
-  const [winnerId, setWinnerId] = useState<number | null>(null);
-  const [result, setResult] = useState<BetOption | null>(null);
-  const [history, setHistory] = useState<Array<{ label: string; loserId: number }>>([]);
+  const [spinnerId, setSpinnerId] = useState(0);
+  const [phase, setPhase] = useState<Phase>('bet');
+  const [pendingTier, setPendingTier] = useState<GambleTier | null>(null);
+  const [reelIndex, setReelIndex] = useState(STRIP_START_INDEX);
+  const [roundKey, setRoundKey] = useState(0);
+  const [result, setResult] = useState<RoundResult | null>(null);
+  const [scores, setScores] = useState<Record<number, number>>({ 0: 0, 1: 0 });
+  const [rounds, setRounds] = useState(0);
+  const timerRef = useRef<number | null>(null);
 
-  const activePlayer = players[0];
-  const opponent = players[1];
+  useEffect(() => () => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+  }, []);
 
-  const spin = () => {
-    if (spinning) return;
-    setSpinning(true);
+  const spinner = players.find(player => player.id === spinnerId) ?? players[0];
+  const nextSpinner = players.find(player => player.id !== spinnerId) ?? players[1];
+
+  const startSpin = (tier: GambleTier) => {
+    const entryIndex = Math.floor(Math.random() * tier.entries.length);
+    const entry = tier.entries[entryIndex];
+    // 赌局自己决定谁做任务：一半概率砸回坐庄的人
+    const loserId = Math.random() < 0.5 ? spinnerId : (spinnerId === 0 ? 1 : 0);
+    const winnerId = loserId === 0 ? 1 : 0;
+
+    setPendingTier(tier);
+    setResult({
+      tier,
+      task: entry.task,
+      loserId,
+      winnerId,
+      points: tier.stake * 2
+    });
     setPhase('spin');
-    setTimeout(() => {
-      const landed = pickRandom(WHEEL_SECTIONS) ?? WHEEL_SECTIONS[0];
-      // 简单决定：随机落点
-      const loserId = Math.random() < 0.5 ? 0 : 1;
-      setResult(landed);
-      setWinnerId(loserId === 0 ? 1 : 0);
-      setHistory(prev => [...prev, { label: landed.label, loserId }]);
-      setSpinning(false);
+    setReelIndex(8 + entryIndex);
+
+    timerRef.current = window.setTimeout(() => {
+      setScores(prev => ({ ...prev, [winnerId]: (prev[winnerId] ?? 0) + tier.stake * 2 }));
       setPhase('result');
-    }, 1600);
+    }, SPIN_DURATION);
   };
 
-  const nextBet = () => {
-    setPhase('bet');
+  const nextRound = () => {
     setResult(null);
-    setWinnerId(null);
+    setPendingTier(null);
+    setPhase('bet');
+    setRoundKey(value => value + 1);
+    setReelIndex(STRIP_START_INDEX);
+    setSpinnerId(prev => (prev === 0 ? 1 : 0));
+    setRounds(value => value + 1);
   };
 
-  const winner = winnerId !== null ? players.find(p => p.id === winnerId) : undefined;
-  const loser = winnerId !== null ? players.find(p => p.id !== winnerId) : undefined;
+  const referenceEntries = pendingTier ? pendingTier.entries : GAMBLE_TIERS[0].entries;
+  const strip = [...referenceEntries, ...referenceEntries, ...referenceEntries];
+
+  const loser = result ? players.find(player => player.id === result.loserId) : undefined;
+  const winner = result ? players.find(player => player.id === result.winnerId) : undefined;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold text-gray-400">
-          已赌 {history.length} 轮
+          第 {rounds + 1} 轮
         </div>
-        <div className="flex items-center gap-1.5 rounded-full bg-[#FFD60A]/15 px-3 py-1 text-[10px] font-bold text-[#FFD60A]">
-          <Crown size={12} />赌上今晚的主权
+        <div className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold">
+          {players.map(player => (
+            <span key={player.id} style={{ color: player.color }}>
+              {player.name} {scores[player.id] ?? 0} 分
+            </span>
+          ))}
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-3 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
-        <User size={15} className="text-[#0A84FF]" />{activePlayer?.name || '男方'} vs {opponent?.name || '女方'}<UserRound size={15} className="text-[#FF375F]" />
+      <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
+        {spinner?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
+        {spinner?.name || '当前玩家'} 坐庄：选注码后开转
       </div>
 
-      {phase === 'bet' && (
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-6 text-center">
-            <Coins size={36} className="mx-auto text-[#FFD60A]" />
-            <div className="mt-3 text-xl font-bold text-white">转盘赌局</div>
-            <div className="mt-2 text-sm text-gray-400">
-              这一转，输家要完成转出的动作，并整晚听赢家差遣
+      {/* 轮盘视窗 */}
+      {phase !== 'bet' && (
+        <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-white/[0.04]">
+          <div className="pointer-events-none absolute left-1/2 top-0 bottom-0 z-10 w-px -translate-x-1/2 bg-[#FFD60A]/60" />
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-8 bg-gradient-to-r from-black/60 to-transparent" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-8 bg-gradient-to-l from-black/60 to-transparent" />
+          <div className="h-[72px] w-full overflow-hidden">
+            <div
+              key={roundKey}
+              className="flex h-full items-center will-change-transform"
+              style={{
+                transform: `translateX(${110 - reelIndex * CELL_WIDTH}px)`,
+                transition: `transform ${SPIN_DURATION}ms cubic-bezier(0.12, 0.75, 0.05, 1)`
+              }}
+            >
+              {strip.map((entry, index) => (
+                <div
+                  key={`${entry.label}-${index}`}
+                  className="flex h-full shrink-0 items-center justify-center"
+                  style={{ width: CELL_WIDTH }}
+                >
+                  <span className="rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-2 text-sm font-bold text-white">
+                    {entry.label}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2">
-            {WHEEL_SECTIONS.map(section => (
-              <div key={section.label} className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] p-3">
-                <span className="text-xl">{section.icon}</span>
-                <span className="text-xs font-semibold text-white">{section.label}</span>
-                <span className="ml-auto text-[10px] font-bold text-[#FF9F0A]">×{section.risk}</span>
-              </div>
-            ))}
+        </div>
+      )}
+
+      {phase === 'bet' && (
+        <div className="space-y-3">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-5 text-center">
+            <Coins size={30} className="mx-auto text-[#FFD60A]" />
+            <div className="mt-2 text-lg font-bold text-white">选择注码</div>
+            <div className="mt-1 text-xs text-gray-500">
+              注码决定轮盘里的任务强度；结果有一半概率砸回你自己
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={spin}
-            className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
-          >
-            转动轮盘
-          </button>
+
+          {GAMBLE_TIERS.map(tier => (
+            <button
+              key={tier.key}
+              type="button"
+              onClick={() => startSpin(tier)}
+              className="ios-btn flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-left active:bg-white/10"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
+                  {tier.stake === 1
+                    ? <Sparkles size={16} className="text-[#30D158]" />
+                    : <Flame size={16} className={tier.stake === 2 ? 'text-[#FF9F0A]' : 'text-[#FF453A]'} />}
+                </span>
+                <div>
+                  <div className="text-base font-bold text-white">{tier.label}</div>
+                  <div className="mt-0.5 text-[11px] text-gray-500">{tier.hint}</div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-[10px] text-gray-500">赢家得分</div>
+                <div className="text-sm font-bold text-[#FFD60A]">+{tier.stake * 2}</div>
+              </div>
+            </button>
+          ))}
         </div>
       )}
 
       {phase === 'spin' && (
-        <div className="flex flex-col items-center justify-center gap-4 py-12">
-          <div className="h-24 w-24 animate-spin rounded-full border-4 border-[#FFD60A] border-t-transparent" />
-          <div className="text-lg font-bold text-white">轮盘转动中…</div>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] py-4 text-center text-sm font-bold text-gray-400">
+          轮盘转动中…
         </div>
       )}
 
-      {phase === 'result' && result && winner && loser && (
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-[#FFD60A]/30 bg-[#FFD60A]/10 p-6 text-center">
-            <div className="text-5xl">{result.icon}</div>
-            <div className="mt-3 text-2xl font-bold text-white">{result.label}</div>
-            <div className="mt-2 text-sm text-gray-400">
-              <span style={{ color: winner.color }}>{winner.name}</span> 赢了，{' '}
-              <span style={{ color: loser.color }}>{loser.name}</span> 要照做
+      {phase === 'result' && result && loser && winner && (
+        <div className="space-y-3">
+          <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-5">
+            <div className="flex items-center justify-between text-[11px] font-bold text-gray-500">
+              <span>{result.tier.label} · 任务</span>
+              <span className="text-[#FFD60A]">+{result.points} 分</span>
             </div>
-          </div>
-
-          {result.risk >= 4 && (
-            <div className="rounded-2xl border border-[#FF453A]/30 bg-[#FF453A]/10 p-4 text-center text-sm font-bold text-white">
-              👑 主权转让：{loser.name} 整晚听 {winner.name} 差遣
+            <div className="mt-3 text-lg font-bold leading-relaxed text-white">{result.task}</div>
+            <div className="mt-4 flex items-center justify-between rounded-2xl bg-black/30 px-4 py-3 text-sm">
+              <span className="font-bold" style={{ color: loser.color }}>
+                {loser.name} 执行
+              </span>
+              <span className="text-xs text-gray-500">
+                由 <span style={{ color: winner.color }}>{winner.name}</span> 得分
+              </span>
             </div>
-          )}
-
-          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-            <div className="text-xs font-bold text-gray-500">本轮惩罚</div>
-            <div className="mt-2 text-sm leading-relaxed text-white">{pickRandom(SPICY_PENALTIES)}</div>
           </div>
 
           <button
             type="button"
-            onClick={nextBet}
+            onClick={nextRound}
             className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
           >
-            再赌一轮
+            下一轮（换 {nextSpinner?.name} 坐庄）
           </button>
         </div>
       )}
@@ -165,7 +222,7 @@ export function GambleModeView({ players, onBack }: GambleModeViewProps) {
             <div className="mt-1 text-sm font-bold text-white">赌局轮盘</div>
           </div>
           <div className="flex h-10 w-10 items-center justify-center text-gray-500">
-            <Crown size={22} />
+            <Coins size={22} />
           </div>
         </header>
 

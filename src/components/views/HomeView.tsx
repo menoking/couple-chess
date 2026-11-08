@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { GameMode, Player, Theme } from '../../types';
-import { Bomb, BookOpen, Brain, ChevronRight, CircleDot, Crown, Dice5, Dices, Disc3, Flag, Flame, Gift, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, Music, Shuffle, Theater, Timer, User, UserRound, Zap } from 'lucide-react';
+import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Dices, Disc3, Flag, Flame, Gift, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, Shuffle, Theater, Timer, User, UserRound, Zap } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -45,6 +45,7 @@ const CATEGORIES: ModeCategory[] = [
       { id: 'memory', title: '记忆翻牌', desc: '翻配对任务卡，完成匹配任务', icon: Brain },
       { id: 'gridchess', title: '点格棋', desc: '连点闭合格子，闭合者再走一步', icon: CircleDot },
       { id: 'sudoku', title: '数独', desc: '解出一个格子数字就抽一张卡', icon: Grid2x2 },
+      { id: 'go', title: '九路围棋', desc: '提子兑卡，终局胜方多抽', icon: CircleDashed },
       { id: 'auction', title: '拍卖竞价', desc: '竞价争夺任务，出价高奖励多', icon: Gavel }
     ]
   },
@@ -54,7 +55,6 @@ const CATEGORIES: ModeCategory[] = [
     modes: [
       { id: 'quiz', title: '默契问答', desc: '分别作答同时揭晓，比谁更懂', icon: MessageCircleQuestion },
       { id: 'timed', title: '限时挑战', desc: '倒计时连续完成任务计分', icon: Timer },
-      { id: 'rhythm', title: '节奏挑战', desc: '跟随节拍互动，失误执行惩罚', icon: Music },
       { id: 'events', title: '随机事件', desc: '抽卡触发交换身份、任务升级', icon: Shuffle }
     ]
   },
@@ -94,7 +94,6 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   blindbox: '开始开盲盒',
   timed: '开始挑战',
   story: '开始接龙',
-  rhythm: '开始挑战',
   events: '开始抽卡',
   survival: '开始生存',
   territory: '开始争夺',
@@ -106,7 +105,8 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   penaltygrid: '开始九宫格',
   secretdouble: '开始翻倍',
   roleplay: '开始演戏',
-  sudoku: '开始数独'
+  sudoku: '开始数独',
+  go: '开始围棋'
 };
 
 const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
@@ -126,17 +126,17 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   penaltygrid: '选择游戏模式和双方抽卡题库',
   secretdouble: '选择游戏模式和双方抽卡题库',
   sudoku: '选择游戏模式和双方抽卡题库',
+  go: '选择游戏模式和双方抽卡题库',
   mine: '选择游戏模式和双方扫雷主题题库',
   quiz: '无需题库，直接开始默契问答',
   story: '无需题库，直接开始故事接龙',
-  rhythm: '无需题库，直接开始节奏挑战',
   gamble: '无需题库，直接开始赌局轮盘',
   edge: '无需题库，直接开始定力对决',
   roleplay: '无需题库，直接开始角色扮演'
 };
 
 /** 自备内容、不需要选择主题的玩法。 */
-const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'rhythm', 'gamble', 'edge', 'roleplay']);
+const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'gamble', 'edge', 'roleplay']);
 
 function findCategoryOf(modeId: GameMode): string {
   for (const category of CATEGORIES) {

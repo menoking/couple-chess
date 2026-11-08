@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, Check, Grid3x3, Sparkles, Trophy, User, UserRound } from 'lucide-react';
+import { ArrowLeft, Check, Grid3x3, PackageOpen, Sparkles, Trophy, User, UserRound } from 'lucide-react';
 import { BingoBoard, BingoCellResult, Player, TaskCard, TaskEventData, Theme } from '../../types';
+import { buildTaskPool, shuffle } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface BingoModeViewProps {
@@ -13,6 +14,9 @@ interface BingoModeViewProps {
   onEndTurn: () => void;
   onBack: () => void;
 }
+
+/** 本局卡包容量：只在赢下回合（连线）时抽取 */
+const CARD_PACK_SIZE = 10;
 
 export function BingoModeView({
   players,
@@ -28,6 +32,14 @@ export function BingoModeView({
   const [pendingIndex, setPendingIndex] = useState<number | null>(null);
   const [reward, setReward] = useState<{ lines: number; task: TaskCard; themeName: string } | null>(null);
   const [finished, setFinished] = useState(false);
+
+  // 有限卡包：只有赢下回合（连成一线）才能从里面抽一张
+  const cardPack = useMemo(() => {
+    const pool = buildTaskPool(players, themes) ?? [];
+    return shuffle(pool).slice(0, CARD_PACK_SIZE);
+  }, [players, themes]);
+  const [drawnCount, setDrawnCount] = useState(0);
+  const packLeft = cardPack.length - drawnCount;
 
   const totalCells = bingoBoard.cells.length;
   const completedCount = bingoBoard.cells.filter(cell => cell.completedBy !== null).length;
@@ -70,18 +82,25 @@ export function BingoModeView({
       onEndTurn();
       return;
     }
+
     if (result.boardComplete) {
       setFinished(true);
       return;
     }
-    if (result.newLines > 0 && result.rewardTask) {
+
+    // 只有赢下回合（连成一线）才抽卡
+    if (result.newLines > 0 && drawnCount < cardPack.length) {
+      const entry = cardPack[drawnCount];
+      setDrawnCount(value => value + 1);
       setReward({
         lines: result.newLines,
-        task: result.rewardTask,
-        themeName: result.rewardThemeName || '情侣任务'
+        task: entry.task,
+        themeName: entry.themeName
       });
       return;
     }
+
+    // 卡包抽空后不主动退出，继续交给对方
     onEndTurn();
   };
 
@@ -103,6 +122,7 @@ export function BingoModeView({
     setReward(null);
     setFinished(false);
     setPendingIndex(null);
+    setDrawnCount(0);
     onRestart();
   };
 
@@ -148,12 +168,10 @@ export function BingoModeView({
               </div>
             </div>
             <div className="rounded-2xl border border-white/5 bg-white/[0.04] p-3 text-center">
-              <div className="text-[10px] text-gray-500">当前回合</div>
-              <div
-                className="mt-1 truncate text-lg font-bold"
-                style={{ color: activePlayer?.color || '#FFFFFF' }}
-              >
-                {activePlayer?.name || '—'}
+              <div className="text-[10px] text-gray-500">卡包余量</div>
+              <div className="mt-1 text-lg font-bold text-[#64D2FF]">
+                {packLeft}
+                <span className="text-xs text-gray-500">/{cardPack.length}</span>
               </div>
             </div>
           </div>
@@ -210,14 +228,21 @@ export function BingoModeView({
           </div>
 
           <p className="mt-4 text-center text-[11px] leading-relaxed text-gray-500">
-            点击格子翻开任务，完成后标记归属；任意行、列或对角线连成一线即可获得连线奖励
+            点击格子完成任务并占格；只有连成一线（赢下回合）才能从卡包抽一张卡。卡包抽空后仍可继续连线，随时返回即可。
           </p>
+
+          {packLeft === 0 && (
+            <div className="mt-3 flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] py-3 text-[11px] font-bold text-gray-400">
+              <PackageOpen size={13} />
+              卡包已抽空 · 继续占格连线，结束后自行返回
+            </div>
+          )}
 
           {reward && (
             <div className="mt-4 rounded-3xl border border-[#BF5AF2]/25 bg-[#BF5AF2]/10 p-5">
               <div className="flex items-center gap-2 text-xs font-bold text-[#D08BFF]">
                 <Sparkles size={15} />
-                连线奖励{reward.lines > 1 ? ` ×${reward.lines}` : ''} · {reward.themeName}
+                连线抽卡{reward.lines > 1 ? ` ×${reward.lines}` : ''} · {reward.themeName}
               </div>
               <div className="mt-3 text-sm leading-relaxed text-white">{reward.task.text}</div>
               <button
@@ -225,7 +250,7 @@ export function BingoModeView({
                 onClick={handleRewardDone}
                 className="ios-btn mt-4 flex h-12 w-full items-center justify-center rounded-full bg-white text-base font-bold text-black shadow-lg"
               >
-                收下奖励，交给下一位
+                收下这张卡，交给对方
               </button>
             </div>
           )}

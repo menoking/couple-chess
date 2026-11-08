@@ -15,7 +15,6 @@ export type GameMode =
   | 'blindbox'
   | 'timed'
   | 'story'
-  | 'rhythm'
   | 'events'
   | 'survival'
   | 'territory'
@@ -27,7 +26,8 @@ export type GameMode =
   | 'penaltygrid'
   | 'secretdouble'
   | 'roleplay'
-  | 'sudoku';
+  | 'sudoku'
+  | 'go';
 
 export type GameView =
   | 'home'
@@ -43,7 +43,6 @@ export type GameView =
   | 'blindbox'
   | 'timed'
   | 'story'
-  | 'rhythm'
   | 'events'
   | 'survival'
   | 'territory'
@@ -56,6 +55,7 @@ export type GameView =
   | 'secretdouble'
   | 'roleplay'
   | 'sudoku'
+  | 'go'
   | 'themes';
 
 export interface BingoCell {
