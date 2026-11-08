@@ -68,7 +68,8 @@ const GAME_MODE_VALUES: GameMode[] = [
   'edge',
   'penaltygrid',
   'secretdouble',
-  'roleplay'
+  'roleplay',
+  'sudoku'
 ];
 
 const VIEW_VALUES: GameView[] = [
@@ -97,6 +98,7 @@ const VIEW_VALUES: GameView[] = [
   'penaltygrid',
   'secretdouble',
   'roleplay',
+  'sudoku',
   'themes'
 ];
 
@@ -124,7 +126,8 @@ const MODE_VIEW: Record<GameMode, GameView> = {
   edge: 'edge',
   penaltygrid: 'penaltygrid',
   secretdouble: 'secretdouble',
-  roleplay: 'roleplay'
+  roleplay: 'roleplay',
+  sudoku: 'sudoku'
 };
 
 const VIEW_MODE: Record<string, GameMode> = {
@@ -152,7 +155,8 @@ const VIEW_MODE: Record<string, GameMode> = {
   edge: 'edge',
   penaltygrid: 'penaltygrid',
   secretdouble: 'secretdouble',
-  roleplay: 'roleplay'
+  roleplay: 'roleplay',
+  sudoku: 'sudoku'
 };
 
 /** 自备内容、不需要选择主题的玩法。 */

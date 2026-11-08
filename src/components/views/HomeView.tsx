@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { GameMode, Player, Theme } from '../../types';
-import { Bomb, BookOpen, Brain, ChevronRight, CircleDot, Crown, Dice5, Dices, Disc3, Flag, Flame, Gift, Gavel, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, Music, Shuffle, Theater, Timer, User, UserRound, Zap } from 'lucide-react';
+import { Bomb, BookOpen, Brain, ChevronRight, CircleDot, Crown, Dice5, Dices, Disc3, Flag, Flame, Gift, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, Music, Shuffle, Theater, Timer, User, UserRound, Zap } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -44,6 +44,7 @@ const CATEGORIES: ModeCategory[] = [
       { id: 'bingo', title: '情侣 Bingo', desc: '任务排成盘，连线拿奖励', icon: Grid3x3 },
       { id: 'memory', title: '记忆翻牌', desc: '翻配对任务卡，完成匹配任务', icon: Brain },
       { id: 'gridchess', title: '点格棋', desc: '连点闭合格子，闭合者再走一步', icon: CircleDot },
+      { id: 'sudoku', title: '数独', desc: '解出一个格子数字就抽一张卡', icon: Grid2x2 },
       { id: 'auction', title: '拍卖竞价', desc: '竞价争夺任务，出价高奖励多', icon: Gavel }
     ]
   },
@@ -104,7 +105,8 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   edge: '开始对决',
   penaltygrid: '开始九宫格',
   secretdouble: '开始翻倍',
-  roleplay: '开始演戏'
+  roleplay: '开始演戏',
+  sudoku: '开始数独'
 };
 
 const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
@@ -123,6 +125,7 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   trutndare: '选择游戏模式和双方抽卡题库',
   penaltygrid: '选择游戏模式和双方抽卡题库',
   secretdouble: '选择游戏模式和双方抽卡题库',
+  sudoku: '选择游戏模式和双方抽卡题库',
   mine: '选择游戏模式和双方扫雷主题题库',
   quiz: '无需题库，直接开始默契问答',
   story: '无需题库，直接开始故事接龙',

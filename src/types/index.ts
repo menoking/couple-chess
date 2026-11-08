@@ -26,7 +26,8 @@ export type GameMode =
   | 'edge'
   | 'penaltygrid'
   | 'secretdouble'
-  | 'roleplay';
+  | 'roleplay'
+  | 'sudoku';
 
 export type GameView =
   | 'home'
@@ -54,6 +55,7 @@ export type GameView =
   | 'penaltygrid'
   | 'secretdouble'
   | 'roleplay'
+  | 'sudoku'
   | 'themes';
 
 export interface BingoCell {

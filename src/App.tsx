@@ -27,6 +27,7 @@ import { EdgeModeView } from './components/views/EdgeModeView';
 import { PenaltyGridModeView } from './components/views/PenaltyGridModeView';
 import { SecretDoubleModeView } from './components/views/SecretDoubleModeView';
 import { RoleplayModeView } from './components/views/RoleplayModeView';
+import { SudokuModeView } from './components/views/SudokuModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -53,7 +54,8 @@ const CARD_THEME_MODES = new Set<GameMode>([
   'gridchess',
   'trutndare',
   'penaltygrid',
-  'secretdouble'
+  'secretdouble',
+  'sudoku'
 ]);
 
 const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
@@ -72,6 +74,7 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
   trutndare: 'card',
   penaltygrid: 'card',
   secretdouble: 'card',
+  sudoku: 'card',
   mine: 'mineTheme'
 };
 
@@ -586,6 +589,15 @@ function App() {
       {state.view === 'roleplay' && (
         <RoleplayModeView
           players={state.players}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'sudoku' && (
+        <SudokuModeView
+          players={state.players}
+          themes={state.themes}
+          currentTurn={state.turn}
           onBack={handleBackFromGame}
         />
       )}
