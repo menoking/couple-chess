@@ -3,6 +3,7 @@ import { ArrowLeft, Grid3x3, RefreshCw, Skull, User, UserRound, X } from 'lucide
 import { Player, Theme } from '../../types';
 import { buildTaskPool, pickRandom } from '../../utils/modeKit';
 import { SPICY_PENALTIES } from '../../data/spicyContent';
+import { DiceRollOff } from '../DiceRollOff';
 
 interface PenaltyGridModeViewProps {
   players: Player[];
@@ -25,6 +26,7 @@ function PenaltyGridGame({ players, themes, onExit }: { players: Player[]; theme
   const [loserId, setLoserId] = useState<number | null>(null);
   const [winnerId, setWinnerId] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [started, setStarted] = useState(false);
 
   const activePlayer = players[turn];
   const pool = buildTaskPool(players, themes) ?? [];
@@ -59,6 +61,21 @@ function PenaltyGridGame({ players, themes, onExit }: { players: Player[]; theme
   };
 
   const currentTask = pickRandom(pool);
+
+  if (!started) {
+    return (
+      <DiceRollOff
+        players={players}
+        title="掷骰定先手"
+        hint="点数大的一方先行动，九宫格先手压力更小"
+        confirmLabel="确认，我先行动"
+        onComplete={winnerId => {
+          setTurn(winnerId === 1 ? 1 : 0);
+          setStarted(true);
+        }}
+      />
+    );
+  }
 
   if (winnerId !== null) {
     const winner = players.find(p => p.id === winnerId);

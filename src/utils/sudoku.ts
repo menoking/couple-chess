@@ -9,6 +9,8 @@ export interface SudokuPuzzle {
   puzzle: number[];
   /** 是否为题面给定格 */
   given: boolean[];
+  /** 实际挖空数量（受唯一解约束，可能略少于目标） */
+  blanks: number;
 }
 
 function shuffleCopy<T>(items: T[]): T[] {
@@ -54,23 +56,74 @@ function fillBoard(board: number[]): boolean {
   return false;
 }
 
+/** 选择候选数最少的空格（MRV），显著加快解数统计 */
+function findBestEmpty(board: number[]): number {
+  let best = -1;
+  let bestCount = 10;
+
+  for (let index = 0; index < SIZE * SIZE; index++) {
+    if (board[index] !== 0) continue;
+    let candidates = 0;
+    for (const value of ALL_VALUES) {
+      if (canPlace(board, index, value)) candidates++;
+    }
+    if (candidates < bestCount) {
+      bestCount = candidates;
+      best = index;
+      if (candidates <= 1) break;
+    }
+  }
+
+  return best;
+}
+
+/** 统计解的个数，最多数到 limit 即提前返回 */
+function countSolutions(board: number[], limit: number): number {
+  const index = findBestEmpty(board);
+  if (index === -1) return 1;
+
+  let count = 0;
+  for (const value of ALL_VALUES) {
+    if (!canPlace(board, index, value)) continue;
+    board[index] = value;
+    count += countSolutions(board, limit - count);
+    board[index] = 0;
+    if (count >= limit) break;
+  }
+
+  return count;
+}
+
 /**
- * 生成一份数独题面：先随机回溯得到一个完整解，再随机挖空。
- * @param blankCount 挖空数量（越大越难，默认 12）
+ * 生成一份**唯一解**数独：先随机回溯得到完整解，再逐格挖空，
+ * 每次挖空后校验解仍然唯一，不唯一则回填。
+ * @param blankCount 目标挖空数量（默认 12）
  */
 export function generateSudoku(blankCount = 12): SudokuPuzzle {
   const solution = new Array<number>(SIZE * SIZE).fill(0);
   fillBoard(solution);
 
-  const order = shuffleCopy(Array.from({ length: SIZE * SIZE }, (_, i) => i));
-  const targets = order.slice(0, Math.min(blankCount, SIZE * SIZE - 17));
   const puzzle = [...solution];
-  const given = new Array<boolean>(SIZE * SIZE).fill(true);
+  const order = shuffleCopy(Array.from({ length: SIZE * SIZE }, (_, i) => i));
+  const target = Math.min(Math.max(blankCount, 0), SIZE * SIZE - 17);
+  let removed = 0;
 
-  for (const index of targets) {
+  for (const index of order) {
+    if (removed >= target) break;
+    const backup = puzzle[index];
     puzzle[index] = 0;
-    given[index] = false;
+
+    if (countSolutions([...puzzle], 2) === 1) {
+      removed++;
+    } else {
+      puzzle[index] = backup;
+    }
   }
 
-  return { solution, puzzle, given };
+  return {
+    solution,
+    puzzle,
+    given: puzzle.map(value => value !== 0),
+    blanks: removed
+  };
 }

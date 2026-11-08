@@ -14,9 +14,9 @@ interface SudokuModeViewProps {
 }
 
 const DIFFICULTIES = [
-  { key: 'easy', label: '简单', blanks: 8, desc: '8 个空格 · 约 8 张卡' },
-  { key: 'normal', label: '标准', blanks: 12, desc: '12 个空格 · 约 12 张卡' },
-  { key: 'hard', label: '困难', blanks: 16, desc: '16 个空格 · 约 16 张卡' }
+  { key: 'easy', label: '简单', blanks: 16, desc: '16 个空格 · 约 16 张卡' },
+  { key: 'normal', label: '标准', blanks: 24, desc: '24 个空格 · 约 24 张卡' },
+  { key: 'hard', label: '困难', blanks: 32, desc: '32 个空格 · 约 32 张卡' }
 ] as const;
 
 type DifficultyKey = typeof DIFFICULTIES[number]['key'];

@@ -3,6 +3,7 @@ import { ArrowLeft, CircleDot, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
+import { DiceRollOff } from '../DiceRollOff';
 
 interface GridChessModeViewProps {
   players: Player[];
@@ -39,6 +40,7 @@ function DotsAndBoxesGame({
   const [boxes, setBoxes] = useState<number[]>(() => new Array(TOTAL_BOXES).fill(-1));
   const [taskData, setTaskData] = useState<TaskEventData | null>(null);
   const [finished, setFinished] = useState(false);
+  const [started, setStarted] = useState(false);
 
   const activePlayer = players[turn];
   const drawnLines = horizontal.filter(l => l.ownerId !== null).length + vertical.filter(l => l.ownerId !== null).length;
@@ -120,6 +122,21 @@ function DotsAndBoxesGame({
     }
     // 闭合格子者获得额外回合，turn 保持不变
   };
+
+  if (!started) {
+    return (
+      <DiceRollOff
+        players={players}
+        title="掷骰定先手"
+        hint="点数大的一方先落子，点格棋先手更有优势"
+        confirmLabel="确认，我先手"
+        onComplete={winnerId => {
+          setTurn(winnerId === 1 ? 1 : 0);
+          setStarted(true);
+        }}
+      />
+    );
+  }
 
   if (finished) {
     const first = players[0];

@@ -3,6 +3,7 @@ import { ArrowLeft, Coins, Gavel, RefreshCw, User, UserRound } from 'lucide-reac
 import { Player, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, shuffle, themeIntensity } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
+import { DiceRollOff } from '../DiceRollOff';
 
 interface AuctionModeViewProps {
   players: Player[];
@@ -14,12 +15,13 @@ const TOTAL_ROUNDS = 10;
 const STARTING_COINS = 100;
 const BID_STEP = 5;
 
-type Phase = 'intro' | 'male-bid' | 'female-bid' | 'reveal' | 'task' | 'over';
+type Phase = 'roll' | 'intro' | 'bid-first' | 'bid-second' | 'reveal' | 'task' | 'over';
 
 function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: Theme[]; onExit: () => void }) {
   const queue = useMemo<ThemeTaskEntry[]>(() => shuffle(buildTaskPool(players, themes) ?? []).slice(0, TOTAL_ROUNDS), [players, themes]);
   const [round, setRound] = useState(0);
-  const [phase, setPhase] = useState<Phase>('intro');
+  const [phase, setPhase] = useState<Phase>('roll');
+  const [firstBidder, setFirstBidder] = useState(0);
   const [coins, setCoins] = useState<Record<number, number>>({ 0: STARTING_COINS, 1: STARTING_COINS });
   const [points, setPoints] = useState<Record<number, number>>({ 0: 0, 1: 0 });
   const [wonCount, setWonCount] = useState<Record<number, number>>({ 0: 0, 1: 0 });
@@ -29,14 +31,18 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
   const [notice, setNotice] = useState<string | null>(null);
 
   const current = queue[round];
-  const bidderId = phase === 'female-bid' ? 1 : 0;
+  const bidderId = phase === 'bid-first'
+    ? firstBidder
+    : phase === 'bid-second'
+      ? (firstBidder === 0 ? 1 : 0)
+      : 0;
   const bidder = players[bidderId];
 
   const startBidding = () => {
     setBids({ 0: 0, 1: 0 });
     setWinnerId(null);
     setNotice(null);
-    setPhase('male-bid');
+    setPhase('bid-first');
   };
 
   const adjustBid = (delta: number) => {
@@ -162,6 +168,19 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
         </div>
       </div>
 
+      {phase === 'roll' && (
+        <DiceRollOff
+          players={players}
+          title="掷骰定出价顺序"
+          hint="点数大的一方先出价，可以先手压价"
+          confirmLabel="确认，我先出价"
+          onComplete={winnerId => {
+            setFirstBidder(winnerId === 1 ? 1 : 0);
+            setPhase('intro');
+          }}
+        />
+      )}
+
       {phase === 'intro' && (
         <>
           {notice && (
@@ -179,7 +198,7 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
         </>
       )}
 
-      {(phase === 'male-bid' || phase === 'female-bid') && (
+      {(phase === 'bid-first' || phase === 'bid-second') && (
         <div className="rounded-3xl border border-[#FF9F0A]/25 bg-[#FF9F0A]/10 p-5">
           <div className="flex items-center justify-center gap-2 text-sm font-bold text-white">
             {bidderId === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
@@ -215,10 +234,10 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
             </button>
             <button
               type="button"
-              onClick={() => (bidderId === 0 ? setPhase('female-bid') : reveal())}
+              onClick={() => (phase === 'bid-first' ? setPhase('bid-second') : reveal())}
               className="ios-btn h-11 flex-[2] rounded-full bg-white text-sm font-bold text-black"
             >
-              {bidderId === 0 ? '藏好出价，换女方' : '双方揭晓'}
+              {phase === 'bid-first' ? '藏好出价，换对方' : '双方揭晓'}
             </button>
           </div>
         </div>
