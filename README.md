@@ -4,7 +4,7 @@
 
 专为情侣设计的互动游戏 Web 应用。
 
-在线预览：[https://couple-flying-chess-pink.vercel.app](https://couple-flying-chess-pink.vercel.app)
+在线预览：[https://chess.menoking.top](https://chess.menoking.top)
 原项目：[https://github.com/woniu9524/couple-flying-chess](https://github.com/woniu9524/couple-flying-chess)
 
 ## 玩法
