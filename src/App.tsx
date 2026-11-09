@@ -29,6 +29,7 @@ import { RoleplayModeView } from './components/views/RoleplayModeView';
 import { SudokuModeView } from './components/views/SudokuModeView';
 import { GoModeView } from './components/views/GoModeView';
 import { BluffDiceModeView } from './components/views/BluffDiceModeView';
+import { JungleModeView } from './components/views/JungleModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -58,7 +59,8 @@ const CARD_THEME_MODES = new Set<GameMode>([
   'secretdouble',
   'sudoku',
   'go',
-  'bluff'
+  'bluff',
+  'jungle'
 ]);
 
 const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
@@ -80,6 +82,7 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
   sudoku: 'card',
   go: 'card',
   bluff: 'card',
+  jungle: 'card',
   mine: 'mineTheme'
 };
 
@@ -643,6 +646,15 @@ function App() {
 
       {state.view === 'bluff' && (
         <BluffDiceModeView
+          players={state.players}
+          themes={state.themes}
+          currentTurn={state.turn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'jungle' && (
+        <JungleModeView
           players={state.players}
           themes={state.themes}
           currentTurn={state.turn}

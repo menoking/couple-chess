@@ -28,7 +28,8 @@ export type GameMode =
   | 'roleplay'
   | 'sudoku'
   | 'go'
-  | 'bluff';
+  | 'bluff'
+  | 'jungle';
 
 export type GameView =
   | 'home'
@@ -58,6 +59,7 @@ export type GameView =
   | 'sudoku'
   | 'go'
   | 'bluff'
+  | 'jungle'
   | 'themes';
 
 export interface BingoCell {

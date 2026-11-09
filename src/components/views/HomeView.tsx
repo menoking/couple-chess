@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { GameMode, Player, Theme } from '../../types';
-import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Dices, Disc3, Flag, Flame, Gift, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, ShieldQuestion, Shuffle, Theater, Timer, User, UserRound, Zap } from 'lucide-react';
+import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Dices, Disc3, Flag, Flame, Gift, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, PawPrint, ShieldQuestion, Shuffle, Theater, Timer, User, UserRound, Zap } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -46,6 +46,7 @@ const CATEGORIES: ModeCategory[] = [
       { id: 'gridchess', title: '点格棋', desc: '连点闭合格子，闭合者再走一步', icon: CircleDot },
       { id: 'sudoku', title: '数独', desc: '解出一个格子数字就抽一张卡', icon: Grid2x2 },
       { id: 'go', title: '九路围棋', desc: '提子兑卡，终局胜方多抽', icon: CircleDashed },
+      { id: 'jungle', title: '斗兽棋', desc: '吃一子抽一张卡，攻入兽穴获胜', icon: PawPrint },
       { id: 'auction', title: '拍卖竞价', desc: '竞价争夺任务，出价高奖励多', icon: Gavel }
     ]
   },
@@ -107,6 +108,7 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   secretdouble: '开始翻倍',
   roleplay: '开始演戏',
   bluff: '开始吹牛',
+  jungle: '开始斗兽',
   sudoku: '开始数独',
   go: '开始围棋'
 };
@@ -128,6 +130,7 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   penaltygrid: '选择游戏模式和双方抽卡题库',
   secretdouble: '选择游戏模式和双方抽卡题库',
   bluff: '选择游戏模式和双方抽卡题库',
+  jungle: '选择游戏模式和双方抽卡题库',
   sudoku: '选择游戏模式和双方抽卡题库',
   go: '选择游戏模式和双方抽卡题库',
   mine: '选择游戏模式和双方扫雷主题题库',
