@@ -339,6 +339,7 @@ function App() {
       />
 
       <TaskCardModal
+        players={state.players}
         isOpen={!!taskData}
         taskData={taskData}
         onAccept={handleTaskAccept}

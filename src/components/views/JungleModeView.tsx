@@ -23,6 +23,7 @@ interface JungleModeViewProps {
 type Phase = 'roll' | 'play' | 'over';
 
 interface PendingCard {
+  drawerId: number;
   executorId: number;
   reason: string;
 }
@@ -63,11 +64,21 @@ function JungleGame({
     const entry = pickRandom(pool);
     setCardQueue(rest);
     if (!entry) return;
-    setTaskData(createViewTaskEvent({ entry, title: next.reason, executorPlayerId: next.executorId }));
+    setTaskData(
+      createViewTaskEvent({
+        entry,
+        title: next.reason,
+        executorPlayerId: next.executorId,
+        initiatorPlayerId: next.drawerId
+      })
+    );
   }, [cardQueue, taskData, pool]);
 
-  const enqueueCards = (executorId: number, count: number, reason: string) => {
-    setCardQueue(prev => [...prev, ...Array.from({ length: count }, () => ({ executorId, reason }))]);
+  const enqueueCards = (drawerId: number, executorId: number, count: number, reason: string) => {
+    setCardQueue(prev => [
+      ...prev,
+      ...Array.from({ length: count }, () => ({ drawerId, executorId, reason }))
+    ]);
   };
 
   const endGame = (winner: number, reason: string) => {
@@ -75,7 +86,7 @@ function JungleGame({
     setPhase('over');
     setNotice(reason);
     const loser = winner === 0 ? 1 : 0;
-    enqueueCards(loser, 1, '终局 · 胜方奖励卡');
+    enqueueCards(winner, loser, 1, '终局 · 胜方抽卡，败方执行');
   };
 
   const handleCellClick = (cellIndex: number) => {
@@ -104,7 +115,7 @@ function JungleGame({
       const rank = result.captured.rank;
       setCaptured(prev => ({ ...prev, [turn]: (prev[turn] ?? 0) + 1 }));
       // 吃掉对方棋子 → 抽一张卡，由被吃的一方执行
-      enqueueCards(opponentId, 1, `吃掉对方的${PIECE_NAMES[rank]}`);
+      enqueueCards(turn, opponentId, 1, `吃掉对方的${PIECE_NAMES[rank]} · 对方执行`);
     }
 
     if (result.winner !== null) {
@@ -163,6 +174,7 @@ function JungleGame({
         </div>
 
         <TaskCardModal
+        players={players}
           isOpen={!!taskData}
           taskData={taskData}
           onAccept={() => setTaskData(null)}
@@ -252,6 +264,7 @@ function JungleGame({
       </div>
 
       <TaskCardModal
+        players={players}
         isOpen={!!taskData}
         taskData={taskData}
         onAccept={() => setTaskData(null)}

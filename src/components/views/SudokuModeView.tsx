@@ -89,7 +89,10 @@ function SudokuGame({
 
       const entry = pickRandom(pool);
       if (entry) {
-        setTaskData(createViewTaskEvent({ entry, title: '解格成功 · 抽卡', executorPlayerId: byId }));
+        const opponentId = byId === 0 ? 1 : 0;
+        setTaskData(
+          createViewTaskEvent({ entry, title: '解格成功 · 对方执行', executorPlayerId: opponentId, initiatorPlayerId: byId })
+        );
       } else {
         setTurn(turn === 0 ? 1 : 0);
       }
@@ -210,7 +213,7 @@ function SudokuGame({
 
       <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
         {activePlayer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-        {activePlayer?.name || '当前玩家'} 的回合：选空格，填对就抽一张卡
+        {activePlayer?.name || '当前玩家'} 的回合：填对 → 你抽卡，对方执行
       </div>
 
       <div className="grid grid-cols-9 overflow-hidden rounded-2xl border-2 border-white/20">
@@ -288,6 +291,7 @@ function SudokuGame({
       )}
 
       <TaskCardModal
+        players={players}
         isOpen={!!taskData}
         taskData={taskData}
         onAccept={closeTask}

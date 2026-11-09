@@ -79,7 +79,7 @@ function TerritoryGame({
 
     setNotice(null);
     setPendingIndex(index);
-    setTaskData(createViewTaskEvent({ entry, title: kind === 'claim' ? '占领任务' : '攻城任务' }));
+    setTaskData(createViewTaskEvent({ entry, title: kind === 'claim' ? '占领任务 · 自己执行' : '攻城任务 · 自己执行', executorPlayerId: activePlayer?.id ?? 0, initiatorPlayerId: activePlayer?.id ?? 0 }));
   };
 
   const resolve = (accepted: boolean) => {
@@ -198,6 +198,7 @@ function TerritoryGame({
       </div>
 
       <TaskCardModal
+        players={players}
         isOpen={!!taskData}
         taskData={taskData}
         onAccept={() => resolve(true)}

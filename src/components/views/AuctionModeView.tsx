@@ -66,7 +66,7 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
     setCoins(prev => ({ ...prev, [winner]: (prev[winner] ?? 0) - winningBid }));
     setWinnerId(winner);
     if (current) {
-      setTaskData(createViewTaskEvent({ entry: current, title: '拍卖所得', executorPlayerId: winner }));
+      setTaskData(createViewTaskEvent({ entry: current, title: '拍得 · 对方执行', executorPlayerId: winner === 0 ? 1 : 0, initiatorPlayerId: winner }));
     }
     setPhase('task');
   };
@@ -164,7 +164,7 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
         </div>
         <div className="mt-3 text-lg font-bold leading-relaxed text-white">{current?.task.text || '拍品已售罄'}</div>
         <div className="mt-2 text-[11px] text-gray-500">
-          成交后需完成该任务；积分 = 难度 + 出价 ÷ 10
+          拍得者抽卡，任务由<span className="text-white">对方执行</span>；积分 = 难度 + 出价 ÷ 10
         </div>
       </div>
 
@@ -276,6 +276,7 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
       )}
 
       <TaskCardModal
+        players={players}
         isOpen={phase === 'task' && !!taskData}
         taskData={taskData}
         onAccept={() => resolveTask(true)}

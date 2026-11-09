@@ -125,7 +125,7 @@ function TruthDareGame({
           <Skull size={34} className="mx-auto text-[#FF453A]" />
           <div className="mt-3 text-lg font-bold text-white">挑战失败</div>
           <div className="mt-2 text-sm text-gray-400">
-            {opponent?.name || '对方'} 指定一项惩罚：
+            {opponent?.name || '对方'} 指定一项惩罚，由 <span className="font-bold text-white">{activePlayer?.name}</span> 执行：
           </div>
           <div className="mt-4 rounded-2xl bg-black/30 p-4 text-base font-semibold leading-relaxed text-white">
             {pickRandom(SPICY_PENALTIES)}

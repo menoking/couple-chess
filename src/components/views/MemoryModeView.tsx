@@ -102,14 +102,15 @@ function MemoryGame({
       setPairCounts(prev => ({ ...prev, [byId]: (prev[byId] ?? 0) + 1 }));
       setFlips([]);
       // 配对成功后弹出真正的任务卡
+      const executorId = byId === 0 ? 1 : 0;
       setMatchTask({
         type: 'card',
         initiatorPlayerId: byId,
-        executorPlayerId: byId,
-        title: '配对成功 · 任务',
+        executorPlayerId: executorId,
+        title: '配对成功 · 对方执行',
         subtitle: `任务来自「${matched.themeName}」`,
         icon: 'sparkles',
-        color: byId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
+        color: executorId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
         task: matched.task.text,
         taskSourceId: matched.themeId,
         moveDelta: 0
@@ -220,6 +221,7 @@ function MemoryGame({
       </div>
 
       <TaskCardModal
+        players={players}
         isOpen={!!matchTask}
         taskData={matchTask}
         onAccept={handleMatchTaskDone}

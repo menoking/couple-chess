@@ -49,6 +49,8 @@ export function BingoModeView({
     count: bingoBoard.cells.filter(cell => cell.completedBy === player.id).length
   }));
 
+  const opponentPlayer = players.find(player => player.id !== activePlayer?.id);
+
   const completedLineCellIndices = useMemo(() => {
     const indices = new Set<number>();
     bingoBoard.lines
@@ -244,13 +246,22 @@ export function BingoModeView({
                 <Sparkles size={15} />
                 连线抽卡{reward.lines > 1 ? ` ×${reward.lines}` : ''} · {reward.themeName}
               </div>
+              <div className="mt-3 flex items-center justify-center gap-2 text-[11px] font-bold">
+                <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${activePlayer?.color}22`, color: activePlayer?.color }}>
+                  抽卡 · {activePlayer?.name}
+                </span>
+                <span className="text-gray-500">→</span>
+                <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${opponentPlayer?.color}22`, color: opponentPlayer?.color }}>
+                  执行 · {opponentPlayer?.name}
+                </span>
+              </div>
               <div className="mt-3 text-sm leading-relaxed text-white">{reward.task.text}</div>
               <button
                 type="button"
                 onClick={handleRewardDone}
                 className="ios-btn mt-4 flex h-12 w-full items-center justify-center rounded-full bg-white text-base font-bold text-black shadow-lg"
               >
-                收下这张卡，交给对方
+                收下这张卡，交给 {opponentPlayer?.name} 执行
               </button>
             </div>
           )}
@@ -285,6 +296,7 @@ export function BingoModeView({
       </div>
 
       <TaskCardModal
+        players={players}
         isOpen={!!taskData}
         taskData={taskData}
         onAccept={handleAccept}

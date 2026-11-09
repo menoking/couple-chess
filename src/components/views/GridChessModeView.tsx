@@ -105,7 +105,7 @@ function DotsAndBoxesGame({
       const pool = buildTaskPool(players, themes) ?? [];
       const entry = pickRandom(pool);
       if (entry) {
-        setTaskData(createViewTaskEvent({ entry, title: `闭合 ${newlyClosed.length} 格 · 任务`, executorPlayerId: turn }));
+        setTaskData(createViewTaskEvent({ entry, title: `闭合 ${newlyClosed.length} 格 · 对方执行`, executorPlayerId: turn === 0 ? 1 : 0, initiatorPlayerId: turn }));
       }
       return;
     }
@@ -201,10 +201,11 @@ function DotsAndBoxesGame({
       />
 
       <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-[11px] leading-relaxed text-gray-500">
-        规则：轮流连接相邻的两个点画一条线。谁连成某个正方形的最后一条边，谁就赢得那个格子，并获得一次额外回合；闭合格子还会触发一张任务卡。全部格子闭合后，格子多者获胜。
+        规则：轮流连接相邻的两个点画一条线。谁连成某个正方形的最后一条边，谁就赢得那个格子，并获得一次额外回合；每闭合一个格子，你抽 1 张任务卡、由对方执行。全部格子闭合后，格子多者获胜。
       </div>
 
       <TaskCardModal
+        players={players}
         isOpen={!!taskData}
         taskData={taskData}
         onAccept={finishTask}

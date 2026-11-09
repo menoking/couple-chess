@@ -45,13 +45,17 @@ export function themeIntensity(theme: Theme | undefined): number {
 export function createViewTaskEvent(input: {
   entry: ThemeTaskEntry;
   title?: string;
+  /** 执行任务的人 */
   executorPlayerId?: number;
+  /** 抽卡的人（默认与执行人相同） */
+  initiatorPlayerId?: number;
 }): TaskEventData {
   const { entry } = input;
   const playerId = input.executorPlayerId ?? entry.playerId;
+  const initiatorId = input.initiatorPlayerId ?? playerId;
   return {
     type: 'card',
-    initiatorPlayerId: playerId,
+    initiatorPlayerId: initiatorId,
     executorPlayerId: playerId,
     title: input.title ?? '任务',
     subtitle: `任务来自「${entry.themeName}」`,

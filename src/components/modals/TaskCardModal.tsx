@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { TaskEventData } from '../../types';
-import { Flame, Heart, Lock, HandshakeIcon, MessageCircleQuestion, Sparkles, X } from 'lucide-react';
+import { TaskEventData, Player } from '../../types';
+import { ArrowRight, Flame, Heart, Lock, HandshakeIcon, MessageCircleQuestion, Sparkles, X } from 'lucide-react';
 
 interface TaskCardModalProps {
   isOpen: boolean;
@@ -8,6 +8,8 @@ interface TaskCardModalProps {
   onAccept: () => void;
   onReject: () => void;
   onClose?: () => void;
+  /** 传入双方信息后，卡片会直接显示玩家名字而不是「男方/女方」 */
+  players?: Player[];
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -19,7 +21,7 @@ const iconMap: Record<string, React.ReactNode> = {
   sparkles: <Sparkles size={40} />
 };
 
-export function TaskCardModal({ isOpen, taskData, onAccept, onReject, onClose }: TaskCardModalProps) {
+export function TaskCardModal({ isOpen, taskData, onAccept, onReject, onClose, players }: TaskCardModalProps) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [visibleTaskData, setVisibleTaskData] = useState<TaskEventData | null>(null);
 
@@ -50,14 +52,41 @@ export function TaskCardModal({ isOpen, taskData, onAccept, onReject, onClose }:
       : visibleTaskData.type === 'collision'
         ? '拒绝（回到起点）'
         : '拒绝（倒退1~3格）';
-  const executorLabel = visibleTaskData.executorPlayerId === 0 ? '男方' : '女方';
+
+  const nameOf = (id: number) =>
+    players?.find(player => player.id === id)?.name ?? (id === 0 ? '男方' : '女方');
+  const colorOf = (id: number) =>
+    players?.find(player => player.id === id)?.color ?? (id === 0 ? '#0A84FF' : '#FF375F');
+
+  const executorLabel = nameOf(visibleTaskData.executorPlayerId);
   const executorClassName = visibleTaskData.executorPlayerId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]';
+  const initiatorLabel = nameOf(visibleTaskData.initiatorPlayerId);
+  const isSelfDraw = visibleTaskData.initiatorPlayerId === visibleTaskData.executorPlayerId;
+
   const moveLabel =
     visibleTaskData.moveDelta === 0
       ? ''
       : visibleTaskData.moveDelta > 0
         ? `完成后前进 ${visibleTaskData.moveDelta} 格`
         : `完成后后退 ${Math.abs(visibleTaskData.moveDelta)} 格`;
+
+  const assignmentStrip = (
+    <div className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
+      <span
+        className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+        style={{ backgroundColor: `${colorOf(visibleTaskData.initiatorPlayerId)}22`, color: colorOf(visibleTaskData.initiatorPlayerId) }}
+      >
+        抽卡 · {initiatorLabel}
+      </span>
+      <ArrowRight size={12} className="text-gray-500" />
+      <span
+        className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+        style={{ backgroundColor: `${colorOf(visibleTaskData.executorPlayerId)}22`, color: colorOf(visibleTaskData.executorPlayerId) }}
+      >
+        执行 · {executorLabel}
+      </span>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto px-4 py-[max(0.5rem,env(safe-area-inset-top))]">
@@ -83,16 +112,16 @@ export function TaskCardModal({ isOpen, taskData, onAccept, onReject, onClose }:
             className="flip-card-front bg-[#1C1C1E] border border-white/10 p-6 flex flex-col items-center justify-center shadow-2xl cursor-pointer"
             onClick={() => setIsFlipped(true)}
           >
-            <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6 animate-pulse">
+            <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-5 animate-pulse">
               <div className={visibleTaskData.color}>
                 {iconMap[visibleTaskData.icon] || iconMap.favorite}
               </div>
             </div>
             <h3 className="text-2xl font-bold text-white mb-2">{visibleTaskData.title}</h3>
-            <p className="text-sm text-gray-500 uppercase tracking-widest mb-8">
+            <p className="text-sm text-gray-500 uppercase tracking-widest mb-5">
               点击翻转查看任务
             </p>
-           
+            {assignmentStrip}
           </div>
 
           <div className="flip-card-back overflow-y-auto bg-[#1C1C1E] border border-white/10 p-[clamp(0.75rem,3dvh,1.5rem)] shadow-2xl">
@@ -101,10 +130,14 @@ export function TaskCardModal({ isOpen, taskData, onAccept, onReject, onClose }:
                 {iconMap[visibleTaskData.icon] || iconMap.favorite}
               </div>
               <h3 className="text-xl font-bold text-white mb-3 mt-3">{visibleTaskData.title}</h3>
-              <div className="text-xs text-gray-400 text-center leading-relaxed mb-3">
+
+              {assignmentStrip}
+
+              <div className="text-xs text-gray-400 text-center leading-relaxed mt-3 mb-3">
                 <div>{visibleTaskData.subtitle}</div>
-                <div>
+                <div className="mt-1">
                   由 <span className={executorClassName}>{executorLabel}</span> 执行
+                  {isSelfDraw ? '（自己抽到自己做）' : `，${initiatorLabel} 旁观`}
                 </div>
                 {moveLabel && <div className="mt-1 text-gray-300">{moveLabel}</div>}
               </div>

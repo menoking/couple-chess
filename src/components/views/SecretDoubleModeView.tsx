@@ -85,13 +85,13 @@ function SecretDoubleGame({
       setUpgradeNote(note);
       const executorId = activePlayer.id === 0 ? 1 : 0;
       setTaskData(
-        createViewTaskEvent({ entry, title: '加码任务', executorPlayerId: executorId })
+        createViewTaskEvent({ entry, title: '加码任务', executorPlayerId: executorId, initiatorPlayerId: activePlayer.id })
       );
     } else {
       setUpgradedEntry(currentEntry);
       setUpgradeNote(null);
       setTaskData(
-        createViewTaskEvent({ entry: currentEntry, title: '普通任务', executorPlayerId: activePlayer.id })
+        createViewTaskEvent({ entry: currentEntry, title: '普通任务', executorPlayerId: activePlayer.id, initiatorPlayerId: activePlayer.id })
       );
     }
   };
@@ -164,7 +164,7 @@ function SecretDoubleGame({
             </div>
           </div>
           <div className="text-center text-sm text-gray-400">
-            加码后会换一个<strong className="text-[#D08BFF]">更刺激的任务</strong>，由{opponent?.name}执行，完成奖励翻倍
+            原样执行＝<span className="text-white">你自己做</span>；加码翻倍＝换一个<strong className="text-[#D08BFF]">更刺激的任务</strong>，由{opponent?.name}做，奖励翻倍
           </div>
           <div className="flex gap-3">
             <button type="button" onClick={() => choose(false)} className="ios-btn h-14 flex-1 rounded-full bg-[#3A3A3C] text-base font-bold text-white">
@@ -185,6 +185,7 @@ function SecretDoubleGame({
             </div>
           )}
           <TaskCardModal
+        players={players}
             isOpen
             taskData={taskData}
             onAccept={() => resolve(true)}

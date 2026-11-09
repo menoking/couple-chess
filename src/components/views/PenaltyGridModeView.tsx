@@ -88,7 +88,7 @@ function PenaltyGridGame({ players, themes, onExit }: { players: Player[]; theme
           <div className="mt-2 text-sm text-gray-400">{loser?.name} 整晚由 {winner?.name} 主导</div>
         </div>
         <div className="rounded-2xl border border-[#FF453A]/25 bg-[#FF453A]/10 p-5">
-          <div className="text-xs font-bold text-[#FF453A]">终极惩罚</div>
+          <div className="text-xs font-bold text-[#FF453A]">终极惩罚 · 由 {loser?.name} 执行</div>
           <div className="mt-2 text-base font-semibold leading-relaxed text-white">{pickRandom(SPICY_PENALTIES)}</div>
         </div>
         <button type="button" onClick={onExit} className="ios-btn h-12 w-full rounded-full border border-white/10 bg-white/10 text-base font-bold text-white">

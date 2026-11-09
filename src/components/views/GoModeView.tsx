@@ -15,9 +15,8 @@ interface GoModeViewProps {
 
 /** 每提满 3 子可抽 1 张卡 */
 const CAPTURE_PER_CARD = 3;
-/** 终局抽卡数：胜方 2 张，负方 1 张 */
+/** 终局抽卡数：胜方抽 2 张，全部由败方执行 */
 const WINNER_CARDS = 2;
-const LOSER_CARDS = 1;
 
 type Phase = 'roll' | 'play' | 'over';
 
@@ -25,7 +24,8 @@ type Phase = 'roll' | 'play' | 'over';
 const STAR_POINTS = new Set([2 * 9 + 2, 2 * 9 + 6, 6 * 9 + 2, 6 * 9 + 6, 4 * 9 + 4]);
 
 interface PendingCard {
-  playerId: number;
+  drawerId: number;
+  executorId: number;
   reason: string;
 }
 
@@ -55,11 +55,21 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
     const entry = pickRandom(pool);
     setCardQueue(rest);
     if (!entry) return;
-    setTaskData(createViewTaskEvent({ entry, title: next.reason, executorPlayerId: next.playerId }));
+    setTaskData(
+      createViewTaskEvent({
+        entry,
+        title: next.reason,
+        executorPlayerId: next.executorId,
+        initiatorPlayerId: next.drawerId
+      })
+    );
   }, [cardQueue, taskData, pool]);
 
-  const enqueueCards = (playerId: number, count: number, reason: string) => {
-    setCardQueue(prev => [...prev, ...Array.from({ length: count }, () => ({ playerId, reason }))]);
+  const enqueueCards = (drawerId: number, executorId: number, count: number, reason: string) => {
+    setCardQueue(prev => [
+      ...prev,
+      ...Array.from({ length: count }, () => ({ drawerId, executorId, reason }))
+    ]);
   };
 
   const handlePlace = (index: number) => {
@@ -85,7 +95,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
 
       const gained = Math.floor(after / CAPTURE_PER_CARD) - Math.floor(before / CAPTURE_PER_CARD);
       if (gained > 0) {
-        enqueueCards(turn, gained, `提子奖励 · 提掉 ${result.captured} 子`);
+        enqueueCards(turn, turn === 0 ? 1 : 0, gained, `提子奖励 · 对方执行`);
       }
     }
 
@@ -106,8 +116,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
     }
     const loserId = winnerId === 0 ? 1 : 0;
 
-    enqueueCards(winnerId, WINNER_CARDS, '终局胜方奖励');
-    enqueueCards(loserId, LOSER_CARDS, '终局败方惩罚');
+    enqueueCards(winnerId, loserId, WINNER_CARDS, '终局 · 胜方抽卡，败方执行');
   };
 
   const handlePass = () => {
@@ -153,7 +162,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
             {surrenderedBy !== null ? `${players.find(p => p.id === surrenderedBy)?.name} 认输` : '终局数子'}
           </div>
           <div className="mt-1 text-xs text-gray-500">
-            胜方抽 {WINNER_CARDS} 张卡，败方抽 {LOSER_CARDS} 张卡，依次执行
+            胜方抽 {WINNER_CARDS} 张卡，全部由败方执行
           </div>
         </div>
 
@@ -179,6 +188,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
         </div>
 
         <TaskCardModal
+        players={players}
           isOpen={!!taskData}
           taskData={taskData}
           onAccept={() => setTaskData(null)}
@@ -262,10 +272,11 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
       </div>
 
       <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-[11px] leading-relaxed text-gray-500">
-        规则：轮流落子，围住对方的棋即提子。每提满 {CAPTURE_PER_CARD} 子抽 1 张卡；双方连续停手后数子（子 + 围空），胜方抽 {WINNER_CARDS} 张、败方抽 {LOSER_CARDS} 张。
+        规则：轮流落子，围住对方的棋即提子。每提满 {CAPTURE_PER_CARD} 子，你抽 1 张卡、由对方执行；双方连续停手后数子（子 + 围空），胜方抽 {WINNER_CARDS} 张，全部由败方执行。
       </div>
 
       <TaskCardModal
+        players={players}
         isOpen={!!taskData}
         taskData={taskData}
         onAccept={() => setTaskData(null)}

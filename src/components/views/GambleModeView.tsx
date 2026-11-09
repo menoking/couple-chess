@@ -138,7 +138,7 @@ function GambleGame({ players }: { players: Player[] }) {
             <Coins size={30} className="mx-auto text-[#FFD60A]" />
             <div className="mt-2 text-lg font-bold text-white">选择注码</div>
             <div className="mt-1 text-xs text-gray-500">
-              注码决定轮盘里的任务强度；结果有一半概率砸回你自己
+              注码决定任务强度；转出的任务由<strong className="text-white">输的一方执行</strong>，结果有一半概率砸回你自己
             </div>
           </div>
 

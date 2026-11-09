@@ -94,7 +94,7 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
 
         {task && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5">
-            <div className="text-xs font-bold text-gray-500">败方要完成的任务</div>
+            <div className="text-xs font-bold text-gray-500">{loser?.name} 要完成的任务</div>
             <div className="mt-2 text-base font-semibold leading-relaxed text-white">{task.task.text}</div>
             <div className="mt-1 text-[11px] text-gray-500">来自「{task.themeName}」</div>
           </div>

@@ -226,6 +226,7 @@ function EventsGame({
       ) : null}
 
       <TaskCardModal
+        players={players}
         isOpen={!!taskData}
         taskData={taskData}
         onAccept={() => resolveTask(true)}

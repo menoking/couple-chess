@@ -250,6 +250,7 @@ function BluffDiceGame({
         </button>
 
         <TaskCardModal
+        players={players}
           isOpen={!!taskData}
           taskData={taskData}
           onAccept={() => setTaskData(null)}

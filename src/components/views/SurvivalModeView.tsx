@@ -95,7 +95,7 @@ function SurvivalGame({
       return;
     }
     resolvedRef.current = false;
-    setTaskData(createViewTaskEvent({ entry, title: '生存任务' }));
+    setTaskData(createViewTaskEvent({ entry, title: '生存任务 · 自己执行', executorPlayerId: activePlayer?.id ?? 0, initiatorPlayerId: activePlayer?.id ?? 0 }));
     setTimeLeft(activeEvent && activeEvent.timeLimit > 0 ? activeEvent.timeLimit : 0);
   };
 
@@ -245,6 +245,7 @@ function SurvivalGame({
       )}
 
       <TaskCardModal
+        players={players}
         isOpen={!!taskData}
         taskData={taskData}
         onAccept={() => resolveTask(true)}

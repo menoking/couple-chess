@@ -89,7 +89,17 @@ function BlindBoxGame({
         return;
       }
       setPendingBox(index);
-      setTaskData(createViewTaskEvent({ entry, title: box.effect === 'reward' ? '盲盒奖励' : '盲盒任务' }));
+      setTaskData(
+        createViewTaskEvent({
+          entry,
+          title: box.effect === 'reward' ? '盲盒奖励 · 对方执行' : '盲盒任务 · 自己执行',
+          executorPlayerId:
+            box.effect === 'reward'
+              ? (playerId === 0 ? 1 : 0)
+              : playerId,
+          initiatorPlayerId: playerId
+        })
+      );
       return;
     }
 
@@ -236,6 +246,7 @@ function BlindBoxGame({
       )}
 
       <TaskCardModal
+        players={players}
         isOpen={!!taskData}
         taskData={taskData}
         onAccept={() => resolveTask(true)}
