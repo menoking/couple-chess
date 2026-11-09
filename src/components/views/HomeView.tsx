@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { GameMode, Player, Theme } from '../../types';
-import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Dices, Disc3, Flag, Flame, Gift, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, PawPrint, ShieldQuestion, Shuffle, Theater, Timer, User, UserRound, Zap } from 'lucide-react';
+import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Disc3, Flag, Flame, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, PawPrint, FlipHorizontal, ShieldQuestion, Theater, TrendingUp, Timer, User, UserRound } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -32,7 +32,6 @@ const CATEGORIES: ModeCategory[] = [
       { id: 'board', title: '飞行棋模式', desc: '投骰子走棋，落格触发任务', icon: Dice5 },
       { id: 'card', title: '任务卡牌', desc: '轮流抽取任务，不用投骰子', icon: Layers3 },
       { id: 'mine', title: '扫雷模式', desc: '点击方格，触发隐藏事件', icon: Bomb },
-      { id: 'dice', title: '亲密骰子', desc: '上下骰子组合动作与部位', icon: Dices },
       { id: 'roulette', title: '情侣转盘', desc: '随机组合执行者、动作、部位与时长', icon: Disc3 },
       { id: 'pose', title: '姿势模式', desc: '轮流抽取姿势图片', icon: ImageIcon }
     ]
@@ -56,7 +55,6 @@ const CATEGORIES: ModeCategory[] = [
     modes: [
       { id: 'quiz', title: '默契问答', desc: '分别作答同时揭晓，比谁更懂', icon: MessageCircleQuestion },
       { id: 'timed', title: '限时挑战', desc: '倒计时连续完成任务计分', icon: Timer },
-      { id: 'events', title: '随机事件', desc: '抽卡触发交换身份、任务升级', icon: Shuffle },
       { id: 'bluff', title: '吹牛骰', desc: '藏骰叫点，敢不敢开对方', icon: ShieldQuestion }
     ]
   },
@@ -66,7 +64,6 @@ const CATEGORIES: ModeCategory[] = [
     modes: [
       { id: 'story', title: '故事接龙', desc: '轮流抽情节卡，共写情侣故事', icon: BookOpen },
       { id: 'survival', title: '合作生存', desc: '共享生命值，完成任务抵御事件', icon: HeartPulse },
-      { id: 'blindbox', title: '盲盒抽奖', desc: '抽奖励、任务、免罚、双倍卡', icon: Gift },
       { id: 'territory', title: '领地争夺', desc: '占领棋盘区域，攻城夺地', icon: Flag }
     ]
   },
@@ -77,8 +74,8 @@ const CATEGORIES: ModeCategory[] = [
       { id: 'trutndare', title: '真心话大冒险', desc: '狂暴版：禁区、当众、三连事件', icon: Flame },
       { id: 'gamble', title: '赌局轮盘', desc: '赌上今晚主权，输家听差遣', icon: Crown },
       { id: 'edge', title: '高潮边缘', desc: '推对方到临界点，先崩者输', icon: Heart },
-      { id: 'penaltygrid', title: '惩罚九宫格', desc: '失败落子，先连线者主导整晚', icon: Grid3x3 },
-      { id: 'secretdouble', title: '秘密翻倍', desc: '任务卡加码翻倍，赌命二选一', icon: Zap },
+      { id: 'penaltygrid', title: '惩罚阶梯', desc: '失败升一级，五级登顶者受终极惩罚', icon: TrendingUp },
+      { id: 'secretdouble', title: '翻牌赌命', desc: '一张张翻牌，翻到黑牌全作废', icon: FlipHorizontal },
       { id: 'roleplay', title: '角色扮演', desc: '抽剧本即兴演，权力反转台词', icon: Theater }
     ]
   }
@@ -89,14 +86,11 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   pose: '开始抽姿势',
   roulette: '开始转盘',
   bingo: '开始 Bingo',
-  dice: '开始骰子',
   mine: '开始扫雷',
   quiz: '开始问答',
   memory: '开始翻牌',
-  blindbox: '开始开盲盒',
   timed: '开始挑战',
   story: '开始接龙',
-  events: '开始抽卡',
   survival: '开始生存',
   territory: '开始争夺',
   auction: '开始拍卖',
@@ -104,8 +98,8 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   trutndare: '开始狂暴版',
   gamble: '开始赌局',
   edge: '开始对决',
-  penaltygrid: '开始九宫格',
-  secretdouble: '开始翻倍',
+  penaltygrid: '开始升阶',
+  secretdouble: '开始翻牌',
   roleplay: '开始演戏',
   bluff: '开始吹牛',
   jungle: '开始斗兽',
@@ -114,14 +108,11 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
 };
 
 const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
-  dice: '选择上骰子动作主题和下骰子部位主题',
   card: '选择游戏模式和双方抽卡题库',
   roulette: '选择游戏模式和双方抽卡题库',
   bingo: '选择游戏模式和双方抽卡题库',
   memory: '选择游戏模式和双方抽卡题库',
-  blindbox: '选择游戏模式和双方抽卡题库',
   timed: '选择游戏模式和双方抽卡题库',
-  events: '选择游戏模式和双方抽卡题库',
   survival: '选择游戏模式和双方抽卡题库',
   territory: '选择游戏模式和双方抽卡题库',
   auction: '选择游戏模式和双方抽卡题库',
@@ -279,19 +270,8 @@ export function HomeView({
           {players.map((player, idx) => {
             const theme = themes.find(t => t.id === player.themeId);
             const isMale = idx === 0;
-            const selectorName =
-              gameMode === 'dice'
-                ? idx === 0
-                  ? '上骰子'
-                  : '下骰子'
-                : `${player.name} (Player ${player.id + 1})`;
-            const selectedThemeLabel =
-              theme?.name ||
-              (gameMode === 'dice'
-                ? idx === 0
-                  ? '未选择动作主题'
-                  : '未选择部位主题'
-                : '未选择主题');
+            const selectorName = `${player.name} (Player ${player.id + 1})`;
+            const selectedThemeLabel = theme?.name || '未选择主题';
 
             return (
               <div

@@ -7,15 +7,12 @@ import { GameView } from './components/views/GameView';
 import { CardModeView } from './components/views/CardModeView';
 import { MineModeView } from './components/views/MineModeView';
 import { PoseModeView } from './components/views/PoseModeView';
-import { DiceModeView } from './components/views/DiceModeView';
 import { RouletteModeView } from './components/views/RouletteModeView';
 import { BingoModeView } from './components/views/BingoModeView';
 import { QuizModeView } from './components/views/QuizModeView';
 import { MemoryModeView } from './components/views/MemoryModeView';
-import { BlindBoxModeView } from './components/views/BlindBoxModeView';
 import { TimedModeView } from './components/views/TimedModeView';
 import { StoryModeView } from './components/views/StoryModeView';
-import { EventsModeView } from './components/views/EventsModeView';
 import { SurvivalModeView } from './components/views/SurvivalModeView';
 import { TerritoryModeView } from './components/views/TerritoryModeView';
 import { AuctionModeView } from './components/views/AuctionModeView';
@@ -23,7 +20,7 @@ import { GridChessModeView } from './components/views/GridChessModeView';
 import { TruthDareModeView } from './components/views/TruthDareModeView';
 import { GambleModeView } from './components/views/GambleModeView';
 import { EdgeModeView } from './components/views/EdgeModeView';
-import { PenaltyGridModeView } from './components/views/PenaltyGridModeView';
+import { PenaltyLadderModeView } from './components/views/PenaltyLadderModeView';
 import { SecretDoubleModeView } from './components/views/SecretDoubleModeView';
 import { RoleplayModeView } from './components/views/RoleplayModeView';
 import { SudokuModeView } from './components/views/SudokuModeView';
@@ -47,9 +44,7 @@ const CARD_THEME_MODES = new Set<GameMode>([
   'roulette',
   'bingo',
   'memory',
-  'blindbox',
   'timed',
-  'events',
   'survival',
   'territory',
   'auction',
@@ -69,9 +64,7 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
   roulette: 'card',
   bingo: 'card',
   memory: 'card',
-  blindbox: 'card',
   timed: 'card',
-  events: 'card',
   survival: 'card',
   territory: 'card',
   auction: 'card',
@@ -152,15 +145,10 @@ function App() {
   };
 
   const selectedPlayer = state.players.find(p => p.id === selectedPlayerId) || state.players[0];
-  const selectedModeForTheme: ThemeMode =
-    state.gameMode === 'dice'
-      ? selectedPlayerId === 0
-        ? 'diceAction'
-        : 'diceBody'
-      : MODE_THEME_MODE[state.gameMode] ?? 'board';
+  const selectedModeForTheme: ThemeMode = MODE_THEME_MODE[state.gameMode] ?? 'board';
   const selectableThemes = state.themes.filter(
     t =>
-      (state.gameMode === 'dice' || t.audience === 'common' || t.audience === selectedPlayer.role) &&
+      (t.audience === 'common' || t.audience === selectedPlayer.role) &&
       t.modes.includes(selectedModeForTheme)
   );
 
@@ -169,10 +157,6 @@ function App() {
     if (!success) {
       if (state.gameMode === 'mine') {
         alert('请为双方选择支持“扫雷主题”的任务包，并确保题库里有支持“扫雷真心话”和“扫雷大冒险”的主题');
-        return;
-      }
-      if (state.gameMode === 'dice') {
-        alert('请先选择支持“上骰子动作”和“下骰子部位”的主题包');
         return;
       }
       if (CARD_THEME_MODES.has(state.gameMode)) {
@@ -220,14 +204,6 @@ function App() {
   const handlePoseDone = () => {
     setPoseImageSrc(null);
     endTurn();
-  };
-
-  const handleSwapThemes = () => {
-    const first = state.players[0];
-    const second = state.players[1];
-    if (!first || !second) return;
-    if (first.themeId) selectTheme(second.id, first.themeId);
-    if (second.themeId) selectTheme(first.id, second.themeId);
   };
 
   const handleWin = (id: number) => {
@@ -454,15 +430,6 @@ function App() {
         />
       )}
 
-      {state.view === 'dice' && (
-        <DiceModeView
-          players={state.players}
-          themes={state.themes}
-          currentTurn={state.turn}
-          onEndTurn={endTurn}
-          onBack={handleBackFromGame}
-        />
-      )}
 
       {state.view === 'roulette' && (
         <RouletteModeView
@@ -504,16 +471,6 @@ function App() {
         />
       )}
 
-      {state.view === 'blindbox' && (
-        <BlindBoxModeView
-          players={state.players}
-          themes={state.themes}
-          currentTurn={state.turn}
-          onEndTurn={endTurn}
-          onSwapThemes={handleSwapThemes}
-          onBack={handleBackFromGame}
-        />
-      )}
 
       {state.view === 'timed' && (
         <TimedModeView
@@ -530,15 +487,6 @@ function App() {
         />
       )}
 
-      {state.view === 'events' && (
-        <EventsModeView
-          players={state.players}
-          themes={state.themes}
-          currentTurn={state.turn}
-          onEndTurn={endTurn}
-          onBack={handleBackFromGame}
-        />
-      )}
 
       {state.view === 'survival' && (
         <SurvivalModeView
@@ -603,7 +551,7 @@ function App() {
       )}
 
       {state.view === 'penaltygrid' && (
-        <PenaltyGridModeView
+        <PenaltyLadderModeView
           players={state.players}
           themes={state.themes}
           onBack={handleBackFromGame}

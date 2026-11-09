@@ -273,3 +273,18 @@ export const ROLEPLAY_SCRIPTS: RoleplayScript[] = [
     forcedLine: '审讯官：再不说，今晚可没那么好过'
   }
 ];
+
+// 惩罚阶梯：五级递进，失败一次升一级
+export interface PenaltyLevel {
+  level: number;
+  label: string;
+  task: string;
+}
+
+export const PENALTY_LADDER: PenaltyLevel[] = [
+  { level: 1, label: '第一级 · 轻', task: '让对方在你手心写一个字，猜不出来就再写一个' },
+  { level: 2, label: '第二级 · 中', task: '蒙上眼睛，接受对方 30 秒的任意触碰（边界事先约定）' },
+  { level: 3, label: '第三级 · 重', task: '由对方指定一件衣物，当场脱下' },
+  { level: 4, label: '第四级 · 更重', task: '让对方在你指定的部位留下一处 5 秒的印记' },
+  { level: 5, label: '第五级 · 终极', task: '由对方从今晚所有惩罚里挑一条最狠的，你必须完成（边界内）' }
+];

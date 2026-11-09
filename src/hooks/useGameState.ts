@@ -49,15 +49,12 @@ const GAME_MODE_VALUES: GameMode[] = [
   'card',
   'pose',
   'mine',
-  'dice',
   'roulette',
   'bingo',
   'quiz',
   'memory',
-  'blindbox',
   'timed',
   'story',
-  'events',
   'survival',
   'territory',
   'auction',
@@ -80,15 +77,12 @@ const VIEW_VALUES: GameView[] = [
   'card',
   'pose',
   'mine',
-  'dice',
   'roulette',
   'bingo',
   'quiz',
   'memory',
-  'blindbox',
   'timed',
   'story',
-  'events',
   'survival',
   'territory',
   'auction',
@@ -111,15 +105,12 @@ const MODE_VIEW: Record<GameMode, GameView> = {
   card: 'card',
   pose: 'pose',
   mine: 'mine',
-  dice: 'dice',
   roulette: 'roulette',
   bingo: 'bingo',
   quiz: 'quiz',
   memory: 'memory',
-  blindbox: 'blindbox',
   timed: 'timed',
   story: 'story',
-  events: 'events',
   survival: 'survival',
   territory: 'territory',
   auction: 'auction',
@@ -142,15 +133,12 @@ const VIEW_MODE: Record<string, GameMode> = {
   card: 'card',
   pose: 'pose',
   mine: 'mine',
-  dice: 'dice',
   roulette: 'roulette',
   bingo: 'bingo',
   quiz: 'quiz',
   memory: 'memory',
-  blindbox: 'blindbox',
   timed: 'timed',
   story: 'story',
-  events: 'events',
   survival: 'survival',
   territory: 'territory',
   auction: 'auction',
@@ -553,32 +541,9 @@ function canStartMineMode(players: Player[], themes: Theme[]) {
   );
 }
 
-function canStartDiceMode(players: Player[], themes: Theme[]) {
-  const actionSlot = players[0];
-  const bodySlot = players[1];
-  const actionTheme = actionSlot?.themeId
-    ? themes.find(theme => theme.id === actionSlot.themeId)
-    : undefined;
-  const bodyTheme = bodySlot?.themeId
-    ? themes.find(theme => theme.id === bodySlot.themeId)
-    : undefined;
-
-  return !!(
-    actionSlot &&
-    bodySlot &&
-    actionTheme &&
-    bodyTheme &&
-    isThemeAllowed(actionTheme, actionSlot.role, 'diceAction') &&
-    isThemeAllowed(bodyTheme, bodySlot.role, 'diceBody') &&
-    actionTheme.tasks.length > 0 &&
-    bodyTheme.tasks.length > 0
-  );
-}
-
 function canStartGameMode(mode: GameMode, players: Player[], themes: Theme[]) {
   if (THEME_FREE_MODES.has(mode)) return true;
   if (mode === 'mine') return canStartMineMode(players, themes);
-  if (mode === 'dice') return canStartDiceMode(players, themes);
   if (mode === 'board') return canStartWithThemes(players, themes);
   return canStartWithThemeMode(players, themes, 'card');
 }
