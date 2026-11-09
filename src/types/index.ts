@@ -27,7 +27,8 @@ export type GameMode =
   | 'secretdouble'
   | 'roleplay'
   | 'sudoku'
-  | 'go';
+  | 'go'
+  | 'bluff';
 
 export type GameView =
   | 'home'
@@ -56,6 +57,7 @@ export type GameView =
   | 'roleplay'
   | 'sudoku'
   | 'go'
+  | 'bluff'
   | 'themes';
 
 export interface BingoCell {

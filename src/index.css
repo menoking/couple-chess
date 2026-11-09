@@ -723,3 +723,17 @@ html.theme-light .text-\[\#FF7A96\] {
 html.theme-light .text-\[\#FFB340\] {
   color: #9A6A00;
 }
+
+/* ---------- 吹牛骰的点数骰面：两套主题都保持浅色骰子 ---------- */
+.bluff-die {
+  background-color: #F2EDE3;
+  color: #1E1B17;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.45), 0 2px 6px rgba(0, 0, 0, 0.35);
+}
+.bluff-pip {
+  background-color: currentColor;
+}
+html.theme-light .bluff-die {
+  background-color: #FFFFFF;
+  box-shadow: inset 0 0 0 1px rgba(84, 66, 42, 0.1), 0 1px 3px rgba(84, 66, 42, 0.16);
+}

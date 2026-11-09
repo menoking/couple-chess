@@ -69,7 +69,8 @@ const GAME_MODE_VALUES: GameMode[] = [
   'secretdouble',
   'roleplay',
   'sudoku',
-  'go'
+  'go',
+  'bluff'
 ];
 
 const VIEW_VALUES: GameView[] = [
@@ -99,6 +100,7 @@ const VIEW_VALUES: GameView[] = [
   'roleplay',
   'sudoku',
   'go',
+  'bluff',
   'themes'
 ];
 
@@ -127,7 +129,8 @@ const MODE_VIEW: Record<GameMode, GameView> = {
   secretdouble: 'secretdouble',
   roleplay: 'roleplay',
   sudoku: 'sudoku',
-  go: 'go'
+  go: 'go',
+  bluff: 'bluff'
 };
 
 const VIEW_MODE: Record<string, GameMode> = {
@@ -156,7 +159,8 @@ const VIEW_MODE: Record<string, GameMode> = {
   secretdouble: 'secretdouble',
   roleplay: 'roleplay',
   sudoku: 'sudoku',
-  go: 'go'
+  go: 'go',
+  bluff: 'bluff'
 };
 
 /** 自备内容、不需要选择主题的玩法。 */

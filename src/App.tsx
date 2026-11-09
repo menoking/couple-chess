@@ -28,6 +28,7 @@ import { SecretDoubleModeView } from './components/views/SecretDoubleModeView';
 import { RoleplayModeView } from './components/views/RoleplayModeView';
 import { SudokuModeView } from './components/views/SudokuModeView';
 import { GoModeView } from './components/views/GoModeView';
+import { BluffDiceModeView } from './components/views/BluffDiceModeView';
 import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
@@ -56,7 +57,8 @@ const CARD_THEME_MODES = new Set<GameMode>([
   'penaltygrid',
   'secretdouble',
   'sudoku',
-  'go'
+  'go',
+  'bluff'
 ]);
 
 const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
@@ -77,6 +79,7 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
   secretdouble: 'card',
   sudoku: 'card',
   go: 'card',
+  bluff: 'card',
   mine: 'mineTheme'
 };
 
@@ -631,6 +634,15 @@ function App() {
 
       {state.view === 'go' && (
         <GoModeView
+          players={state.players}
+          themes={state.themes}
+          currentTurn={state.turn}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'bluff' && (
+        <BluffDiceModeView
           players={state.players}
           themes={state.themes}
           currentTurn={state.turn}

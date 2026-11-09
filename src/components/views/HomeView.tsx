@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { GameMode, Player, Theme } from '../../types';
-import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Dices, Disc3, Flag, Flame, Gift, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, Shuffle, Theater, Timer, User, UserRound, Zap } from 'lucide-react';
+import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Dices, Disc3, Flag, Flame, Gift, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, ShieldQuestion, Shuffle, Theater, Timer, User, UserRound, Zap } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -55,7 +55,8 @@ const CATEGORIES: ModeCategory[] = [
     modes: [
       { id: 'quiz', title: '默契问答', desc: '分别作答同时揭晓，比谁更懂', icon: MessageCircleQuestion },
       { id: 'timed', title: '限时挑战', desc: '倒计时连续完成任务计分', icon: Timer },
-      { id: 'events', title: '随机事件', desc: '抽卡触发交换身份、任务升级', icon: Shuffle }
+      { id: 'events', title: '随机事件', desc: '抽卡触发交换身份、任务升级', icon: Shuffle },
+      { id: 'bluff', title: '吹牛骰', desc: '藏骰叫点，敢不敢开对方', icon: ShieldQuestion }
     ]
   },
   {
@@ -105,6 +106,7 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   penaltygrid: '开始九宫格',
   secretdouble: '开始翻倍',
   roleplay: '开始演戏',
+  bluff: '开始吹牛',
   sudoku: '开始数独',
   go: '开始围棋'
 };
@@ -125,6 +127,7 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   trutndare: '选择游戏模式和双方抽卡题库',
   penaltygrid: '选择游戏模式和双方抽卡题库',
   secretdouble: '选择游戏模式和双方抽卡题库',
+  bluff: '选择游戏模式和双方抽卡题库',
   sudoku: '选择游戏模式和双方抽卡题库',
   go: '选择游戏模式和双方抽卡题库',
   mine: '选择游戏模式和双方扫雷主题题库',
