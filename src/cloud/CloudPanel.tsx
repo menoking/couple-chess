@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { Cloud, Copy, Download, LogOut, Upload, Users, X } from 'lucide-react';
 import { useCloud } from './useCloud';
 import { supabase } from './client';
@@ -15,6 +15,9 @@ interface CloudPanelProps {
   onStartRoom: (room: OnlineRoomInfo) => void;
   syncStatus: string;
   lastSyncedAt: string | null;
+  incoming: OnlineRoomInfo | null;
+  onAcceptInvite: (room: OnlineRoomInfo) => void;
+  onDismissInvite: () => void;
 }
 
 type AuthMode = 'signin' | 'signup';
@@ -26,7 +29,10 @@ export function CloudPanel({
   transportKind,
   onStartRoom,
   syncStatus,
-  lastSyncedAt
+  lastSyncedAt,
+  incoming,
+  onAcceptInvite,
+  onDismissInvite
 }: CloudPanelProps) {
   const [authMode, setAuthMode] = useState<AuthMode>('signin');
   const [email, setEmail] = useState('');
@@ -35,28 +41,8 @@ export function CloudPanel({
   const [notice, setNotice] = useState<string | null>(null);
   const [spaceName, setSpaceName] = useState('我们的小屋');
   const [joinCode, setJoinCode] = useState('');
-  const [incoming, setIncoming] = useState<OnlineRoomInfo | null>(null);
-
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
   const space = cloud.space;
-
-  useEffect(() => {
-    if (!open || !space) return;
-    const client = supabase;
-    if (!client) return;
-    const channel = client.channel(`cfc-space-${space.id}`);
-    channel.on('broadcast', { event: 'invite' }, payload => {
-      const data = payload.payload as OnlineRoomInfo | undefined;
-      if (!data || data.hostSeat === space.seat) return;
-      setIncoming(data);
-    });
-    channel.subscribe();
-    channelRef.current = channel;
-    return () => {
-      client.removeChannel(channel);
-      channelRef.current = null;
-    };
-  }, [open, space]);
 
   if (!open) return null;
 
@@ -271,14 +257,14 @@ export function CloudPanel({
                 <div className="mt-2 flex gap-2">
                   <button
                     type="button"
-                    onClick={() => { onStartRoom(incoming); setIncoming(null); }}
+                    onClick={() => onAcceptInvite(incoming)}
                     className="ios-btn h-10 flex-1 rounded-full bg-white text-xs font-bold text-black"
                   >
                     接受
                   </button>
                   <button
                     type="button"
-                    onClick={() => setIncoming(null)}
+                    onClick={onDismissInvite}
                     className="ios-btn h-10 flex-1 rounded-full bg-white/10 text-xs font-bold text-white"
                   >
                     忽略

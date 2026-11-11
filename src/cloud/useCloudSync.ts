@@ -68,6 +68,7 @@ export function useCloudSync(input: {
         });
         window.localStorage.setItem(pushKey(spaceId), String(Date.parse(now)));
         setLastSyncedAt(now);
+        skipNextPush.current = false;
       }
 
       setStatus('idle');
