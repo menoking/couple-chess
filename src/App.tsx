@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Github, Moon, Sun } from 'lucide-react';
+import { Cloud, Github, Moon, Sun } from 'lucide-react';
 import { useGameState } from './hooks/useGameState';
 import { GameMode, MineTaskChoice, TaskEventData, ThemeMode } from './types';
 import { HomeView } from './components/views/HomeView';
@@ -37,6 +37,12 @@ import { BottomNav } from './components/BottomNav';
 import { ThemeCreateModal } from './components/modals/ThemeCreateModal';
 import { ThemeEditorModal } from './components/modals/ThemeEditorModal';
 import { AiImportModal } from './components/modals/AiImportModal';
+import { useCloud } from './cloud/useCloud';
+import { useCloudSync } from './cloud/useCloudSync';
+import { CloudPanel } from './cloud/CloudPanel';
+import { OnlinePlayView, OnlineRoomInfo } from './cloud/OnlinePlayView';
+import { cloudConfigured } from './cloud/client';
+import { Seat } from './cloud/types';
 
 /** 需要双方选择“抽卡”类主题的玩法。 */
 const CARD_THEME_MODES = new Set<GameMode>([
@@ -100,8 +106,13 @@ function App() {
     }
   }, [theme]);
 
+  const [cloudOpen, setCloudOpen] = useState(false);
+  const [onlineRoom, setOnlineRoom] = useState<OnlineRoomInfo | null>(null);
+  const cloud = useCloud();
+
   const {
     state,
+    replaceThemes,
     switchView,
     selectGameMode,
     selectTheme,
@@ -201,6 +212,13 @@ function App() {
     resolveTask(taskData, 'reject');
   };
 
+  const cloudSync = useCloudSync({
+    spaceId: cloud.space?.id ?? null,
+    themes: state.themes,
+    onRemote: replaceThemes,
+    enabled: cloudConfigured && !!cloud.space
+  });
+
   const handlePoseDone = () => {
     setPoseImageSrc(null);
     endTurn();
@@ -241,6 +259,15 @@ function App() {
           </div>
           <div className="flex flex-col items-end gap-2 mt-1">
             <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCloudOpen(true)}
+                className="ios-btn flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/10"
+                aria-label="云同步与联机"
+                title="云同步与联机"
+              >
+                <Cloud size={17} className={cloud.space ? 'text-[#30D158]' : 'text-gray-400'} />
+              </button>
               <button
                 type="button"
                 onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
@@ -608,6 +635,30 @@ function App() {
           themes={state.themes}
           currentTurn={state.turn}
           onBack={handleBackFromGame}
+        />
+      )}
+
+      <CloudPanel
+        open={cloudOpen}
+        onClose={() => setCloudOpen(false)}
+        cloud={cloud}
+        transportKind={cloudConfigured ? 'supabase' : 'local'}
+        onStartRoom={room => { setOnlineRoom(room); setCloudOpen(false); }}
+        syncStatus={cloudSync.status}
+        lastSyncedAt={cloudSync.lastSyncedAt}
+      />
+
+      {onlineRoom && cloud.space && (
+        <OnlinePlayView
+          room={onlineRoom}
+          mySeat={cloud.space.seat as Seat}
+          players={state.players.map(player => ({
+            seat: player.id as Seat,
+            name: player.name,
+            color: player.color
+          }))}
+          kind={cloudConfigured ? 'supabase' : 'local'}
+          onExit={() => setOnlineRoom(null)}
         />
       )}
     </div>

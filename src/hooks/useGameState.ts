@@ -688,6 +688,11 @@ export function useGameState() {
     }));
   }, []);
 
+  /** 云端同步用：整体替换题库（不做合并，冲突时以传入内容为准） */
+  const replaceThemes = useCallback((next: Theme[]) => {
+    setState(prev => ({ ...prev, themes: next }));
+  }, []);
+
   const createTheme = useCallback((input: {
     name: string;
     desc?: string;
@@ -1090,6 +1095,7 @@ export function useGameState() {
     selectGameMode,
     selectTheme,
     createTheme,
+    replaceThemes,
     updateThemeMeta,
     addThemeTask,
     updateThemeTask,
