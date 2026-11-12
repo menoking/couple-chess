@@ -42,6 +42,8 @@ import { useCloudSync } from './cloud/useCloudSync';
 import { CloudPanel } from './cloud/CloudPanel';
 import { OnlinePlayView, OnlineRoomInfo } from './cloud/OnlinePlayView';
 import { cloudConfigured } from './cloud/client';
+import { enterOnlineRoom, announceRoom, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
+import { ONLINE_MODES, OnlineModeKey } from './cloud/games/adapters';
 import { Seat } from './cloud/types';
 
 /** 需要双方选择“抽卡”类主题的玩法。 */
@@ -108,6 +110,9 @@ function App() {
 
   const [cloudOpen, setCloudOpen] = useState(false);
   const [onlineSession, setOnlineSession] = useState<{ room: OnlineRoomInfo; isHost: boolean } | null>(null);
+  const [onlinePrompt, setOnlinePrompt] = useState<OnlineModeKey | null>(null);
+  const [remoteRoom, setRemoteRoom] = useState<RoomAnnounce | null>(null);
+  const [onlineNotice, setOnlineNotice] = useState<string | null>(null);
   const cloud = useCloud();
 
   const {
@@ -163,7 +168,7 @@ function App() {
       t.modes.includes(selectedModeForTheme)
   );
 
-  const handleStartGame = () => {
+  const startLocalGame = () => {
     const success = startGame();
     if (!success) {
       if (state.gameMode === 'mine') {
@@ -177,6 +182,40 @@ function App() {
       alert('请先为双方选择支持飞行棋的任务包');
     }
   };
+
+  /** 登录后，三个支持联机的玩法先让用户选「同屏」还是「两台设备」 */
+  const handleStartGame = () => {
+    const onlineMode = ONLINE_MODES.find(item => item.key === state.gameMode);
+    if (cloud.space && onlineMode) {
+      setOnlinePrompt(onlineMode.key);
+      return;
+    }
+    startLocalGame();
+  };
+
+  const enterOnline = async (mode: OnlineModeKey) => {
+    if (!cloud.space) return;
+    try {
+      const ticket = await enterOnlineRoom(cloud.space, mode);
+      if (!ticket) return;
+      setOnlineSession({ room: { roomId: ticket.roomId, mode: ticket.mode }, isHost: ticket.isHost });
+      setOnlinePrompt(null);
+      void announceRoom(cloud.space, ticket.roomId, ticket.mode);
+    } catch (error) {
+      setOnlineNotice(error instanceof Error ? error.message : '进房间失败');
+    }
+  };
+
+  // 对方进房间时提示「一起来」
+  useEffect(() => {
+    if (!cloud.space) {
+      setRemoteRoom(null);
+      return;
+    }
+    return subscribeSpaceRooms(cloud.space, announce => {
+      setRemoteRoom(announce);
+    });
+  }, [cloud.space]);
 
   const handleTaskTrigger = (data: TaskEventData) => {
     setTaskData(data);
@@ -636,6 +675,61 @@ function App() {
           currentTurn={state.turn}
           onBack={handleBackFromGame}
         />
+      )}
+
+      {onlinePrompt && (
+        <div className="fixed inset-0 z-[125] flex items-end justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-[430px] rounded-t-3xl border-t border-white/10 bg-[#1C1C1E] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            <div className="text-center text-base font-bold text-white">这一局怎么玩？</div>
+            <div className="mt-1 text-center text-[11px] text-gray-500">
+              {ONLINE_MODES.find(item => item.key === onlinePrompt)?.label}
+            </div>
+            <button
+              type="button"
+              onClick={() => { setOnlinePrompt(null); startLocalGame(); }}
+              className="ios-btn mt-4 h-14 w-full rounded-2xl bg-white/10 text-sm font-bold text-white"
+            >
+              同屏玩（一台设备，两人轮流）
+            </button>
+            <button
+              type="button"
+              onClick={() => void enterOnline(onlinePrompt)}
+              className="ios-btn mt-2 h-14 w-full rounded-2xl bg-white text-sm font-bold text-black shadow-lg"
+            >
+              两台设备联机（各看各的）
+            </button>
+            <button
+              type="button"
+              onClick={() => setOnlinePrompt(null)}
+              className="ios-btn mt-2 h-10 w-full rounded-full text-xs font-bold text-gray-500"
+            >
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+
+      {remoteRoom && !onlineSession && (
+        <button
+          type="button"
+          onClick={() => {
+            setOnlineSession({ room: { roomId: remoteRoom.roomId, mode: remoteRoom.mode }, isHost: false });
+            setRemoteRoom(null);
+          }}
+          className="fixed inset-x-0 bottom-[calc(88px+env(safe-area-inset-bottom))] z-[124] mx-auto flex w-[calc(100%-2.5rem)] max-w-[390px] items-center justify-between rounded-2xl border border-[#30D158]/40 bg-[#30D158]/15 px-4 py-3 backdrop-blur"
+        >
+          <span className="text-xs font-bold text-white">
+            对方正在玩「{ONLINE_MODES.find(item => item.key === remoteRoom.mode)?.label}」
+          </span>
+          <span className="text-xs font-bold text-[#30D158]">加入 →</span>
+        </button>
+      )}
+
+      {onlineNotice && (
+        <div className="fixed inset-x-0 top-20 z-[126] mx-auto w-[calc(100%-2.5rem)] max-w-[390px] rounded-2xl border border-[#FF453A]/30 bg-[#FF453A]/15 px-4 py-3 text-center text-xs font-bold text-white backdrop-blur">
+          {onlineNotice}
+          <button type="button" onClick={() => setOnlineNotice(null)} className="ml-2 text-gray-300">知道了</button>
+        </div>
       )}
 
       <CloudPanel

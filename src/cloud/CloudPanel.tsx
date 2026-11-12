@@ -5,7 +5,7 @@ import { supabase } from './client';
 import { ONLINE_MODES, OnlineModeKey } from './games/adapters';
 import { TransportKind } from './transport';
 import { LocalBackup, exportLocalBackup, importLocalBackup, isSandbox } from '../utils/localStorage';
-import { getDeviceId } from './device';
+import { enterOnlineRoom, roomIdOf } from './rooms';
 
 interface CloudPanelProps {
   open: boolean;
@@ -46,38 +46,24 @@ export function CloudPanel({
     }
   };
 
-  /** 进房间：谁先创谁当房主，靠 rooms 表主键抢占（原子） */
   const enterRoom = async (target: OnlineModeKey, forceHost = false) => {
-    const client = supabase;
-    if (!client || !cloud.space) return;
-    const roomId = `${cloud.space.id}-${target}`;
-    const device = getDeviceId();
-
-    const { error: insertError } = await client
-      .from('rooms')
-      .insert({ id: roomId, space_id: cloud.space.id, host_device: device });
-
-    if (insertError && insertError.code !== '23505') {
-      setNotice(insertError.message);
-      return;
+    if (!cloud.space) return;
+    try {
+      const ticket = await enterOnlineRoom(cloud.space, target, forceHost);
+      if (!ticket) return;
+      onEnterRoom({ roomId: ticket.roomId, mode: ticket.mode }, ticket.isHost);
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : '进房间失败');
     }
-
-    if (forceHost) {
-      await client.from('rooms').update({ host_device: device, updated_at: new Date().toISOString() }).eq('id', roomId);
-    }
-
-    const { data } = await client.from('rooms').select('host_device').eq('id', roomId).maybeSingle();
-    const isHost = data?.host_device === device;
-    onEnterRoom({ roomId, mode: target }, isHost);
   };
 
   /** 对方退出后接管房主，避免卡在「等待对方」 */
   const takeOverRooms = async () => {
     const client = supabase;
     if (!client || !cloud.space) return;
-    const device = getDeviceId();
+    const device = (await import('./device')).getDeviceId();
     for (const item of ONLINE_MODES) {
-      const roomId = `${cloud.space.id}-${item.key}`;
+      const roomId = roomIdOf(cloud.space.id, item.key);
       const { error } = await client
         .from('rooms')
         .upsert({ id: roomId, space_id: cloud.space.id, host_device: device, updated_at: new Date().toISOString() });
