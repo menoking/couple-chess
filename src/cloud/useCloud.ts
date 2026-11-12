@@ -16,6 +16,17 @@ function friendlyAuthError(message: string): string {
   return message;
 }
 
+/** 把底层网络错误翻译成能直接照做的提示 */
+function friendlyAuthError(message: string): string {
+  if (/failed to fetch|networkerror|load failed/i.test(message)) {
+    return '连不上云服务：请检查 VITE_SUPABASE_URL 是否正确（可在浏览器直接打开 你的地址/rest/v1/ 验证），以及项目是否被暂停';
+  }
+  if (/invalid api key|no api key/i.test(message)) {
+    return 'API Key 无效：请确认填的是 Publishable（anon）key，而不是 Secret 或 service_role';
+  }
+  return message;
+}
+
 function randomCode(length = 6): string {
   const bytes = new Uint8Array(length);
   if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
