@@ -5,6 +5,7 @@ import type {
   BingoCellResult,
   GameMode,
   MineRevealResult,
+  MineTaskChoice,
   MineTile,
   PathCoord,
   Player,
@@ -13,6 +14,7 @@ import type {
   Theme,
   TileType
 } from '../types';
+import { MineBombChoiceModal } from '../components/modals/MineBombChoiceModal';
 import { GameView } from '../components/views/GameView';
 import { CardModeView } from '../components/views/CardModeView';
 import { MineModeView } from '../components/views/MineModeView';
@@ -47,11 +49,13 @@ import { createRoom } from '../rules/room';
 import { ModeRuntimeProvider } from '../rules/ModeRuntime';
 import {
   BINGO_BOARD_SIZE,
+  calculateNewPosition,
   generateBingoBoard,
   generateBoardMap,
   generateMineBoard,
   generateSpiralPath
 } from '../utils/gameLogic';
+import { completeBingoCellOnBoard, createMineTaskEvent, resolveBoardTile } from '../rules/modeRules';
 import { useSharedRoom } from './useSharedRoom';
 import type { TransportKind } from './transport';
 
@@ -69,13 +73,13 @@ export interface OnlineStageProps {
 
 const other = (seat: Seat): Seat => (seat === 0 ? 1 : 0);
 
-function poolTask(snap: RoomSnapshot, executorSeat: Seat): TaskEventData {
+function poolTask(snap: RoomSnapshot, executorSeat: Seat, reason = '抽到一张任务卡'): TaskEventData {
   const card = cardFor(snap.cardPool, snap.cardSeq + 1);
   return {
     type: 'card',
     initiatorPlayerId: other(executorSeat),
     executorPlayerId: executorSeat,
-    title: '抽到一张任务卡',
+    title: reason,
     subtitle: `来自「${card.themeName}」`,
     icon: 'sparkles',
     color: executorSeat === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
@@ -235,6 +239,7 @@ export function OnlineStage(props: OnlineStageProps) {
   const dispatch = shared.dispatch;
 
   const [selected, setSelected] = useState<string[]>([]);
+  const [bombOpen, setBombOpen] = useState(false);
 
   useEffect(() => {
     if (snap) setSelected(snap.picks[mySeat].themeIds);
@@ -417,7 +422,8 @@ export function OnlineStage(props: OnlineStageProps) {
       drawerSeat: found?.drawerSeat ?? other(mySeat),
       executorSeat: found?.executorSeat ?? mySeat,
       reason: found?.reason ?? '抽到一张任务卡',
-      card: found?.card
+      card: found?.card,
+      moveDelta: found?.moveDelta ?? 0
     });
   };
 
@@ -425,20 +431,27 @@ export function OnlineStage(props: OnlineStageProps) {
   const onBack = onExit;
   const onDrawTask = () => poolTask(snap, other(mySeat));
   const onTaskTrigger = (task: TaskEventData) => enqueue(task);
-  const onBombTrigger = () => enqueue(poolTask(snap, mySeat));
+  // 扫雷炸弹：三选一由对方指定（与同屏 chooseMineBombTask 一致）
+  const onBombTrigger = () => setBombOpen(true);
+  const onChooseBomb = (choice: MineTaskChoice) => {
+    setBombOpen(false);
+    const turnSeat: Seat = snap.turn === 1 ? 1 : 0;
+    const task = createMineTaskEvent(players, onlineThemes, turnSeat, choice, other(turnSeat));
+    if (task) enqueue(task);
+    else endTurn();
+  };
   const onPoseTrigger = (src: string) => patch('stage.poseImage', src);
-  const onWin = (winnerId: number) => enqueue(poolTask(snap, winnerId === 1 ? 1 : 0));
+  const onWin = (winnerId: number) => enqueue(poolTask(snap, other(winnerId === 1 ? 1 : 0), '终局 · 胜方抽卡'));
   const onSetRolling = (rolling: boolean) => patch('stage.isRolling', rolling);
-  const onMove = (steps: number) => {
+  // GameView 每次只传 +1/-1，按同屏 calculateNewPosition 逐格推进
+  const onMove = (delta: number) => {
     const current = (data['stage.steps'] as number[] | undefined) ?? [0, 0];
     const next = [...current];
-    next[snap.turn] = steps;
+    next[snap.turn] = calculateNewPosition(next[snap.turn] ?? 0, delta);
     patch('stage.steps', next);
   };
-  const onCheckTile = (landingStep: number): TaskEventData | 'win' | null => {
-    if (landingStep >= 48) return 'win';
-    return landingStep % 3 === 0 ? poolTask(snap, snap.turn === 0 ? 0 : 1) : null;
-  };
+  const onCheckTile = (landingStep: number): TaskEventData | 'win' | null =>
+    resolveBoardTile({ landingStep, players, themes: onlineThemes, turn: snap.turn, boardMap });
   const onRevealTile = (index: number): MineRevealResult | null => {
     const board = [...mineBoard];
     if (!board[index] || board[index].revealed) return null;
@@ -447,14 +460,18 @@ export function OnlineStage(props: OnlineStageProps) {
     const type = board[index].type;
     if (type === 'blank') return { type: 'blank' };
     if (type === 'bomb') return { type: 'bomb' };
-    return { type: 'task', task: poolTask(snap, snap.turn === 0 ? 0 : 1) };
+    const choice: MineTaskChoice = type === 'truth' ? 'truth' : type === 'dare' ? 'dare' : 'theme';
+    const task = createMineTaskEvent(players, onlineThemes, snap.turn, choice);
+    return task ? { type: 'task', task } : { type: 'blank' };
   };
   const onCompleteCell = (index: number): BingoCellResult | null => {
     if (!bingoBoard) return null;
-    const cells = bingoBoard.cells.map((cell, i) => (i === index ? { ...cell, completedBy: snap.turn } : cell));
-    patch('stage.bingoBoard', { ...bingoBoard, cells });
-    return { newLines: 0, rewardTask: null, rewardThemeName: null, boardComplete: false };
+    const done = completeBingoCellOnBoard(bingoBoard, index, snap.turn, players, onlineThemes);
+    if (!done) return null;
+    patch('stage.bingoBoard', done.board);
+    return done.result;
   };
+  // restart 会清空玩法局部状态，房主 effect 随即重生成 Bingo 棋盘
   const onRestart = () => dispatch({ type: 'restart', seat: mySeat });
 
   const common = { players, themes: onlineThemes, currentTurn: snap.turn, onBack, onEndTurn: endTurn };
@@ -537,6 +554,12 @@ export function OnlineStage(props: OnlineStageProps) {
             </div>
           </div>
         )}
+        <MineBombChoiceModal
+          isOpen={bombOpen}
+          activePlayer={players[snap.turn] ?? null}
+          selectorPlayer={players[snap.turn === 1 ? 0 : 1] ?? null}
+          onChoose={onChooseBomb}
+        />
         <CardGate snap={snap} mySeat={mySeat} players={players} dispatch={dispatch} />
       </div>
     </ModeRuntimeProvider>

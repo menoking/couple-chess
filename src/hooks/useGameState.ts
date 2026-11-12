@@ -19,8 +19,17 @@ import {
   ThemeTag,
   ThemeMode
 } from '../types';
+import {
+  applyMoveDelta,
+  buildBingoDecks,
+  buildTaskEvent,
+  chooseRandomTask,
+  createMineTaskEvent,
+  isThemeAllowed,
+  isThemeAllowedForRole
+} from '../rules/modeRules';
 import { loadFromStorage, saveToStorage } from '../utils/localStorage';
-import { generateSpiralPath, generateBoardMap, calculateNewPosition, generateMineBoard, generateBingoBoard, BINGO_BOARD_SIZE, BingoDeck } from '../utils/gameLogic';
+import { generateSpiralPath, generateBoardMap, calculateNewPosition, generateMineBoard, generateBingoBoard, BINGO_BOARD_SIZE } from '../utils/gameLogic';
 import { DEFAULT_THEMES } from '../data/defaultThemes';
 
 const STORAGE_KEY = 'couples-ludo-game-state';
@@ -162,17 +171,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isThemeAllowedForRole(theme: Theme, role: Player['role']) {
-  return theme.audience === 'common' || theme.audience === role;
-}
 
-function isThemeAllowedForMode(theme: Theme, mode: ThemeMode) {
-  return theme.modes.includes(mode);
-}
 
-function isThemeAllowed(theme: Theme, role: Player['role'], mode: ThemeMode) {
-  return isThemeAllowedForRole(theme, role) && isThemeAllowedForMode(theme, mode);
-}
 
 function normalizeExecutor(value: unknown): TaskExecutor {
   if (value === 1 || value === '1') return 'female';
@@ -258,64 +258,15 @@ function getTaskKey(task: TaskCard) {
   return `${task.text}__${task.executor}__${task.moveDelta}`;
 }
 
-function chooseRandomTask(theme: Theme | undefined): TaskCard | null {
-  if (!theme || theme.tasks.length === 0) return null;
-  return theme.tasks[Math.floor(Math.random() * theme.tasks.length)];
-}
 
-function chooseRandomTheme(themes: Theme[], role: Player['role'], mode: ThemeMode): Theme | null {
-  const availableThemes = themes.filter(
-    theme => isThemeAllowed(theme, role, mode) && theme.tasks.length > 0
-  );
-  if (availableThemes.length === 0) return null;
-  return availableThemes[Math.floor(Math.random() * availableThemes.length)];
-}
 
 function hasThemeForMode(themes: Theme[], role: Player['role'], mode: ThemeMode) {
   return themes.some(theme => isThemeAllowed(theme, role, mode) && theme.tasks.length > 0);
 }
 
-function getExecutorPlayerId(task: TaskCard, fallbackPlayerId: number) {
-  if (task.executor === 'female') return 1;
-  if (task.executor === 'male') return 0;
-  return fallbackPlayerId;
-}
 
-function formatMoveDelta(moveDelta: number) {
-  if (moveDelta === 0) return '';
-  return moveDelta > 0 ? `，完成后前进${moveDelta}格` : `，完成后后退${Math.abs(moveDelta)}格`;
-}
 
-function buildTaskEvent(input: {
-  type: TaskEventData['type'];
-  initiatorPlayerId: number;
-  fallbackExecutorPlayerId: number;
-  title: string;
-  subtitle: string;
-  icon: string;
-  color: string;
-  task: TaskCard;
-  taskSourceId: string;
-}): TaskEventData {
-  return {
-    type: input.type,
-    initiatorPlayerId: input.initiatorPlayerId,
-    executorPlayerId: getExecutorPlayerId(input.task, input.fallbackExecutorPlayerId),
-    title: input.title,
-    subtitle: `${input.subtitle}${formatMoveDelta(input.task.moveDelta)}`,
-    icon: input.icon,
-    color: input.color,
-    task: input.task.text,
-    taskSourceId: input.taskSourceId,
-    moveDelta: input.task.moveDelta
-  };
-}
 
-function applyMoveDelta(step: number, moveDelta: number) {
-  if (moveDelta > 0) return calculateNewPosition(step, moveDelta);
-  if (moveDelta < 0) return Math.max(0, step + moveDelta);
-  return step;
-}
 
 function normalizePlayers(input: unknown): Player[] {
   const incoming = Array.isArray(input) ? input : [];
@@ -413,13 +364,6 @@ function normalizeMineBoard(input: unknown): MineTile[] {
   return mineBoard.length === MINE_BOARD_SIZE ? mineBoard : generateMineBoard();
 }
 
-function buildBingoDecks(players: Player[], themes: Theme[]): BingoDeck[] {
-  return players.map(player => {
-    const theme = themes.find(t => t.id === player.themeId);
-    const tasks = theme && isThemeAllowed(theme, player.role, 'card') ? theme.tasks : [];
-    return { themeId: theme?.id ?? '', tasks };
-  });
-}
 
 function normalizeBingoBoard(input: unknown): BingoBoard | null {
   if (!isRecord(input)) return null;
@@ -575,67 +519,6 @@ function createRandomTaskEvent(
   });
 }
 
-function createMineTaskEvent(
-  players: Player[],
-  themes: Theme[],
-  playerId: number,
-  choice: MineTaskChoice,
-  selectedByPlayerId?: number
-): TaskEventData | null {
-  const player = players.find(p => p.id === playerId);
-  const selector = players.find(p => p.id === selectedByPlayerId);
-  if (!player) return null;
-
-  const selectedPrefix = selector ? `${selector.name}指定` : '扫雷事件';
-  const mode: ThemeMode =
-    choice === 'truth' ? 'mineTruth' : choice === 'dare' ? 'mineDare' : 'mineTheme';
-  const theme =
-    choice === 'theme' && player.themeId
-      ? themes.find(t => t.id === player.themeId && isThemeAllowed(t, player.role, 'mineTheme')) || null
-      : chooseRandomTheme(themes, player.role, mode);
-  const task = chooseRandomTask(theme || undefined);
-  if (!theme || !task) return null;
-
-  if (choice === 'truth') {
-    return buildTaskEvent({
-      type: 'mineTruth',
-      initiatorPlayerId: player.id,
-      fallbackExecutorPlayerId: player.id,
-      title: '真心话',
-      subtitle: selectedPrefix,
-      icon: 'message-question',
-      color: 'text-[#64D2FF]',
-      task: { ...task, moveDelta: 0 },
-      taskSourceId: theme.id
-    });
-  }
-
-  if (choice === 'dare') {
-    return buildTaskEvent({
-      type: 'mineDare',
-      initiatorPlayerId: player.id,
-      fallbackExecutorPlayerId: player.id,
-      title: '大冒险',
-      subtitle: selectedPrefix,
-      icon: 'flame',
-      color: 'text-[#FF9F0A]',
-      task: { ...task, moveDelta: 0 },
-      taskSourceId: theme.id
-    });
-  }
-
-  return buildTaskEvent({
-    type: 'mineTheme',
-    initiatorPlayerId: player.id,
-    fallbackExecutorPlayerId: player.id,
-    title: '主题任务',
-    subtitle: `${selectedPrefix}，任务来自「${theme?.name || ''}」`,
-    icon: 'sparkles',
-    color: player.role === 'male' ? 'text-[#0A84FF]' : 'text-[#FF375F]',
-    task: { ...task, moveDelta: 0 },
-    taskSourceId: theme.id
-  });
-}
 
 export function useGameState() {
   const [state, setState] = useState<GameState>(() => {

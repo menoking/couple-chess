@@ -27,6 +27,8 @@ export interface PendingCard {
   phase: CardPhase;
   /** 明文卡面；locked 时为 null，drawn 时只下发给抽卡方 */
   card: OnlineCard | null;
+  /** 飞行棋任务完成后前进/后退的格数，确认时应用到执行人 */
+  moveDelta: number;
 }
 
 export interface LobbyPick {
@@ -59,7 +61,7 @@ export type RoomAction =
   | { type: 'patch'; key: string; value: unknown; baseSeq: number; seat: Seat }
   | { type: 'endTurn'; seat: Seat }
   | { type: 'setTurn'; seat: Seat; turn: number }
-  | { type: 'enqueueCard'; drawerSeat: Seat; executorSeat: Seat; reason: string; card?: OnlineCard }
+  | { type: 'enqueueCard'; drawerSeat: Seat; executorSeat: Seat; reason: string; card?: OnlineCard; moveDelta?: number }
   | { type: 'drawCard'; seat: Seat }
   | { type: 'revealCard'; seat: Seat }
   | { type: 'ackCard'; seat: Seat }

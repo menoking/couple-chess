@@ -1,4 +1,5 @@
 import type { OnlineCard, PendingCard, RoomAction, RoomSnapshot, Seat } from './types';
+import { applyMoveDelta } from './modeRules';
 
 export const FALLBACK_CARD: OnlineCard = {
   task: '请先在房间大厅各自选择卡包并锁定，下一局就能抽到具体任务',
@@ -26,6 +27,7 @@ export function enqueueCard(state: RoomSnapshot, spec: {
   reason: string;
   /** 玩法视图自己抽出的具体任务；不给时由公共卡池按序号确定性取卡 */
   card?: OnlineCard;
+  moveDelta?: number;
 }): RoomSnapshot {
   const cardSeq = state.cardSeq + 1;
   const card: PendingCard = {
@@ -36,7 +38,8 @@ export function enqueueCard(state: RoomSnapshot, spec: {
     reason: spec.reason,
     phase: 'locked',
     // 权威状态里可以先存具体卡面，viewFor 在 locked 阶段一律下发 null
-    card: spec.card ?? null
+    card: spec.card ?? null,
+    moveDelta: spec.moveDelta ?? 0
   };
   return { ...state, cardSeq, cards: [...state.cards, card] };
 }
@@ -68,7 +71,18 @@ export function reduceCard(state: RoomSnapshot, action: RoomAction): RoomSnapsho
 
   if (action.type === 'ackCard') {
     if (action.seat !== first.executorSeat || first.phase !== 'revealed') return state;
-    return { ...state, cards: state.cards.slice(1) };
+    // 飞行棋的「完成后前进/后退 N 格」在这里落到执行人身上
+    let data = state.data;
+    if (first.moveDelta !== 0) {
+      const steps = state.data['stage.steps'];
+      if (Array.isArray(steps)) {
+        const next = [...(steps as number[])];
+        const seat = first.executorSeat;
+        next[seat] = applyMoveDelta(typeof next[seat] === 'number' ? next[seat] : 0, first.moveDelta);
+        data = { ...state.data, 'stage.steps': next };
+      }
+    }
+    return { ...state, cards: state.cards.slice(1), data };
   }
 
   return state;
@@ -97,6 +111,7 @@ export interface ExtractedCard {
   drawerSeat: Seat;
   executorSeat: Seat;
   reason: string;
+  moveDelta: number;
 }
 
 /**
@@ -124,5 +139,9 @@ export function extractCard(value: unknown): ExtractedCard | null {
         : '双端合并卡包';
   const reason = typeof record.title === 'string' && record.title.trim() ? record.title.trim() : '抽到一张任务卡';
 
-  return { card: { task: text.trim(), themeName }, drawerSeat, executorSeat, reason };
+  const moveDelta = typeof record.moveDelta === 'number' && Number.isFinite(record.moveDelta)
+    ? record.moveDelta
+    : 0;
+
+  return { card: { task: text.trim(), themeName }, drawerSeat, executorSeat, reason, moveDelta };
 }

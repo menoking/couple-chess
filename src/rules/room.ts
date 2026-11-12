@@ -49,7 +49,8 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
           drawerSeat: found.drawerSeat,
           executorSeat: found.executorSeat,
           reason: found.reason,
-          card: found.card
+          card: found.card,
+          moveDelta: found.moveDelta
         }));
       }
       // 视图用 runId 重挂内层组件重开一局；清空全部玩法局部状态，两端一起重开
@@ -69,7 +70,9 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       return bump(enqueueCard(state, {
         drawerSeat: action.drawerSeat,
         executorSeat: action.executorSeat,
-        reason: action.reason
+        reason: action.reason,
+        card: action.card,
+        moveDelta: action.moveDelta
       }));
 
     case 'drawCard':
