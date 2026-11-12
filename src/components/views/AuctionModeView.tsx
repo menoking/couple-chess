@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useMemo } from 'react';
 import { ArrowLeft, Coins, Gavel, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, shuffle, themeIntensity } from '../../utils/modeKit';
@@ -19,16 +20,16 @@ type Phase = 'roll' | 'intro' | 'bid-first' | 'bid-second' | 'reveal' | 'task' |
 
 function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: Theme[]; onExit: () => void }) {
   const queue = useMemo<ThemeTaskEntry[]>(() => shuffle(buildTaskPool(players, themes) ?? []).slice(0, TOTAL_ROUNDS), [players, themes]);
-  const [round, setRound] = useState(0);
-  const [phase, setPhase] = useState<Phase>('roll');
-  const [firstBidder, setFirstBidder] = useState(0);
-  const [coins, setCoins] = useState<Record<number, number>>({ 0: STARTING_COINS, 1: STARTING_COINS });
-  const [points, setPoints] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [wonCount, setWonCount] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [bids, setBids] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [winnerId, setWinnerId] = useState<number | null>(null);
-  const [taskData, setTaskData] = useState<TaskEventData | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [round, setRound] = useModeState('AuctionModeView.round', 0);
+  const [phase, setPhase] = useModeState<Phase>('AuctionModeView.phase', 'roll');
+  const [firstBidder, setFirstBidder] = useModeState('AuctionModeView.firstBidder', 0);
+  const [coins, setCoins] = useModeState<Record<number, number>>('AuctionModeView.coins', { 0: STARTING_COINS, 1: STARTING_COINS });
+  const [points, setPoints] = useModeState<Record<number, number>>('AuctionModeView.points', { 0: 0, 1: 0 });
+  const [wonCount, setWonCount] = useModeState<Record<number, number>>('AuctionModeView.wonCount', { 0: 0, 1: 0 });
+  const [bids, setBids] = useModeState<Record<number, number>>('AuctionModeView.bids', { 0: 0, 1: 0 });
+  const [winnerId, setWinnerId] = useModeState<number | null>('AuctionModeView.winnerId', null);
+  const [taskData, setTaskData] = useModeState<TaskEventData | null>('AuctionModeView.taskData', null);
+  const [notice, setNotice] = useModeState<string | null>('AuctionModeView.notice', null);
 
   const current = queue[round];
   const bidderId = phase === 'bid-first'
@@ -288,7 +289,7 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
 }
 
 export function AuctionModeView({ players, themes, onBack }: AuctionModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('AuctionModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

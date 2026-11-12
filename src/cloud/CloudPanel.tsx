@@ -9,17 +9,18 @@ import {
   shortId,
   subscribeDiagnostics
 } from './diagnostics';
-import { ONLINE_MODES, OnlineModeKey } from './games/adapters';
+import { MODE_REGISTRY } from '../rules/registry';
+import type { GameMode } from '../types';
 import { TransportKind } from './transport';
 import { LocalBackup, exportLocalBackup, importLocalBackup, isSandbox } from '../utils/localStorage';
-import { enterOnlineRoom } from './rooms';
 
 interface CloudPanelProps {
   open: boolean;
   onClose: () => void;
   cloud: ReturnType<typeof useCloud>;
   transportKind: TransportKind;
-  onEnterRoom: (room: { roomId: string; mode: OnlineModeKey }, isHost: boolean) => void;
+  /** 统一走 App 的进房流程，避免面板自己再选一次房主 */
+  onEnterRoom: (mode: GameMode) => void;
   syncStatus: string;
   syncError?: string | null;
   lastSyncedAt: string | null;
@@ -63,24 +64,13 @@ export function CloudPanel({
     }
   };
 
-  const enterRoom = async (target: OnlineModeKey) => {
+  const enterRoom = (target: GameMode) => {
     if (!cloud.space) {
       diagLog('panel:enter-abort', { reason: 'cloud.space 为空' });
       return;
     }
     diagLog('panel:enter-begin', { mode: target });
-    try {
-      const ticket = await enterOnlineRoom(cloud.space, target);
-      if (!ticket) {
-        diagLog('panel:enter-null', { mode: target });
-        return;
-      }
-      diagLog('panel:enter-ok', { room: ticket.roomId.slice(-8), isHost: ticket.isHost });
-      onEnterRoom({ roomId: ticket.roomId, mode: ticket.mode }, ticket.isHost);
-    } catch (error) {
-      diagLog('panel:enter-error', { message: error instanceof Error ? error.message : String(error) });
-      setNotice(error instanceof Error ? error.message : '进房间失败');
-    }
+    onEnterRoom(target);
   };
 
 
@@ -236,22 +226,20 @@ export function CloudPanel({
             </div>
 
             <div className="space-y-2">
-              <div className="text-[10px] font-bold text-gray-500">进房间（两台设备选同一个玩法即可）</div>
-              {ONLINE_MODES.map(item => (
-                <button
-                  key={item.key}
-                  type="button"
-                  disabled={!cloud.space}
-                  onClick={() => void enterRoom(item.key)}
-                  className="ios-btn flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left disabled:opacity-40"
-                >
-                  <div>
-                    <div className="text-sm font-bold text-white">{item.label}</div>
-                    <div className="text-[10px] text-gray-500">{item.desc}</div>
-                  </div>
-                  <span className="text-[10px] font-bold text-[#64D2FF]">进入</span>
-                </button>
-              ))}
+              <div className="text-[10px] font-bold text-gray-500">全部 24 个玩法都支持双设备 · 两台设备选同一个即可</div>
+              <div className="grid grid-cols-2 gap-2">
+                {MODE_REGISTRY.map(item => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    disabled={!cloud.space}
+                    onClick={() => enterRoom(item.key)}
+                    className="ios-btn rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-left text-[11px] font-bold text-white disabled:opacity-40"
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
 
             </div>
 
@@ -317,7 +305,7 @@ export function CloudPanel({
             <div>
               设备 {snap.deviceId === 'dev-unknown' ? 'dev-unknown（两台会撞房主）' : shortId(snap.deviceId)}
             </div>
-            <div>当前玩法 {snap.gameMode ?? '—'} · 支持联机 {snap.onlineModeAvailable ? '是' : '否'}</div>
+            <div>当前玩法 {snap.gameMode ?? '—'} · 联机 {snap.onlineModeAvailable ? '全部玩法可用' : '不可用'}</div>
             <div>
               上次开局{' '}
               {snap.lastStart

@@ -1,23 +1,27 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
+import type { GameMode } from '../types';
+import type { Role } from '../rules/types';
 import { supabase } from './client';
 import { SpaceInfo } from './types';
 import { getDeviceId } from './device';
 import { diagLog } from './diagnostics';
-import { OnlineModeKey } from './games/adapters';
 
 export interface RoomTicket {
   roomId: string;
-  mode: OnlineModeKey;
+  mode: GameMode;
   isHost: boolean;
+  /** 房主设备选择的性别，用来给后进设备分配另一个座位 */
+  hostRole: Role;
 }
 
 export interface RoomAnnounce {
   roomId: string;
-  mode: OnlineModeKey;
+  mode: GameMode;
+  hostRole?: Role;
   fromDevice?: string;
 }
 
-export function roomIdOf(spaceId: string, mode: OnlineModeKey): string {
+export function roomIdOf(spaceId: string, mode: GameMode): string {
   return `${spaceId}-${mode}`;
 }
 
@@ -30,20 +34,22 @@ export interface RoomPresence {
   deviceId: string;
   role: RoomRole;
   at: number;
+  gender?: Role;
 }
 
 /** 每台设备在整局期间都保持自己的选举频道，房主离开后房间状态仍然可读。 */
 const activeChannels = new Map<string, RealtimeChannel>();
 
 function readPresence(channel: RealtimeChannel): RoomPresence[] {
-  const state = channel.presenceState() as Record<string, Array<{ role?: string; at?: number }>>;
+  const state = channel.presenceState() as Record<string, Array<{ role?: string; at?: number; gender?: string }>>;
   const result: RoomPresence[] = [];
   Object.entries(state ?? {}).forEach(([deviceId, metas]) => {
     const meta = metas?.[0] ?? {};
     result.push({
       deviceId,
       role: meta.role === 'host' || meta.role === 'guest' ? meta.role : 'peer',
-      at: typeof meta.at === 'number' ? meta.at : 0
+      at: typeof meta.at === 'number' ? meta.at : 0,
+      gender: meta.gender === 'male' || meta.gender === 'female' ? meta.gender : undefined
     });
   });
   return result;
@@ -65,18 +71,20 @@ export function decideHost(peers: RoomPresence[], myId: string, at: number): boo
   return earliest?.deviceId === myId;
 }
 
+/** 从在场设备里找到房主的性别；找不到时以我自己的性别兜底。 */
+export function hostRoleOf(peers: RoomPresence[], myId: string, fallback: Role): Role {
+  const host = peers.find(entry => entry.role === 'host' && entry.deviceId !== myId);
+  return host?.gender ?? fallback;
+}
+
 /**
  * 进入「账号 + 玩法」这唯一一间房，并决定我是房主还是访客。
- *
- * 规则（关键是后来者绝不抢房主）：
- * 1. 频道里已经有人标记成 host → 我是访客，直接加入他的房间；
- * 2. 只剩访客、房主刚走 → 我接手当房主；
- * 3. 两台设备同时进 → 按「进入时间 + 设备 ID」排序，最早的那台当房主，另一台当访客。
- * 当选结果会立刻 track 回 Presence，后来者一眼就能看到 host。
+ * 规则：先到先当房主，后来者无条件加入；性别随 Presence 广播，供座位分配用。
  */
 export async function enterOnlineRoom(
   space: SpaceInfo,
-  mode: OnlineModeKey
+  mode: GameMode,
+  myRole: Role
 ): Promise<RoomTicket | null> {
   const client = supabase;
   if (!client) {
@@ -87,7 +95,7 @@ export async function enterOnlineRoom(
   const roomId = roomIdOf(space.id, mode);
   const myId = getDeviceId();
   const at = Date.now();
-  diagLog('room:begin', { room: roomId.slice(-8), device: myId.slice(0, 8) });
+  diagLog('room:begin', { room: roomId.slice(-8), device: myId.slice(0, 8), gender: myRole });
 
   await leaveOnlineRoom(roomId);
 
@@ -105,7 +113,7 @@ export async function enterOnlineRoom(
     channel.subscribe(async status => {
       diagLog('room:subscribe', { status, ms: Date.now() - at });
       if (status === 'SUBSCRIBED') {
-        await channel.track({ role: 'peer', at });
+        await channel.track({ role: 'peer', at, gender: myRole });
         finish();
       }
     });
@@ -113,20 +121,21 @@ export async function enterOnlineRoom(
   });
 
   activeChannels.set(roomId, channel);
-  // 等 Presence 把同房间的其它设备同步过来
   await new Promise<void>(resolve => window.setTimeout(resolve, 1100));
 
   const peers = readPresence(channel);
   const isHost = decideHost(peers, myId, at);
+  const hostRole = isHost ? myRole : hostRoleOf(peers, myId, myRole);
   diagLog('room:decided', {
     ms: Date.now() - at,
-    peers: peers.map(entry => `${entry.deviceId.slice(0, 8)}:${entry.role}`),
-    isHost
+    peers: peers.map(entry => `${entry.deviceId.slice(0, 8)}:${entry.role}:${entry.gender ?? '-'}`),
+    isHost,
+    hostRole
   });
-  await channel.track({ role: isHost ? 'host' : 'guest', at });
+  await channel.track({ role: isHost ? 'host' : 'guest', at, gender: myRole });
   diagLog('room:done', { ms: Date.now() - at });
 
-  return { roomId, mode, isHost };
+  return { roomId, mode, isHost, hostRole };
 }
 
 export async function leaveOnlineRoom(roomId: string): Promise<void> {
@@ -137,10 +146,7 @@ export async function leaveOnlineRoom(roomId: string): Promise<void> {
   if (client) await client.removeChannel(channel);
 }
 
-/**
- * 同一间屋子只开一个频道：房主用它广播，另一方用它接收。
- * 两个同名的 Supabase 频道会互相挤掉，所以这里统一复用。
- */
+/** 同一间屋子只开一个频道：房主用它广播，另一方用它接收。 */
 const roomListeners = new Set<(room: RoomAnnounce) => void>();
 let sharedChannel: RealtimeChannel | null = null;
 let sharedSpaceId: string | null = null;
@@ -165,33 +171,27 @@ function getRoomChannel(client: NonNullable<typeof supabase>, spaceId: string): 
   return channel;
 }
 
-function broadcastRoom(
-  channel: RealtimeChannel,
-  roomId: string,
-  mode: OnlineModeKey
-): void {
+function broadcastRoom(channel: RealtimeChannel, announce: RoomAnnounce): void {
   if (!sharedSubscribed) return;
   channel.send({
     type: 'broadcast',
     event: 'room-open',
-    payload: { roomId, mode, fromDevice: getDeviceId() }
+    payload: { ...announce, fromDevice: getDeviceId() }
   });
 }
 
-/**
- * 房主持续广播「我在这个房间」，直到退出房间。
- * 之前只播一次，另一台设备晚打开页面就永远收不到，看起来就像匹配不上。
- */
 export function startRoomHeartbeat(
   space: SpaceInfo,
   roomId: string,
-  mode: OnlineModeKey
+  mode: GameMode,
+  hostRole: Role = 'male'
 ): () => void {
   const client = supabase;
   if (!client) return () => undefined;
 
   const channel = getRoomChannel(client, space.id);
-  const send = () => broadcastRoom(channel, roomId, mode);
+  const send = () => broadcastRoom(channel, { roomId, mode, hostRole });
+  send();
   const timer = window.setInterval(send, 2500);
 
   return () => window.clearInterval(timer);

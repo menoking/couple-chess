@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Bomb, FlipHorizontal, HandCoins, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, pickRandom, shuffle } from '../../utils/modeKit';
@@ -33,17 +34,17 @@ function FlipGambleGame({
 }) {
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
-  const [flipperId, setFlipperId] = useState(currentTurn === 1 ? 1 : 0);
-  const [round, setRound] = useState(1);
-  const [deck, setDeck] = useState<Card[]>([]);
-  const [cursor, setCursor] = useState(0);
-  const [drawn, setDrawn] = useState<ThemeTaskEntry[]>([]);
-  const [phase, setPhase] = useState<Phase>('ready');
-  const [bombed, setBombed] = useState(false);
+  const [flipperId, setFlipperId] = useModeState('SecretDoubleModeView.flipperId', currentTurn === 1 ? 1 : 0);
+  const [round, setRound] = useModeState('SecretDoubleModeView.round', 1);
+  const [deck, setDeck] = useModeState<Card[]>('SecretDoubleModeView.deck', []);
+  const [cursor, setCursor] = useModeState('SecretDoubleModeView.cursor', 0);
+  const [drawn, setDrawn] = useModeState<ThemeTaskEntry[]>('SecretDoubleModeView.drawn', []);
+  const [phase, setPhase] = useModeState<Phase>('SecretDoubleModeView.phase', 'ready');
+  const [bombed, setBombed] = useModeState('SecretDoubleModeView.bombed', false);
 
-  const [cardQueue, setCardQueue] = useState<Array<{ executorId: number; entry: ThemeTaskEntry }>>([]);
-  const [taskData, setTaskData] = useState<ReturnType<typeof createViewTaskEvent> | null>(null);
-  const [points, setPoints] = useState<Record<number, number>>({ 0: 0, 1: 0 });
+  const [cardQueue, setCardQueue] = useModeState<Array<{ executorId: number; entry: ThemeTaskEntry }>>('SecretDoubleModeView.cardQueue', []);
+  const [taskData, setTaskData] = useModeState<ReturnType<typeof createViewTaskEvent> | null>('SecretDoubleModeView.taskData', null);
+  const [points, setPoints] = useModeState<Record<number, number>>('SecretDoubleModeView.points', { 0: 0, 1: 0 });
 
   const flipper = players.find(player => player.id === flipperId) ?? players[0];
   const victimId = flipperId === 0 ? 1 : 0;
@@ -251,7 +252,7 @@ function FlipGambleGame({
 }
 
 export function SecretDoubleModeView({ players, themes, currentTurn, onEndTurn, onBack }: SecretDoubleModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('SecretDoubleModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

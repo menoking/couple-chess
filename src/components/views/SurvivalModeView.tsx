@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Heart, HeartPulse, RefreshCw, Timer, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 import { SURVIVAL_EVENTS, SURVIVAL_MAX_HEARTS, SURVIVAL_TOTAL_ROUNDS, SurvivalEvent } from '../../data/survivalEvents';
@@ -27,15 +28,15 @@ function SurvivalGame({
   onExit: () => void;
 }) {
   const activePlayer = players[currentTurn] || players[0];
-  const [eventDeck, setEventDeck] = useState<SurvivalEvent[]>(() => shuffle(SURVIVAL_EVENTS));
-  const [round, setRound] = useState(1);
-  const [hearts, setHearts] = useState(SURVIVAL_MAX_HEARTS);
-  const [points, setPoints] = useState(0);
-  const [activeEvent, setActiveEvent] = useState<SurvivalEvent | null>(null);
-  const [taskData, setTaskData] = useState<TaskEventData | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [over, setOver] = useState<{ win: boolean; rounds: number } | null>(null);
+  const [eventDeck, setEventDeck] = useModeState<SurvivalEvent[]>('SurvivalModeView.eventDeck', () => shuffle(SURVIVAL_EVENTS));
+  const [round, setRound] = useModeState('SurvivalModeView.round', 1);
+  const [hearts, setHearts] = useModeState('SurvivalModeView.hearts', SURVIVAL_MAX_HEARTS);
+  const [points, setPoints] = useModeState('SurvivalModeView.points', 0);
+  const [activeEvent, setActiveEvent] = useModeState<SurvivalEvent | null>('SurvivalModeView.activeEvent', null);
+  const [taskData, setTaskData] = useModeState<TaskEventData | null>('SurvivalModeView.taskData', null);
+  const [notice, setNotice] = useModeState<string | null>('SurvivalModeView.notice', null);
+  const [timeLeft, setTimeLeft] = useModeState('SurvivalModeView.timeLeft', 0);
+  const [over, setOver] = useModeState<{ win: boolean; rounds: number } | null>('SurvivalModeView.over', null);
   const resolvedRef = useRef(false);
   const timerRef = useRef<number | null>(null);
 
@@ -257,7 +258,7 @@ function SurvivalGame({
 }
 
 export function SurvivalModeView({ players, themes, currentTurn, onEndTurn, onBack }: SurvivalModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('SurvivalModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

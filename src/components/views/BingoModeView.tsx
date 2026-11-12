@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useMemo } from 'react';
 import { ArrowLeft, Check, Grid3x3, PackageOpen, Sparkles, Trophy, User, UserRound } from 'lucide-react';
 import { BingoBoard, BingoCellResult, Player, TaskCard, TaskEventData, Theme } from '../../types';
 import { buildTaskPool, shuffle } from '../../utils/modeKit';
@@ -29,16 +30,16 @@ export function BingoModeView({
   onBack
 }: BingoModeViewProps) {
   const activePlayer = players[currentTurn] || players[0];
-  const [pendingIndex, setPendingIndex] = useState<number | null>(null);
-  const [reward, setReward] = useState<{ lines: number; task: TaskCard; themeName: string } | null>(null);
-  const [finished, setFinished] = useState(false);
+  const [pendingIndex, setPendingIndex] = useModeState<number | null>('BingoModeView.pendingIndex', null);
+  const [reward, setReward] = useModeState<{ lines: number; task: TaskCard; themeName: string } | null>('BingoModeView.reward', null);
+  const [finished, setFinished] = useModeState('BingoModeView.finished', false);
 
   // 有限卡包：只有赢下回合（连成一线）才能从里面抽一张
   const cardPack = useMemo(() => {
     const pool = buildTaskPool(players, themes) ?? [];
     return shuffle(pool).slice(0, CARD_PACK_SIZE);
   }, [players, themes]);
-  const [drawnCount, setDrawnCount] = useState(0);
+  const [drawnCount, setDrawnCount] = useModeState('BingoModeView.drawnCount', 0);
   const packLeft = cardPack.length - drawnCount;
 
   const totalCells = bingoBoard.cells.length;

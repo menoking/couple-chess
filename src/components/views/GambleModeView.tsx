@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useRef } from 'react';
 import { ArrowLeft, Coins, Flame, RefreshCw, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { GAMBLE_TIERS, GambleTier } from '../../data/spicyContent';
@@ -24,14 +25,14 @@ interface RoundResult {
 }
 
 function GambleGame({ players }: { players: Player[] }) {
-  const [spinnerId, setSpinnerId] = useState(0);
-  const [phase, setPhase] = useState<Phase>('bet');
-  const [pendingTier, setPendingTier] = useState<GambleTier | null>(null);
-  const [reelIndex, setReelIndex] = useState(STRIP_START_INDEX);
-  const [roundKey, setRoundKey] = useState(0);
-  const [result, setResult] = useState<RoundResult | null>(null);
-  const [scores, setScores] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [rounds, setRounds] = useState(0);
+  const [spinnerId, setSpinnerId] = useModeState('GambleModeView.spinnerId', 0);
+  const [phase, setPhase] = useModeState<Phase>('GambleModeView.phase', 'bet');
+  const [pendingTier, setPendingTier] = useModeState<GambleTier | null>('GambleModeView.pendingTier', null);
+  const [reelIndex, setReelIndex] = useModeState('GambleModeView.reelIndex', STRIP_START_INDEX);
+  const [roundKey, setRoundKey] = useModeState('GambleModeView.roundKey', 0);
+  const [result, setResult] = useModeState<RoundResult | null>('GambleModeView.result', null);
+  const [scores, setScores] = useModeState<Record<number, number>>('GambleModeView.scores', { 0: 0, 1: 0 });
+  const [rounds, setRounds] = useModeState('GambleModeView.rounds', 0);
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => () => {
@@ -207,7 +208,7 @@ function GambleGame({ players }: { players: Player[] }) {
 }
 
 export function GambleModeView({ players, onBack }: GambleModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('GambleModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

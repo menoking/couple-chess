@@ -40,15 +40,26 @@ import { AiImportModal } from './components/modals/AiImportModal';
 import { useCloud } from './cloud/useCloud';
 import { useCloudSync } from './cloud/useCloudSync';
 import { CloudPanel } from './cloud/CloudPanel';
-import { OnlinePlayView, OnlineRoomInfo } from './cloud/OnlinePlayView';
+import { OnlineStage } from './cloud/OnlineStage';
 import { cloudConfigured } from './cloud/client';
 import { enterOnlineRoom, leaveOnlineRoom, startRoomHeartbeat, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
-import { ONLINE_MODES, OnlineModeKey } from './cloud/games/adapters';
-import { OnlineCard, Seat } from './cloud/types';
+import type { Role, Seat } from './rules/types';
+import { resolveSeats, roleOfSeat } from './rules/identity';
+import { MODE_LABEL } from './rules/registry';
 import { setDiagnosticContext, diagLog } from './cloud/diagnostics';
 import { getDeviceId } from './cloud/device';
 import { isSandbox } from './utils/localStorage';
-import { collectThemeTasks } from './utils/modeKit';
+
+interface OnlineSession {
+  roomId: string;
+  mode: GameMode;
+  isHost: boolean;
+  mySeat: Seat;
+  hostSeat: Seat;
+  roles: [Role, Role];
+  myRole: Role;
+  hostRole: Role;
+}
 
 /** 需要双方选择“抽卡”类主题的玩法。 */
 const CARD_THEME_MODES = new Set<GameMode>([
@@ -94,9 +105,12 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
 /** 无文字的 ♂ / ♀ 滑动开关，靠颜色和滑块表达当前性别 */
 function RoleSwitch({
   role,
+  online,
   onChange
 }: {
   role: 'male' | 'female';
+  /** 只有登录态才影响座位、先手、卡包与执行人；单机同屏保持老一套 */
+  online: boolean;
   onChange: (role: 'male' | 'female') => void;
 }) {
   const female = role === 'female';
@@ -105,8 +119,10 @@ function RoleSwitch({
       type="button"
       role="switch"
       aria-checked={female}
-      aria-label="切换性别"
-      title={female ? '当前：女生，点击切换' : '当前：男生，点击切换'}
+      aria-label={online ? '切换性别（联机中：决定座位与先手）' : '切换性别（单机同屏仅作标记）'}
+      title={online
+        ? `${female ? '女生' : '男生'} · 联机生效：座位、先手、卡包与执行人`
+        : `${female ? '女生' : '男生'} · 单机同屏仅作标记，登录后生效`}
       onClick={() => onChange(female ? 'male' : 'female')}
       className="ios-btn relative h-9 w-[60px] shrink-0 rounded-full border"
       style={{ backgroundColor: 'var(--theme-surface)', borderColor: 'var(--theme-line)' }}
@@ -176,8 +192,7 @@ function App() {
   };
 
   const [cloudOpen, setCloudOpen] = useState(false);
-  const [onlineSession, setOnlineSession] = useState<{ room: OnlineRoomInfo; isHost: boolean } | null>(null);
-  const [onlinePrompt, setOnlinePrompt] = useState<OnlineModeKey | null>(null);
+  const [onlineSession, setOnlineSession] = useState<OnlineSession | null>(null);
   const [remoteRoom, setRemoteRoom] = useState<RoomAnnounce | null>(null);
   const [onlineNotice, setOnlineNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const cloud = useCloud();
@@ -257,50 +272,57 @@ function App() {
     }
   };
 
-  /** 登录后，三个支持联机的玩法先让用户选「同屏」还是「两台设备」 */
+  /** 登录态 = 联机态：24 个玩法一律自动开房；未登录则完全照旧单机同屏。 */
   const handleStartGame = () => {
-    const onlineMode = ONLINE_MODES.find(item => item.key === state.gameMode);
-    if (cloud.space && onlineMode) {
-      setDiagnosticContext({ lastStart: { at: Date.now(), branch: '弹联机选择', reason: '已登录且玩法支持联机' } });
-      diagLog('start:prompt', { gameMode: state.gameMode, spaceId: cloud.space.id.slice(0, 8) });
-      setOnlinePrompt(onlineMode.key);
+    if (cloud.space) {
+      setDiagnosticContext({ lastStart: { at: Date.now(), branch: '自动联机', reason: '已登录，全部玩法走双设备房间' } });
+      diagLog('start:online', { gameMode: state.gameMode, spaceId: cloud.space.id.slice(0, 8), myRole });
+      void enterOnline(state.gameMode);
       return;
     }
-    const reason = !cloud.space
-      ? cloudConfigured ? '未登录或会话丢失（cloud.space 为空）' : '构建缺少 VITE_SUPABASE_*'
-      : `玩法 ${state.gameMode} 不支持联机`;
+    const reason = cloudConfigured ? '未登录或会话丢失（cloud.space 为空）' : '构建缺少 VITE_SUPABASE_*';
     setDiagnosticContext({ lastStart: { at: Date.now(), branch: '直接同屏', reason } });
-    diagLog('start:local', {
-      gameMode: state.gameMode,
-      configured: cloud.configured,
-      user: Boolean(cloud.user),
-      space: Boolean(cloud.space),
-      reason
-    });
+    diagLog('start:local', { gameMode: state.gameMode, configured: cloud.configured, reason });
     startLocalGame();
   };
 
-  const enterOnline = async (mode: OnlineModeKey) => {
+  const enterOnline = async (mode: GameMode) => {
     if (!cloud.space) {
       diagLog('enter:abort', { reason: 'cloud.space 为空' });
       return;
     }
-    diagLog('enter:begin', { mode, spaceId: cloud.space.id.slice(0, 8) });
+    diagLog('enter:begin', { mode, spaceId: cloud.space.id.slice(0, 8), myRole });
     try {
-      // 房间 ID 固定为「账号 + 玩法」，无论从首页还是云面板进入，都是同一间
-      const ticket = await enterOnlineRoom(cloud.space, mode);
+      const ticket = await enterOnlineRoom(cloud.space, mode, myRole);
       if (!ticket) {
         diagLog('enter:null', { reason: 'enterOnlineRoom 返回 null' });
         return;
       }
-      diagLog('enter:ok', { roomId: ticket.roomId.slice(-8), isHost: ticket.isHost });
-      setOnlineSession({ room: { roomId: ticket.roomId, mode: ticket.mode }, isHost: ticket.isHost });
-      setOnlinePrompt(null);
+      const seats = resolveSeats(myRole, ticket.hostRole);
+      diagLog('enter:ok', {
+        roomId: ticket.roomId.slice(-8),
+        isHost: ticket.isHost,
+        mySeat: seats.mySeat,
+        hostSeat: seats.hostSeat,
+        flipped: seats.flipped
+      });
+      setOnlineSession({
+        roomId: ticket.roomId,
+        mode: ticket.mode,
+        isHost: ticket.isHost,
+        mySeat: seats.mySeat,
+        hostSeat: seats.hostSeat,
+        roles: [roleOfSeat(0), roleOfSeat(1)],
+        myRole: seats.effectiveRole,
+        hostRole: ticket.hostRole
+      });
       setRemoteRoom(null);
       showOnlineNotice(
-        ticket.isHost
-          ? '房间已开好，对方点「两台设备联机」就会自动进来'
-          : '已自动匹配到对方的房间',
+        seats.flipped
+          ? '两台设备选了同一性别，你已自动调整为另一方'
+          : ticket.isHost
+            ? '房间已开好，对方点同一玩法就会自动进来'
+            : '已自动匹配到对方的房间',
         true
       );
     } catch (error) {
@@ -312,8 +334,21 @@ function App() {
   // 房主持续广播房间，另一台设备什么时候打开页面都能发现
   useEffect(() => {
     if (!cloud.space || !onlineSession || !onlineSession.isHost) return;
-    return startRoomHeartbeat(cloud.space, onlineSession.room.roomId, onlineSession.room.mode);
+    return startRoomHeartbeat(
+      cloud.space,
+      onlineSession.roomId,
+      onlineSession.mode,
+      onlineSession.hostRole
+    );
   }, [cloud.space, onlineSession]);
+
+  // 退出登录立刻断开房间，回到单机同屏
+  useEffect(() => {
+    if (cloud.user || !onlineSession) return;
+    void leaveOnlineRoom(onlineSession.roomId);
+    setOnlineSession(null);
+    setRemoteRoom(null);
+  }, [cloud.user, onlineSession]);
 
   // 对方正在玩时，给一个随时可点的「一键跟上」入口
   useEffect(() => {
@@ -387,11 +422,11 @@ function App() {
       deviceId: getDeviceId(),
       sandbox: isSandbox,
       gameMode: state.gameMode,
-      onlineModeAvailable: ONLINE_MODES.some(item => item.key === state.gameMode),
+      onlineModeAvailable: true,
       onlineSession: onlineSession
         ? {
-            roomId: onlineSession.room.roomId,
-            mode: onlineSession.room.mode,
+            roomId: onlineSession.roomId,
+            mode: onlineSession.mode,
             isHost: onlineSession.isHost
           }
         : null,
@@ -403,20 +438,6 @@ function App() {
     cloud.configured, cloud.user, cloud.username, cloud.space, cloud.error,
     cloudSync.status, cloudSync.error, state.gameMode, onlineSession, supabaseHost
   ]);
-
-  /** 联机抽卡的题库：优先用双方选中的任务包，没选时退回到全部抽卡主题，保证一定有卡可抽。 */
-  const onlineCardPool = useMemo<OnlineCard[]>(() => {
-    const selected = collectThemeTasks(state.players, state.themes).map(entry => ({
-      task: entry.task.text,
-      themeName: entry.themeName
-    }));
-    const pool = selected.length > 0
-      ? selected
-      : state.themes
-          .filter(theme => theme.modes.includes('card'))
-          .flatMap(theme => theme.tasks.map(task => ({ task: task.text, themeName: theme.name })));
-    return pool.filter(item => typeof item.task === 'string' && item.task.trim().length > 0);
-  }, [state.players, state.themes]);
 
   const handlePoseDone = () => {
     setPoseImageSrc(null);
@@ -459,7 +480,7 @@ function App() {
           </div>
           <div className="flex flex-col items-end gap-2 mt-1">
             <div className="flex items-center gap-1.5">
-              <RoleSwitch role={myRole} onChange={changeMyRole} />
+              <RoleSwitch role={myRole} online={Boolean(cloud.space)} onChange={changeMyRole} />
               <button
                 type="button"
                 onClick={() => setCloudOpen(true)}
@@ -841,38 +862,6 @@ function App() {
         />
       )}
 
-      {onlinePrompt && (
-        <div className="fixed inset-0 z-[125] flex items-end justify-center bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-[430px] rounded-t-3xl border-t border-white/10 bg-[#1C1C1E] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
-            <div className="text-center text-base font-bold text-white">这一局怎么玩？</div>
-            <div className="mt-1 text-center text-[11px] text-gray-500">
-              {ONLINE_MODES.find(item => item.key === onlinePrompt)?.label}
-            </div>
-            <button
-              type="button"
-              onClick={() => { setOnlinePrompt(null); startLocalGame(); }}
-              className="ios-btn mt-4 h-14 w-full rounded-2xl bg-white/10 text-sm font-bold text-white"
-            >
-              同屏玩（一台设备，两人轮流）
-            </button>
-            <button
-              type="button"
-              onClick={() => void enterOnline(onlinePrompt)}
-              className="ios-btn mt-2 h-14 w-full rounded-2xl bg-white text-sm font-bold text-black shadow-lg"
-            >
-              两台设备联机（各看各的）
-            </button>
-            <button
-              type="button"
-              onClick={() => setOnlinePrompt(null)}
-              className="ios-btn mt-2 h-10 w-full rounded-full text-xs font-bold text-gray-500"
-            >
-              取消
-            </button>
-          </div>
-        </div>
-      )}
-
       {remoteRoom && !onlineSession && (
         <button
           type="button"
@@ -884,7 +873,7 @@ function App() {
           className="fixed inset-x-0 bottom-[calc(88px+env(safe-area-inset-bottom))] z-[124] mx-auto flex w-[calc(100%-2.5rem)] max-w-[390px] items-center justify-between rounded-2xl border border-[#30D158]/40 bg-[#30D158]/15 px-4 py-3 backdrop-blur"
         >
           <span className="text-xs font-bold text-white">
-            对方正在玩「{ONLINE_MODES.find(item => item.key === remoteRoom.mode)?.label}」
+            对方正在玩「{MODE_LABEL[remoteRoom.mode]}」
           </span>
           <span className="text-xs font-bold text-[#30D158]">一起玩 →</span>
         </button>
@@ -906,15 +895,10 @@ function App() {
         onClose={() => setCloudOpen(false)}
         cloud={cloud}
         transportKind={cloudConfigured ? 'supabase' : 'local'}
-        onEnterRoom={(room, isHost) => {
-          diagLog('panel:session', { room: room.roomId.slice(-8), isHost });
-          setOnlineSession({ room, isHost });
+        onEnterRoom={mode => {
+          diagLog('panel:session', { mode });
           setCloudOpen(false);
-          setRemoteRoom(null);
-          showOnlineNotice(
-            isHost ? '房间已开好，对方点「两台设备联机」就会自动进来' : '已自动匹配到对方的房间',
-            true
-          );
+          void enterOnline(mode);
         }}
         syncStatus={cloudSync.status}
         syncError={cloudSync.error}
@@ -923,20 +907,18 @@ function App() {
         lastSyncedAt={cloudSync.lastSyncedAt}
       />
 
-      {onlineSession && cloud.space && (
-        <OnlinePlayView
-          room={onlineSession.room}
-          isHost={onlineSession.isHost}
-          players={state.players.map(player => ({
-            seat: player.id as Seat,
-            name: player.name,
-            color: player.color
-          }))}
-          localPlayers={state.players}
-          cardPool={onlineCardPool}
+      {onlineSession && (
+        <OnlineStage
+          roomId={onlineSession.roomId}
+          mode={onlineSession.mode}
+          mySeat={onlineSession.mySeat}
+          hostSeat={onlineSession.hostSeat}
+          roles={onlineSession.roles}
+          myRole={onlineSession.myRole}
+          themes={state.themes}
           kind={cloudConfigured ? 'supabase' : 'local'}
           onExit={() => {
-            if (onlineSession) void leaveOnlineRoom(onlineSession.room.roomId);
+            void leaveOnlineRoom(onlineSession.roomId);
             setOnlineSession(null);
           }}
         />

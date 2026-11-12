@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useMemo } from 'react';
 import { ArrowLeft, CircleDot, Flag, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
@@ -32,18 +33,18 @@ interface PendingCard {
 function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: Theme[]; currentTurn: number }) {
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
-  const [board, setBoard] = useState<GoBoard>(() => createGoBoard());
-  const [turn, setTurn] = useState(currentTurn === 1 ? 1 : 0);
-  const [koKey, setKoKey] = useState<string | null>(null);
-  const [lastMove, setLastMove] = useState<number | null>(null);
-  const [captures, setCaptures] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [passes, setPasses] = useState(0);
-  const [phase, setPhase] = useState<Phase>('roll');
-  const [surrenderedBy, setSurrenderedBy] = useState<number | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [board, setBoard] = useModeState<GoBoard>('GoModeView.board', () => createGoBoard());
+  const [turn, setTurn] = useModeState('GoModeView.turn', currentTurn === 1 ? 1 : 0);
+  const [koKey, setKoKey] = useModeState<string | null>('GoModeView.koKey', null);
+  const [lastMove, setLastMove] = useModeState<number | null>('GoModeView.lastMove', null);
+  const [captures, setCaptures] = useModeState<Record<number, number>>('GoModeView.captures', { 0: 0, 1: 0 });
+  const [passes, setPasses] = useModeState('GoModeView.passes', 0);
+  const [phase, setPhase] = useModeState<Phase>('GoModeView.phase', 'roll');
+  const [surrenderedBy, setSurrenderedBy] = useModeState<number | null>('GoModeView.surrenderedBy', null);
+  const [notice, setNotice] = useModeState<string | null>('GoModeView.notice', null);
 
-  const [cardQueue, setCardQueue] = useState<PendingCard[]>([]);
-  const [taskData, setTaskData] = useState<ReturnType<typeof createViewTaskEvent> | null>(null);
+  const [cardQueue, setCardQueue] = useModeState<PendingCard[]>('GoModeView.cardQueue', []);
+  const [taskData, setTaskData] = useModeState<ReturnType<typeof createViewTaskEvent> | null>('GoModeView.taskData', null);
 
   const activePlayer = players[turn] ?? players[0];
   const score = useMemo(() => scoreGoBoard(board), [board]);
@@ -288,7 +289,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
 }
 
 export function GoModeView({ players, themes, currentTurn, onBack }: GoModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('GoModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

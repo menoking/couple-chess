@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+
 import { ArrowLeft, BookOpen, RefreshCw, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { STORY_FRAGMENTS, STORY_KIND_LABELS, STORY_SEQUENCE, StoryFragment, StoryFragmentKind } from '../../data/storyFragments';
@@ -13,7 +14,7 @@ interface StoryModeViewProps {
 const STORY_ACTING_BONUS = '把刚才的故事即兴演给对方看，可以加戏，但不许笑场';
 
 function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void }) {
-  const [decks] = useState<Record<StoryFragmentKind, StoryFragment[]>>(() => {
+  const [decks] = useModeState<Record<StoryFragmentKind, StoryFragment[]>>('StoryModeView.decks', () => {
     const byKind: Record<StoryFragmentKind, StoryFragment[]> = {
       opening: [],
       development: [],
@@ -30,9 +31,9 @@ function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void 
       ending: shuffle(byKind.ending)
     };
   });
-  const [step, setStep] = useState(0);
-  const [story, setStory] = useState<Array<{ playerId: number; fragment: StoryFragment }>>([]);
-  const [finished, setFinished] = useState(false);
+  const [step, setStep] = useModeState('StoryModeView.step', 0);
+  const [story, setStory] = useModeState<Array<{ playerId: number; fragment: StoryFragment }>>('StoryModeView.story', []);
+  const [finished, setFinished] = useModeState('StoryModeView.finished', false);
 
   const drawer = players[step % players.length];
   const kind = STORY_SEQUENCE[step];
@@ -138,7 +139,7 @@ function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void 
 }
 
 export function StoryModeView({ players, onBack }: StoryModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('StoryModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

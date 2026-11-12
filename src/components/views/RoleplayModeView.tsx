@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+
 import { ArrowLeft, RefreshCw, Theater, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { pickRandom } from '../../utils/modeKit';
@@ -11,8 +12,8 @@ interface RoleplayModeViewProps {
 }
 
 function RoleplayGame({ players, onExit }: { players: Player[]; onExit: () => void }) {
-  const [script, setScript] = useState<typeof ROLEPLAY_SCRIPTS[number] | null>(null);
-  const [revealed, setRevealed] = useState(false);
+  const [script, setScript] = useModeState<typeof ROLEPLAY_SCRIPTS[number] | null>('RoleplayModeView.script', null);
+  const [revealed, setRevealed] = useModeState('RoleplayModeView.revealed', false);
 
   const draw = () => {
     setScript(pickRandom(ROLEPLAY_SCRIPTS) ?? ROLEPLAY_SCRIPTS[0]);
@@ -92,7 +93,7 @@ function RoleplayGame({ players, onExit }: { players: Player[]; onExit: () => vo
 }
 
 export function RoleplayModeView({ players, onBack }: RoleplayModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('RoleplayModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

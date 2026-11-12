@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Brain, Check, Crown, Flame, Gift, Heart, RefreshCw, Star, Sun, User, UserRound, Zap } from 'lucide-react';
 import { Player, TaskCard, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, shuffle } from '../../utils/modeKit';
@@ -62,12 +63,12 @@ function MemoryGame({
     return shuffle(deck);
   }, [pool]);
 
-  const [board, setBoard] = useState<Tile[]>(tiles);
-  const [flips, setFlips] = useState<number[]>([]);
-  const [locked, setLocked] = useState(false);
-  const [matchTask, setMatchTask] = useState<TaskEventData | null>(null);
-  const [pairCounts, setPairCounts] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [finished, setFinished] = useState(false);
+  const [board, setBoard] = useModeState<Tile[]>('MemoryModeView.board', tiles);
+  const [flips, setFlips] = useModeState<number[]>('MemoryModeView.flips', []);
+  const [locked, setLocked] = useModeState('MemoryModeView.locked', false);
+  const [matchTask, setMatchTask] = useModeState<TaskEventData | null>('MemoryModeView.matchTask', null);
+  const [pairCounts, setPairCounts] = useModeState<Record<number, number>>('MemoryModeView.pairCounts', { 0: 0, 1: 0 });
+  const [finished, setFinished] = useModeState('MemoryModeView.finished', false);
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => () => {
@@ -244,7 +245,7 @@ function TileIcon({ tile }: { tile: Tile }) {
 }
 
 export function MemoryModeView({ players, themes, currentTurn, onEndTurn, onBack }: MemoryModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('MemoryModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

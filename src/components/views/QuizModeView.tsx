@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+
 import { ArrowLeft, Check, MessageCircleQuestion, RefreshCw, User, UserRound, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { QUIZ_QUESTIONS, QuizQuestion } from '../../data/quizQuestions';
@@ -25,13 +26,13 @@ function getMatchTier(rate: number): { label: string; desc: string } {
 function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }) {
   const male = players[0];
   const female = players[1];
-  const [queue] = useState<QuizQuestion[]>(() => shuffle(QUIZ_QUESTIONS).slice(0, ROUNDS));
-  const [round, setRound] = useState(0);
-  const [phase, setPhase] = useState<Phase>('male');
-  const [malePick, setMalePick] = useState<number | null>(null);
-  const [femalePick, setFemalePick] = useState<number | null>(null);
-  const [matches, setMatches] = useState(0);
-  const [done, setDone] = useState(false);
+  const [queue] = useModeState<QuizQuestion[]>('QuizModeView.queue', () => shuffle(QUIZ_QUESTIONS).slice(0, ROUNDS));
+  const [round, setRound] = useModeState('QuizModeView.round', 0);
+  const [phase, setPhase] = useModeState<Phase>('QuizModeView.phase', 'male');
+  const [malePick, setMalePick] = useModeState<number | null>('QuizModeView.malePick', null);
+  const [femalePick, setFemalePick] = useModeState<number | null>('QuizModeView.femalePick', null);
+  const [matches, setMatches] = useModeState('QuizModeView.matches', 0);
+  const [done, setDone] = useModeState('QuizModeView.done', false);
 
   const question = queue[round];
   const isMatch = phase === 'reveal' && malePick !== null && femalePick !== null && malePick === femalePick;
@@ -178,7 +179,7 @@ function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }
 }
 
 export function QuizModeView({ players, onBack }: QuizModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('QuizModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

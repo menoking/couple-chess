@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useMemo } from 'react';
 import { ArrowLeft, PawPrint, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
@@ -39,17 +40,17 @@ function JungleGame({
 }) {
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
-  const [phase, setPhase] = useState<Phase>('roll');
-  const [board, setBoard] = useState<JungleBoard>(() => createJungleBoard());
-  const [turn, setTurn] = useState(currentTurn === 1 ? 1 : 0);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [lastMove, setLastMove] = useState<{ from: number; to: number } | null>(null);
-  const [captured, setCaptured] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [winnerId, setWinnerId] = useState<number | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [phase, setPhase] = useModeState<Phase>('JungleModeView.phase', 'roll');
+  const [board, setBoard] = useModeState<JungleBoard>('JungleModeView.board', () => createJungleBoard());
+  const [turn, setTurn] = useModeState('JungleModeView.turn', currentTurn === 1 ? 1 : 0);
+  const [selected, setSelected] = useModeState<number | null>('JungleModeView.selected', null);
+  const [lastMove, setLastMove] = useModeState<{ from: number; to: number } | null>('JungleModeView.lastMove', null);
+  const [captured, setCaptured] = useModeState<Record<number, number>>('JungleModeView.captured', { 0: 0, 1: 0 });
+  const [winnerId, setWinnerId] = useModeState<number | null>('JungleModeView.winnerId', null);
+  const [notice, setNotice] = useModeState<string | null>('JungleModeView.notice', null);
 
-  const [cardQueue, setCardQueue] = useState<PendingCard[]>([]);
-  const [taskData, setTaskData] = useState<ReturnType<typeof createViewTaskEvent> | null>(null);
+  const [cardQueue, setCardQueue] = useModeState<PendingCard[]>('JungleModeView.cardQueue', []);
+  const [taskData, setTaskData] = useModeState<ReturnType<typeof createViewTaskEvent> | null>('JungleModeView.taskData', null);
 
   const activePlayer = players[turn] ?? players[0];
   const opponentId = turn === 0 ? 1 : 0;
@@ -276,7 +277,7 @@ function JungleGame({
 }
 
 export function JungleModeView({ players, themes, currentTurn, onBack }: JungleModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('JungleModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

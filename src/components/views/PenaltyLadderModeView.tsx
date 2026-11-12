@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useMemo } from 'react';
 import { ArrowLeft, Check, RefreshCw, Skull, TrendingUp, User, UserRound, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, pickRandom } from '../../utils/modeKit';
@@ -20,13 +21,13 @@ interface StepResult {
 function PenaltyLadderGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
-  const [turn, setTurn] = useState(0);
-  const [steps, setSteps] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [phase, setPhase] = useState<Phase>('play');
-  const [currentTask, setCurrentTask] = useState(() => pickRandom(pool));
-  const [penaltyResult, setPenaltyResult] = useState<StepResult | null>(null);
-  const [loserId, setLoserId] = useState<number | null>(null);
-  const [round, setRound] = useState(1);
+  const [turn, setTurn] = useModeState('PenaltyLadderModeView.turn', 0);
+  const [steps, setSteps] = useModeState<Record<number, number>>('PenaltyLadderModeView.steps', { 0: 0, 1: 0 });
+  const [phase, setPhase] = useModeState<Phase>('PenaltyLadderModeView.phase', 'play');
+  const [currentTask, setCurrentTask] = useModeState('PenaltyLadderModeView.currentTask', () => pickRandom(pool));
+  const [penaltyResult, setPenaltyResult] = useModeState<StepResult | null>('PenaltyLadderModeView.penaltyResult', null);
+  const [loserId, setLoserId] = useModeState<number | null>('PenaltyLadderModeView.loserId', null);
+  const [round, setRound] = useModeState('PenaltyLadderModeView.round', 1);
 
   const activePlayer = players[turn];
   const opponent = players.find(player => player.id !== activePlayer?.id);
@@ -182,7 +183,7 @@ function PenaltyLadderGame({ players, themes }: { players: Player[]; themes: The
 }
 
 export function PenaltyLadderModeView({ players, themes, onBack }: PenaltyLadderModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('PenaltyLadderModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

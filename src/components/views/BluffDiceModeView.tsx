@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Dices, Eye, RefreshCw, ShieldQuestion, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
@@ -70,17 +71,17 @@ function BluffDiceGame({
 }) {
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
-  const [phase, setPhase] = useState<Phase>('handoff1');
-  const [round, setRound] = useState(1);
-  const [starterId, setStarterId] = useState(currentTurn === 1 ? 1 : 0);
-  const [turn, setTurn] = useState(currentTurn === 1 ? 1 : 0);
-  const [dice, setDice] = useState<Record<number, number[]>>({ 0: rollDice(), 1: rollDice() });
-  const [bid, setBid] = useState<Bid | null>(null);
-  const [draftQty, setDraftQty] = useState(2);
-  const [draftFace, setDraftFace] = useState(1);
-  const [points, setPoints] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [reveal, setReveal] = useState<RevealInfo | null>(null);
-  const [taskData, setTaskData] = useState<ReturnType<typeof createViewTaskEvent> | null>(null);
+  const [phase, setPhase] = useModeState<Phase>('BluffDiceModeView.phase', 'handoff1');
+  const [round, setRound] = useModeState('BluffDiceModeView.round', 1);
+  const [starterId, setStarterId] = useModeState('BluffDiceModeView.starterId', currentTurn === 1 ? 1 : 0);
+  const [turn, setTurn] = useModeState('BluffDiceModeView.turn', currentTurn === 1 ? 1 : 0);
+  const [dice, setDice] = useModeState<Record<number, number[]>>('BluffDiceModeView.dice', { 0: rollDice(), 1: rollDice() }, 'seat');
+  const [bid, setBid] = useModeState<Bid | null>('BluffDiceModeView.bid', null);
+  const [draftQty, setDraftQty] = useModeState('BluffDiceModeView.draftQty', 2);
+  const [draftFace, setDraftFace] = useModeState('BluffDiceModeView.draftFace', 1);
+  const [points, setPoints] = useModeState<Record<number, number>>('BluffDiceModeView.points', { 0: 0, 1: 0 });
+  const [reveal, setReveal] = useModeState<RevealInfo | null>('BluffDiceModeView.reveal', null);
+  const [taskData, setTaskData] = useModeState<ReturnType<typeof createViewTaskEvent> | null>('BluffDiceModeView.taskData', null);
 
   const first = players[0];
   const currentPlayer = players.find(player => player.id === turn) ?? first;
@@ -382,7 +383,7 @@ function BluffDiceGame({
 }
 
 export function BluffDiceModeView({ players, themes, currentTurn, onBack }: BluffDiceModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('BluffDiceModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

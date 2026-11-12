@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Check, RefreshCw, Timer, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, shuffle } from '../../utils/modeKit';
@@ -27,12 +28,12 @@ function formatTime(seconds: number): string {
 
 function TimedGame({ players, themes, onExit }: { players: Player[]; themes: Theme[]; onExit: () => void }) {
   const queue = useMemo<ThemeTaskEntry[]>(() => shuffle(buildTaskPool(players, themes) ?? []), [players, themes]);
-  const [timeLeft, setTimeLeft] = useState(TOTAL_SECONDS);
-  const [index, setIndex] = useState(0);
-  const [score, setScore] = useState(0);
-  const [done, setDone] = useState(0);
-  const [skipped, setSkipped] = useState(0);
-  const [over, setOver] = useState(false);
+  const [timeLeft, setTimeLeft] = useModeState('TimedModeView.timeLeft', TOTAL_SECONDS);
+  const [index, setIndex] = useModeState('TimedModeView.index', 0);
+  const [score, setScore] = useModeState('TimedModeView.score', 0);
+  const [done, setDone] = useModeState('TimedModeView.done', 0);
+  const [skipped, setSkipped] = useModeState('TimedModeView.skipped', 0);
+  const [over, setOver] = useModeState('TimedModeView.over', false);
 
   useEffect(() => {
     if (over) return;
@@ -158,7 +159,7 @@ function TimedGame({ players, themes, onExit }: { players: Player[]; themes: The
 }
 
 export function TimedModeView({ players, themes, onBack }: TimedModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('TimedModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

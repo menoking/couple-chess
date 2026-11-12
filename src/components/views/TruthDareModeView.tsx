@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useMemo } from 'react';
 import { ArrowLeft, Flame, RefreshCw, Skull, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, pickRandom } from '../../utils/modeKit';
@@ -42,10 +43,10 @@ function TruthDareGame({
 }) {
   const activePlayer = players[currentTurn] || players[0];
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
-  const [card, setCard] = useState<ActiveCard | null>(null);
-  const [penaltyTarget, setPenaltyTarget] = useState<number | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [done, setDone] = useState(0);
+  const [card, setCard] = useModeState<ActiveCard | null>('TruthDareModeView.card', null);
+  const [penaltyTarget, setPenaltyTarget] = useModeState<number | null>('TruthDareModeView.penaltyTarget', null);
+  const [notice, setNotice] = useModeState<string | null>('TruthDareModeView.notice', null);
+  const [done, setDone] = useModeState('TruthDareModeView.done', 0);
 
   const drawEvent = (): Event => {
     const roll = Math.random();
@@ -195,7 +196,7 @@ function TruthDareGame({
 }
 
 export function TruthDareModeView({ players, themes, currentTurn, onEndTurn, onBack }: TruthDareModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('TruthDareModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

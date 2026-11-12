@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useMemo } from 'react';
 import { ArrowLeft, Check, Grid2x2, RefreshCw, Sparkles, User, UserRound, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
@@ -35,19 +36,19 @@ function SudokuGame({
 }) {
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
-  const [phase, setPhase] = useState<'roll' | 'difficulty' | 'play'>('roll');
-  const [privilegeId, setPrivilegeId] = useState<number | null>(null);
-  const [difficulty, setDifficulty] = useState<DifficultyKey>('normal');
-  const [puzzle, setPuzzle] = useState<SudokuPuzzle | null>(null);
+  const [phase, setPhase] = useModeState<'roll' | 'difficulty' | 'play'>('SudokuModeView.phase', 'roll');
+  const [privilegeId, setPrivilegeId] = useModeState<number | null>('SudokuModeView.privilegeId', null);
+  const [difficulty, setDifficulty] = useModeState<DifficultyKey>('SudokuModeView.difficulty', 'normal');
+  const [puzzle, setPuzzle] = useModeState<SudokuPuzzle | null>('SudokuModeView.puzzle', null);
 
-  const [cells, setCells] = useState<number[]>([]);
-  const [turn, setTurn] = useState(currentTurn === 1 ? 1 : 0);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [errorCell, setErrorCell] = useState<number | null>(null);
-  const [cardCounts, setCardCounts] = useState<Record<number, number>>({ 0: 0, 1: 0 });
-  const [taskData, setTaskData] = useState<ReturnType<typeof createViewTaskEvent> | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-  const [finished, setFinished] = useState(false);
+  const [cells, setCells] = useModeState<number[]>('SudokuModeView.cells', []);
+  const [turn, setTurn] = useModeState('SudokuModeView.turn', currentTurn === 1 ? 1 : 0);
+  const [selected, setSelected] = useModeState<number | null>('SudokuModeView.selected', null);
+  const [errorCell, setErrorCell] = useModeState<number | null>('SudokuModeView.errorCell', null);
+  const [cardCounts, setCardCounts] = useModeState<Record<number, number>>('SudokuModeView.cardCounts', { 0: 0, 1: 0 });
+  const [taskData, setTaskData] = useModeState<ReturnType<typeof createViewTaskEvent> | null>('SudokuModeView.taskData', null);
+  const [toast, setToast] = useModeState<string | null>('SudokuModeView.toast', null);
+  const [finished, setFinished] = useModeState('SudokuModeView.finished', false);
 
   const activePlayer = players[turn] || players[0];
   const difficultyLabel = DIFFICULTIES.find(item => item.key === difficulty)?.label ?? '标准';
@@ -303,7 +304,7 @@ function SudokuGame({
 }
 
 export function SudokuModeView({ players, themes, currentTurn, onBack }: SudokuModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('SudokuModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useMemo } from 'react';
 import { ArrowLeft, Flag, RefreshCw, Swords, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, collectThemeTasks, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
@@ -32,10 +33,10 @@ function TerritoryGame({
 }) {
   const activePlayer = players[currentTurn] || players[0];
   const opponent = players.find(p => p.id !== activePlayer?.id) || players[1];
-  const [owners, setOwners] = useState<Array<number | null>>(() => new Array(TOTAL_CELLS).fill(null));
-  const [taskData, setTaskData] = useState<TaskEventData | null>(null);
-  const [pendingIndex, setPendingIndex] = useState<number | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [owners, setOwners] = useModeState<Array<number | null>>('TerritoryModeView.owners', () => new Array(TOTAL_CELLS).fill(null));
+  const [taskData, setTaskData] = useModeState<TaskEventData | null>('TerritoryModeView.taskData', null);
+  const [pendingIndex, setPendingIndex] = useModeState<number | null>('TerritoryModeView.pendingIndex', null);
+  const [notice, setNotice] = useModeState<string | null>('TerritoryModeView.notice', null);
 
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
@@ -210,7 +211,7 @@ function TerritoryGame({
 }
 
 export function TerritoryModeView({ players, themes, currentTurn, onEndTurn, onBack }: TerritoryModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('TerritoryModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

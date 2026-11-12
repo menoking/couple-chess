@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+
 import { ArrowLeft, CircleDot, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
@@ -34,13 +35,13 @@ function DotsAndBoxesGame({
   themes: Theme[];
   onExit: () => void;
 }) {
-  const [turn, setTurn] = useState(0);
-  const [horizontal, setHorizontal] = useState<LineOwner[]>(() => new Array(H_LINES).fill(null).map(() => ({ ownerId: null })));
-  const [vertical, setVertical] = useState<LineOwner[]>(() => new Array(V_LINES).fill(null).map(() => ({ ownerId: null })));
-  const [boxes, setBoxes] = useState<number[]>(() => new Array(TOTAL_BOXES).fill(-1));
-  const [taskData, setTaskData] = useState<TaskEventData | null>(null);
-  const [finished, setFinished] = useState(false);
-  const [started, setStarted] = useState(false);
+  const [turn, setTurn] = useModeState('GridChessModeView.turn', 0);
+  const [horizontal, setHorizontal] = useModeState<LineOwner[]>('GridChessModeView.horizontal', () => new Array(H_LINES).fill(null).map(() => ({ ownerId: null })));
+  const [vertical, setVertical] = useModeState<LineOwner[]>('GridChessModeView.vertical', () => new Array(V_LINES).fill(null).map(() => ({ ownerId: null })));
+  const [boxes, setBoxes] = useModeState<number[]>('GridChessModeView.boxes', () => new Array(TOTAL_BOXES).fill(-1));
+  const [taskData, setTaskData] = useModeState<TaskEventData | null>('GridChessModeView.taskData', null);
+  const [finished, setFinished] = useModeState('GridChessModeView.finished', false);
+  const [started, setStarted] = useModeState('GridChessModeView.started', false);
 
   const activePlayer = players[turn];
   const drawnLines = horizontal.filter(l => l.ownerId !== null).length + vertical.filter(l => l.ownerId !== null).length;
@@ -358,7 +359,7 @@ function DotsBoard({
 }
 
 export function GridChessModeView({ players, themes, onBack }: GridChessModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('GridChessModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

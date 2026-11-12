@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useRef } from 'react';
 import { ArrowLeft, Check, Flame, RefreshCw, Timer, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, pickRandom } from '../../utils/modeKit';
@@ -13,12 +14,12 @@ interface EdgeModeViewProps {
 type Phase = 'ready' | 'running' | 'decide' | 'result';
 
 function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
-  const [attackerId, setAttackerId] = useState(0);
-  const [levelIndex, setLevelIndex] = useState(0);
-  const [phase, setPhase] = useState<Phase>('ready');
-  const [secondsLeft, setSecondsLeft] = useState(0);
-  const [breakerId, setBreakerId] = useState<number | null>(null);
-  const [forcedLoss, setForcedLoss] = useState(false);
+  const [attackerId, setAttackerId] = useModeState('EdgeModeView.attackerId', 0);
+  const [levelIndex, setLevelIndex] = useModeState('EdgeModeView.levelIndex', 0);
+  const [phase, setPhase] = useModeState<Phase>('EdgeModeView.phase', 'ready');
+  const [secondsLeft, setSecondsLeft] = useModeState('EdgeModeView.secondsLeft', 0);
+  const [breakerId, setBreakerId] = useModeState<number | null>('EdgeModeView.breakerId', null);
+  const [forcedLoss, setForcedLoss] = useModeState('EdgeModeView.forcedLoss', false);
   const timerRef = useRef<number | null>(null);
 
   const attacker = players.find(player => player.id === attackerId) ?? players[0];
@@ -199,7 +200,7 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
 }
 
 export function EdgeModeView({ players, themes, onBack }: EdgeModeViewProps) {
-  const [runId, setRunId] = useState(0);
+  const [runId, setRunId] = useModeState('EdgeModeView.runId', 0);
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

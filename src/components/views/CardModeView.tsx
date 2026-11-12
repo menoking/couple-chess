@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Layers3, User, UserRound, X } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 
@@ -21,7 +22,7 @@ export function CardModeView({
 }: CardModeViewProps) {
   const activePlayer = players[currentTurn];
   const activeTheme = themes.find(t => t.id === activePlayer.themeId);
-  const [drawnKeys, setDrawnKeys] = useState<Set<string>>(() => new Set());
+  const [drawnKeys, setDrawnKeys] = useModeState<Set<string>>('CardModeView.drawnKeys', () => new Set());
   const maleThemeId = players[0]?.themeId;
   const femaleThemeId = players[1]?.themeId;
 

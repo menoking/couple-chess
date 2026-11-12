@@ -1,4 +1,5 @@
-import { useState, useCallback } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useCallback } from 'react';
 import { Player, PathCoord, TileType, TaskEventData } from '../../types';
 import { GameBoard } from '../GameBoard';
 import { Dice } from '../Dice';
@@ -34,8 +35,8 @@ export function GameView({
   onTaskTrigger,
   onBack
 }: GameViewProps) {
-  const [diceResult, setDiceResult] = useState<number | null>(null);
-  const [isMoving, setIsMoving] = useState(false);
+  const [diceResult, setDiceResult] = useModeState<number | null>('GameView.diceResult', null);
+  const [isMoving, setIsMoving] = useModeState('GameView.isMoving', false);
 
   const handleRoll = useCallback(() => {
     if (isRolling || isMoving || diceResult) return;

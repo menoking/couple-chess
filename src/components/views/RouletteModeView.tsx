@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useModeState } from '../../rules/ModeRuntime';
+import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, CheckCircle2, Disc3, RotateCw, ShieldAlert, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, TaskCard, Theme } from '../../types';
 import { loadFromStorage, saveToStorage } from '../../utils/localStorage';
@@ -97,7 +98,7 @@ function WheelCard({
   highlightLabel?: string;
 }) {
   const flatItems = useMemo(() => flatten(groups), [groups]);
-  const [rotation, setRotation] = useState(0);
+  const [rotation, setRotation] = useModeState('RouletteModeView.rotation', 0);
 
   useEffect(() => {
     if (spinToken === 0) return;
@@ -156,13 +157,13 @@ export function RouletteModeView({
   onBack
 }: RouletteModeViewProps) {
   const activePlayer = players[currentTurn] || players[0];
-  const [isSpinning, setIsSpinning] = useState(false);
-  const [result, setResult] = useState({ executor: '', action: '', target: '', duration: '' });
-  const [bonusTask, setBonusTask] = useState<TaskCard | null>(null);
-  const [round, setRound] = useState(0);
-  const [spinToken, setSpinToken] = useState(0);
-  const [tick, setTick] = useState(0);
-  const [intensity, setIntensity] = useState<RouletteIntensity>(() =>
+  const [isSpinning, setIsSpinning] = useModeState('RouletteModeView.isSpinning', false);
+  const [result, setResult] = useModeState('RouletteModeView.result', { executor: '', action: '', target: '', duration: '' });
+  const [bonusTask, setBonusTask] = useModeState<TaskCard | null>('RouletteModeView.bonusTask', null);
+  const [round, setRound] = useModeState('RouletteModeView.round', 0);
+  const [spinToken, setSpinToken] = useModeState('RouletteModeView.spinToken', 0);
+  const [tick, setTick] = useModeState('RouletteModeView.tick', 0);
+  const [intensity, setIntensity] = useModeState<RouletteIntensity>('RouletteModeView.intensity', () =>
     loadFromStorage<RouletteIntensity>(INTENSITY_STORAGE_KEY, 'gentle')
   );
   const isWild = intensity === 'wild';
