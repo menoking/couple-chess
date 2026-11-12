@@ -33,9 +33,13 @@ export async function enterOnlineRoom(
     .insert({ id: roomId, space_id: space.id, host_device: device });
 
   if (insertError && insertError.code !== '23505') {
+    const missingTable =
+      insertError.code === '42P01' ||
+      insertError.code === 'PGRST205' ||
+      /could not find the table|does not exist/i.test(insertError.message);
     throw new Error(
-      insertError.code === '42P01'
-        ? 'rooms 表不存在：请在 Supabase SQL Editor 重新执行 supabase/schema.sql'
+      missingTable
+        ? 'rooms 表还没建：去 Supabase SQL Editor 执行 supabase/schema.sql，然后执行 notify pgrst, \'reload schema\''
         : insertError.message
     );
   }
