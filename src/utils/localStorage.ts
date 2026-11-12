@@ -82,6 +82,26 @@ export function saveToStorage<T>(key: string, value: T): void {
   }
 }
 
+/** 退出登录/切换账号时使用：取消待写入并清空对局数据，避免串号 */
+export function resetLocalState(): void {
+  if (idleSaveTimer !== null) {
+    const scoped = window as unknown as { cancelIdleCallback?: (id: number) => void };
+    if (typeof scoped.cancelIdleCallback === 'function') {
+      scoped.cancelIdleCallback(idleSaveTimer);
+    } else {
+      window.clearTimeout(idleSaveTimer);
+    }
+    idleSaveTimer = null;
+  }
+  pendingSave = null;
+  try {
+    localStorage.removeItem(resolveKey('couples-ludo-game-state'));
+  } catch (error) {
+    console.error('Error resetting local state:', error);
+  }
+}
+
+
 export function removeFromStorage(key: string): void {
   try {
     localStorage.removeItem(resolveKey(key));

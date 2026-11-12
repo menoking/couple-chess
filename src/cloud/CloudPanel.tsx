@@ -50,7 +50,7 @@ export function CloudPanel({
   const enterRoom = async (target: OnlineModeKey, forceHost = false) => {
     const client = supabase;
     if (!client || !cloud.space) return;
-    const roomId = `${cloud.space.id}:${target}`;
+    const roomId = `${cloud.space.id}-${target}`;
     const device = getDeviceId();
 
     const { error: insertError } = await client
@@ -77,7 +77,7 @@ export function CloudPanel({
     if (!client || !cloud.space) return;
     const device = getDeviceId();
     for (const item of ONLINE_MODES) {
-      const roomId = `${cloud.space.id}:${item.key}`;
+      const roomId = `${cloud.space.id}-${item.key}`;
       const { error } = await client
         .from('rooms')
         .upsert({ id: roomId, space_id: cloud.space.id, host_device: device, updated_at: new Date().toISOString() });

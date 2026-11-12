@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { User } from '@supabase/supabase-js';
 import { cloudConfigured, supabase } from './client';
 import { MemberInfo, Seat, SpaceInfo } from './types';
-import { removeFromStorage } from '../utils/localStorage';
+import { resetLocalState } from '../utils/localStorage';
 
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const FAKE_MAIL_DOMAIN = 'cfc.local';
@@ -240,7 +240,7 @@ export function useCloud() {
     if (!supabase) return;
     await supabase.auth.signOut();
     // 退出时清掉本地对局数据，避免下一个账号串数据
-    removeFromStorage('couples-ludo-game-state');
+    resetLocalState();
     setUser(null);
     setSpace(null);
     setMembers([]);
