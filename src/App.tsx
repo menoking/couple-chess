@@ -42,7 +42,7 @@ import { useCloudSync } from './cloud/useCloudSync';
 import { CloudPanel } from './cloud/CloudPanel';
 import { OnlinePlayView, OnlineRoomInfo } from './cloud/OnlinePlayView';
 import { cloudConfigured } from './cloud/client';
-import { enterOnlineRoom, announceRoom, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
+import { enterOnlineRoom, leaveOnlineRoom, announceRoom, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
 import { ONLINE_MODES, OnlineModeKey } from './cloud/games/adapters';
 import { Seat } from './cloud/types';
 
@@ -752,7 +752,10 @@ function App() {
             color: player.color
           }))}
           kind={cloudConfigured ? 'supabase' : 'local'}
-          onExit={() => setOnlineSession(null)}
+          onExit={() => {
+            if (onlineSession) void leaveOnlineRoom(onlineSession.room.roomId);
+            setOnlineSession(null);
+          }}
         />
       )}
     </div>

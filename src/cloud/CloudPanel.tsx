@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { Cloud, Download, LogOut, Upload, X } from 'lucide-react';
 import { useCloud } from './useCloud';
-import { supabase } from './client';
 import { ONLINE_MODES, OnlineModeKey } from './games/adapters';
 import { TransportKind } from './transport';
 import { LocalBackup, exportLocalBackup, importLocalBackup, isSandbox } from '../utils/localStorage';
-import { enterOnlineRoom, roomIdOf } from './rooms';
+import { enterOnlineRoom } from './rooms';
 
 interface CloudPanelProps {
   open: boolean;
@@ -46,10 +45,10 @@ export function CloudPanel({
     }
   };
 
-  const enterRoom = async (target: OnlineModeKey, forceHost = false) => {
+  const enterRoom = async (target: OnlineModeKey) => {
     if (!cloud.space) return;
     try {
-      const ticket = await enterOnlineRoom(cloud.space, target, forceHost);
+      const ticket = await enterOnlineRoom(cloud.space, target);
       if (!ticket) return;
       onEnterRoom({ roomId: ticket.roomId, mode: ticket.mode }, ticket.isHost);
     } catch (error) {
@@ -57,23 +56,6 @@ export function CloudPanel({
     }
   };
 
-  /** 对方退出后接管房主，避免卡在「等待对方」 */
-  const takeOverRooms = async () => {
-    const client = supabase;
-    if (!client || !cloud.space) return;
-    const device = (await import('./device')).getDeviceId();
-    for (const item of ONLINE_MODES) {
-      const roomId = roomIdOf(cloud.space.id, item.key);
-      const { error } = await client
-        .from('rooms')
-        .upsert({ id: roomId, space_id: cloud.space.id, host_device: device, updated_at: new Date().toISOString() });
-      if (error) {
-        setNotice(error.message);
-        return;
-      }
-    }
-    setNotice('已接管房主，重新进入玩法即可');
-  };
 
 
   const doExport = () => {
@@ -218,14 +200,7 @@ export function CloudPanel({
                   <span className="text-[10px] font-bold text-[#64D2FF]">进入</span>
                 </button>
               ))}
-              <button
-                type="button"
-                disabled={!cloud.space}
-                onClick={() => void takeOverRooms()}
-                className="ios-btn h-9 w-full rounded-full text-[10px] font-bold text-gray-500 disabled:opacity-40"
-              >
-                把三个房间的房主都改成我（对方已关页面时用）
-              </button>
+
             </div>
 
             <div className="flex gap-2">

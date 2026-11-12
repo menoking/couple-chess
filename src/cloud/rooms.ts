@@ -1,3 +1,4 @@
+import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './client';
 import { SpaceInfo } from './types';
 import { getDeviceId } from './device';
@@ -9,14 +10,25 @@ export interface RoomTicket {
   isHost: boolean;
 }
 
+export interface RoomAnnounce {
+  roomId: string;
+  mode: OnlineModeKey;
+  fromDevice?: string;
+}
+
 export function roomIdOf(spaceId: string, mode: OnlineModeKey): string {
   return `${spaceId}-${mode}`;
 }
 
 /**
- * 进房间：先插 rooms 行，谁先插入谁是房主。
- * 主键冲突说明对方已经先到了，直接读回 host_device 判定身份。
+ * 房主选举：不依赖任何数据表。
+ * 每台设备进入时加入房间的「在场频道」，等 900ms 看还有谁在：
+ * - 只有自己 → 我是房主
+ * - 有别人 → 按设备 ID 排序，最小的当房主（同时进入也不会打架）
+ * 频道在整局期间保持打开，所以后来者一定能看到房主；房主离开后，剩下的人自动成为房主。
  */
+const activeChannels = new Map<string, RealtimeChannel>();
+
 export async function enterOnlineRoom(
   space: SpaceInfo,
   mode: OnlineModeKey,
@@ -26,33 +38,52 @@ export async function enterOnlineRoom(
   if (!client) return null;
 
   const roomId = roomIdOf(space.id, mode);
-  const device = getDeviceId();
+  const myId = getDeviceId();
 
-  const { error: insertError } = await client
-    .from('rooms')
-    .insert({ id: roomId, space_id: space.id, host_device: device });
+  await leaveOnlineRoom(roomId);
 
-  if (insertError && insertError.code !== '23505') {
-    const missingTable =
-      insertError.code === '42P01' ||
-      insertError.code === 'PGRST205' ||
-      /could not find the table|does not exist/i.test(insertError.message);
-    throw new Error(
-      missingTable
-        ? 'rooms 表还没建：去 Supabase SQL Editor 执行 supabase/schema.sql，然后执行 notify pgrst, \'reload schema\''
-        : insertError.message
-    );
-  }
+  const channel = client.channel(`cfc-ele-${roomId}`, {
+    config: { presence: { key: myId } }
+  });
 
-  if (forceHost) {
-    await client
-      .from('rooms')
-      .update({ host_device: device, updated_at: new Date().toISOString() })
-      .eq('id', roomId);
-  }
+  const seen = new Set<string>();
+  channel.on('presence', { event: 'sync' }, () => {
+    const state = channel.presenceState() as Record<string, unknown>;
+    seen.clear();
+    Object.keys(state).forEach(key => seen.add(key));
+  });
 
-  const { data } = await client.from('rooms').select('host_device').eq('id', roomId).maybeSingle();
-  return { roomId, mode, isHost: data?.host_device === device };
+  await new Promise<void>(resolve => {
+    channel.subscribe(async status => {
+      if (status === 'SUBSCRIBED') {
+        await channel.track({ at: Date.now() });
+        resolve();
+      }
+    });
+    window.setTimeout(resolve, 1500);
+  });
+
+  activeChannels.set(roomId, channel);
+  window.setTimeout(() => {
+    const state = channel.presenceState() as Record<string, unknown>;
+    seen.clear();
+    Object.keys(state).forEach(key => seen.add(key));
+  }, 0);
+
+  await new Promise(resolve => window.setTimeout(resolve, 900));
+
+  const others = [...seen].filter(id => id !== myId);
+  const isHost = forceHost || others.length === 0 || [...seen].sort()[0] === myId;
+
+  return { roomId, mode, isHost };
+}
+
+export async function leaveOnlineRoom(roomId: string): Promise<void> {
+  const client = supabase;
+  const channel = activeChannels.get(roomId);
+  if (!channel) return;
+  activeChannels.delete(roomId);
+  if (client) await client.removeChannel(channel);
 }
 
 /** 通知同一间屋子的另一台设备「我来玩了」 */
@@ -69,12 +100,6 @@ export async function announceRoom(space: SpaceInfo, roomId: string, mode: Onlin
   window.setTimeout(() => {
     void client.removeChannel(channel);
   }, 1200);
-}
-
-export interface RoomAnnounce {
-  roomId: string;
-  mode: OnlineModeKey;
-  fromDevice?: string;
 }
 
 /** 常驻监听别人的「我来玩了」通知 */
