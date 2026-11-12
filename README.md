@@ -51,11 +51,15 @@ npm run lint       # 代码检查
 
 1. 在 [Supabase](https://supabase.com) 新建项目
 2. 打开 SQL Editor，整段执行仓库里的 `supabase/schema.sql`
-3. Authentication → Providers → Email：关闭 «Confirm email»（家庭内部使用，不需要验证邮件）
-4. 在 Vercel 项目里加环境变量，然后重新部署：
-   - `VITE_SUPABASE_URL`
-   - `VITE_SUPABASE_ANON_KEY`
-5. 首次使用：打开首页右上角 ☁️ 图标 → 注册一个家庭账号 → 创建小屋 → 把 6 位邀请码发给对方 → 对方登录后输入邀请码
+3. 关闭邮箱验证：`Authentication` → `Sign In / Providers`（旧版为 `Providers`）→ `Email` → 关闭 **Confirm email**
+   - 找不到也没关系：不关的话，注册后去邮箱点确认链接同样可以激活
+4. 在 Vercel 项目里加环境变量，然后**重新部署**：
+   - 路径：项目 → `Settings` → `Environment Variables` → 勾选 Production
+   - `VITE_SUPABASE_URL`（Supabase → Project Settings → API → Project URL）
+   - `VITE_SUPABASE_ANON_KEY`（同页面 → anon public key，**不要用 service_role**）
+   - ⚠️ Vite 的环境变量是构建时注入的，加完必须 Redeploy 才生效
+5. 验证配置成功：首页右上角 ☁️ 图标点开应显示登录表单（若仍显示「云服务未配置」，说明变量没生效或没重新部署）
+6. 首次使用：在 ☁️ 面板里注册一个家庭账号 → 创建小屋 → 把 6 位邀请码发给对方 → 对方登录后输入邀请码
 
 ### 已支持联机
 
