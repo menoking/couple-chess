@@ -1,9 +1,11 @@
 import { useRef, useState } from 'react';
-import { GameMode, Player, Theme } from '../../types';
+import { GameMode, Player, PlayerRole, Theme } from '../../types';
 import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Disc3, Flag, Flame, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, PawPrint, FlipHorizontal, ShieldQuestion, Theater, TrendingUp, Timer, User, UserRound } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
+  /** 当前使用者的性别，用于把「我」排在前面 */
+  myRole?: PlayerRole;
   themes: Theme[];
   gameMode: GameMode;
   onSelectMode: (mode: GameMode) => void;
@@ -144,6 +146,7 @@ function findCategoryOf(modeId: GameMode): string {
 
 export function HomeView({
   players,
+  myRole,
   themes,
   gameMode,
   onSelectMode,
@@ -267,10 +270,13 @@ export function HomeView({
 
         {shouldShowThemeSelectors && (
         <div className="space-y-4">
-          {players.map((player, idx) => {
+          {[...players]
+            .sort((a, b) => (a.role === myRole ? -1 : b.role === myRole ? 1 : 0))
+            .map(player => {
             const theme = themes.find(t => t.id === player.themeId);
-            const isMale = idx === 0;
-            const selectorName = `${player.name} (Player ${player.id + 1})`;
+            const isMale = player.role === 'male';
+            const isMe = player.role === myRole;
+            const selectorName = `${player.name}${isMe ? '（你）' : ''} (Player ${player.id + 1})`;
             const selectedThemeLabel = theme?.name || '未选择主题';
 
             return (

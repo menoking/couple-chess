@@ -108,6 +108,24 @@ function App() {
     }
   }, [theme]);
 
+  const [myRole, setMyRole] = useState<'male' | 'female'>(() => {
+    try {
+      const saved = window.localStorage.getItem('cfc:my-role');
+      if (saved === 'male' || saved === 'female') return saved;
+    } catch {
+      // ignore
+    }
+    return 'male';
+  });
+  const changeMyRole = (role: 'male' | 'female') => {
+    setMyRole(role);
+    try {
+      window.localStorage.setItem('cfc:my-role', role);
+    } catch {
+      // ignore
+    }
+  };
+
   const [cloudOpen, setCloudOpen] = useState(false);
   const [onlineSession, setOnlineSession] = useState<{ room: OnlineRoomInfo; isHost: boolean } | null>(null);
   const [onlinePrompt, setOnlinePrompt] = useState<OnlineModeKey | null>(null);
@@ -289,7 +307,27 @@ function App() {
       </div>
 
       <div className="relative z-10 w-full max-w-[430px] h-full flex flex-col bg-black/20">
-        <header className="app-header pb-2 px-6 shrink-0 flex justify-between items-start">
+        <header className="app-header pb-2 px-6 shrink-0">
+          <div className="mb-2 flex items-center justify-center gap-1.5">
+            <span className="text-[10px] font-bold text-gray-500">我是</span>
+            {(['male', 'female'] as const).map(role => (
+              <button
+                key={role}
+                type="button"
+                onClick={() => changeMyRole(role)}
+                className={`ios-btn rounded-full px-3 py-1 text-[11px] font-bold transition-colors ${
+                  myRole === role
+                    ? role === 'male'
+                      ? 'bg-[#0A84FF] text-white'
+                      : 'bg-[#FF375F] text-white'
+                    : 'bg-white/10 text-gray-400'
+                }`}
+              >
+                {role === 'male' ? '男生' : '女生'}
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-between items-start">
           <div>
             <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">
               Couple's Game
@@ -334,6 +372,7 @@ function App() {
               由 Meno 改版
             </span>
           </div>
+          </div>
         </header>
 
         <main className="flex-1 min-h-0 relative overflow-hidden">
@@ -346,6 +385,7 @@ function App() {
           >
             <HomeView
               players={state.players}
+              myRole={myRole}
               themes={state.themes}
               gameMode={state.gameMode}
               onSelectMode={selectGameMode}
