@@ -402,6 +402,7 @@ export function OnlineStage(props: OnlineStageProps) {
   }
 
   const data = snap.data;
+  const poseImage = data['stage.poseImage'] as string | undefined;
   const boardMap = (data['stage.boardMap'] as TileType[] | undefined) ?? [];
   const pathCoords = (data['stage.pathCoords'] as PathCoord[] | undefined) ?? [];
   const mineBoard = (data['stage.mineBoard'] as MineTile[] | undefined) ?? [];
@@ -521,6 +522,21 @@ export function OnlineStage(props: OnlineStageProps) {
         <div className="relative flex-1 overflow-hidden">
           {renderMode()}
         </div>
+        {poseImage && (
+          <div className="fixed inset-0 z-[138] flex items-center justify-center bg-black/90 px-5">
+            <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#1C1C1E] p-4">
+              <div className="mb-2 text-center text-xs font-bold text-gray-400">姿势卡 · 双方同时查看</div>
+              <img src={poseImage} alt="姿势卡" className="mx-auto max-h-[62vh] w-auto rounded-2xl object-contain" />
+              <button
+                type="button"
+                onClick={() => patch('stage.poseImage', null)}
+                className="ios-btn mt-4 h-11 w-full rounded-full bg-white text-xs font-bold text-black"
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        )}
         <CardGate snap={snap} mySeat={mySeat} players={players} dispatch={dispatch} />
       </div>
     </ModeRuntimeProvider>
