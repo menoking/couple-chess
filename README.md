@@ -50,7 +50,8 @@ npm run lint       # 代码检查
 ### 一次性配置
 
 1. 在 [Supabase](https://supabase.com) 新建项目
-2. SQL Editor 整段执行 `supabase/schema.sql`（可重复执行）
+2. SQL Editor 整段执行 `supabase/fix-cloud.sql`（幂等、可重复执行；全新项目也可用 `supabase/schema.sql`）
+   - 这一步**只影响题库跨设备同步**；不执行也能正常双设备联机
 3. **必须关闭邮箱验证**：`Authentication` → `Sign In / Providers` → `Email` → 关掉 **Confirm email**
    （账号用的是「用户名@cfc.local」这种虚拟邮箱，收不到信，所以必须关）
 4. Vercel → `Settings` → `Environment Variables`（勾选 Production）：
@@ -68,6 +69,22 @@ npm run lint       # 代码检查
 5. 两台设备同时进入时按进入时间决胜，只会产生一个房主
 6. 房主持续广播「我在玩」，另一台设备什么时候打开页面都能看到底部「一起玩」入口，点一下直接加入
 7. 房主退出后，另一台设备退出该玩法再进一次即可接手当房主（会重新开局）
+
+### 手机端「初始化小屋失败」/ 一直显示「正在初始化小屋…」
+
+新版把「初始化小屋」改成了**纯本地操作**：登录成功就直接拿账号 ID 当小屋 ID，
+不查表、不建屋、不等网络，所以这一步已经不可能失败。若手机上仍然看到旧提示：
+
+1. 打开 ☁️ 看最底部的「诊断」行有没有 **版本 2**。没有 → 手机加载的还是旧构建：
+   去 Vercel 重新部署（改过环境变量必须 Redeploy），再强制刷新页面。
+2. 面板里「题库同步：失败」会直接给出中文原因，点「重试」可重新拉取。
+   常见原因是 `space_data` 表缺失、旧外键未解除、RLS 策略不全 → 执行 `supabase/fix-cloud.sql`
+   （末尾的 `notify pgrst, 'reload schema'` 会刷新 PostgREST 缓存）。
+3. **题库同步失败不影响联机**：房间 ID = 账号 ID + 玩法，两台设备必然同一间。
+
+旧版会卡住的四条路径都已移除：`spaces(id,name,invite_code)` 嵌套查询依赖 PostgREST
+外键关系缓存、两台设备同时首次建屋撞唯一索引、非 HTTPS 页面里 `crypto.randomUUID()`
+不可用导致非法 uuid、`onAuthStateChange` 回调没 catch 把数据库错误静默吞掉。
 
 ### 内置测试账号
 

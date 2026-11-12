@@ -13,7 +13,10 @@ interface CloudPanelProps {
   transportKind: TransportKind;
   onEnterRoom: (room: { roomId: string; mode: OnlineModeKey }, isHost: boolean) => void;
   syncStatus: string;
+  syncError?: string | null;
   lastSyncedAt: string | null;
+  onRetrySync?: () => void;
+  supabaseHost?: string | null;
 }
 
 export function CloudPanel({
@@ -23,7 +26,10 @@ export function CloudPanel({
   transportKind,
   onEnterRoom,
   syncStatus,
-  lastSyncedAt
+  syncError,
+  lastSyncedAt,
+  onRetrySync,
+  supabaseHost
 }: CloudPanelProps) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
@@ -172,15 +178,40 @@ export function CloudPanel({
                 )}
               </div>
               <div className="mt-1 text-[10px] text-gray-500">
-                {cloud.space ? `已自动创建小屋「${cloud.space.name}」` : '正在初始化小屋…'}
+                {cloud.space
+                  ? `小屋已就绪「${cloud.space.name}」· ID ${cloud.space.id.slice(0, 8)}`
+                  : cloud.loading ? '正在读取登录状态…' : '小屋未就绪'}
               </div>
             </div>
 
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-[10px] text-gray-500">
-              题库同步：
-              {syncStatus === 'error' ? '失败' : syncStatus === 'pushing' ? '上传中…' : syncStatus === 'pulling' ? '拉取中…' : '已同步'}
-              {lastSyncedAt && <span className="ml-1">· {new Date(lastSyncedAt).toLocaleTimeString()}</span>}
-              <span className="ml-1">· 通道 {transportKind === 'supabase' ? 'Supabase' : '本地'}</span>
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  题库同步：
+                  {syncStatus === 'error' ? '失败' : syncStatus === 'pushing' ? '上传中…' : syncStatus === 'pulling' ? '拉取中…' : '已同步'}
+                  {lastSyncedAt && <span className="ml-1">· {new Date(lastSyncedAt).toLocaleTimeString()}</span>}
+                  <span className="ml-1">· 通道 {transportKind === 'supabase' ? 'Supabase' : '本地'}</span>
+                </span>
+                {onRetrySync && (
+                  <button
+                    type="button"
+                    onClick={onRetrySync}
+                    className="ios-btn shrink-0 rounded-full bg-white/10 px-2 py-1 text-[10px] font-bold text-[#64D2FF]"
+                  >
+                    重试
+                  </button>
+                )}
+              </div>
+              {syncError && (
+                <div className="mt-1.5 break-all leading-relaxed text-[#FF7A96]">{syncError}</div>
+              )}
+              <div className="mt-1.5 leading-relaxed text-gray-600">
+                数据库只影响题库同步，联机对战不依赖任何表。
+              </div>
+            </div>
+
+            <div className="px-1 text-[9px] leading-relaxed text-gray-600">
+              诊断 · 账号 {cloud.user?.id?.slice(0, 8) ?? '—'} · 服务 {supabaseHost ?? '未配置'} · 版本 2
             </div>
 
             <div className="space-y-2">

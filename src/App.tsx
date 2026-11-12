@@ -339,8 +339,17 @@ function App() {
     spaceId: cloud.space?.id ?? null,
     themes: state.themes,
     onRemote: replaceThemes,
-    enabled: cloudConfigured && !!cloud.space
+    enabled: cloudConfigured && !!cloud.space,
+    retryKey: cloud.syncNonce
   });
+
+  const supabaseHost = useMemo(() => {
+    try {
+      return new URL((import.meta.env.VITE_SUPABASE_URL as string | undefined) ?? '').hostname || null;
+    } catch {
+      return null;
+    }
+  }, []);
 
   /** 联机抽卡的题库：优先用双方选中的任务包，没选时退回到全部抽卡主题，保证一定有卡可抽。 */
   const onlineCardPool = useMemo<OnlineCard[]>(() => {
@@ -854,6 +863,9 @@ function App() {
           );
         }}
         syncStatus={cloudSync.status}
+        syncError={cloudSync.error}
+        onRetrySync={cloud.retrySync}
+        supabaseHost={supabaseHost}
         lastSyncedAt={cloudSync.lastSyncedAt}
       />
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from './client';
+import { friendlyAuthError } from './useCloud';
 import { Theme } from '../types';
 
 export interface CloudSyncState {
@@ -13,14 +14,16 @@ const pushKey = (spaceId: string) => `cfc:themes:push:${spaceId}`;
 /**
  * 题库云同步：登录后拉取一次；本地改动防抖 2.5s 推送。
  * 冲突策略为「后写覆盖」，因此约定同一时间只在一台设备上编辑题库。
+ * 这里的所有失败都只影响题库，不会阻塞联机。
  */
 export function useCloudSync(input: {
   spaceId: string | null;
   themes: Theme[];
   onRemote: (themes: Theme[]) => void;
   enabled: boolean;
+  retryKey?: number;
 }): CloudSyncState {
-  const { spaceId, themes, onRemote, enabled } = input;
+  const { spaceId, themes, onRemote, enabled, retryKey = 0 } = input;
   const themesRef = useRef(themes);
   const skipNextPush = useRef(true);
   const [status, setStatus] = useState<CloudSyncState['status']>('idle');
@@ -33,6 +36,7 @@ export function useCloudSync(input: {
     if (!enabled || !spaceId || !supabase) return;
     let cancelled = false;
     setStatus('pulling');
+    setError(null);
 
     (async () => {
       const { data, error: fetchError } = await supabase
@@ -43,7 +47,7 @@ export function useCloudSync(input: {
 
       if (cancelled) return;
       if (fetchError) {
-        setError(fetchError.message);
+        setError(friendlyAuthError(fetchError.message));
         setStatus('error');
         return;
       }
@@ -61,11 +65,18 @@ export function useCloudSync(input: {
       } else {
         // 云端还没有数据：把本地题库推上去作为基线
         const now = new Date().toISOString();
-        await supabase.from('space_data').upsert({
+        const { error: upsertError } = await supabase.from('space_data').upsert({
           space_id: spaceId,
           themes: themesRef.current,
           updated_at: now
         });
+        if (cancelled) return;
+        if (upsertError) {
+          // 以前这里吞掉了错误并假装成功，手机上完全看不出题库没同步
+          setError(friendlyAuthError(upsertError.message));
+          setStatus('error');
+          return;
+        }
         window.localStorage.setItem(pushKey(spaceId), String(Date.parse(now)));
         setLastSyncedAt(now);
         skipNextPush.current = false;
@@ -77,7 +88,7 @@ export function useCloudSync(input: {
     return () => {
       cancelled = true;
     };
-  }, [enabled, onRemote, spaceId]);
+  }, [enabled, onRemote, spaceId, retryKey]);
 
   useEffect(() => {
     if (!enabled || !spaceId || !supabase) return;
@@ -98,17 +109,18 @@ export function useCloudSync(input: {
         updated_at: now
       });
       if (upsertError) {
-        setError(upsertError.message);
+        setError(friendlyAuthError(upsertError.message));
         setStatus('error');
         return;
       }
+      setError(null);
       window.localStorage.setItem(pushKey(spaceId), String(Date.parse(now)));
       setLastSyncedAt(now);
       setStatus('idle');
     }, 2500);
 
     return () => window.clearTimeout(timer);
-  }, [enabled, spaceId, themes]);
+  }, [enabled, spaceId, themes, retryKey]);
 
   return { status, lastSyncedAt, error };
 }

@@ -144,3 +144,16 @@ create policy rooms_select_member on public.rooms
 
 -- 一个账号只能有一间小屋，避免两台设备同时首次登录各建一间
 create unique index if not exists spaces_one_per_creator on public.spaces(created_by);
+
+-- ---------- 新版简化：小屋 ID = 账号 ID ----------
+-- 前端只用 space_data 存题库，space_id 直接是 auth.uid()，
+-- 因此必须解掉旧外键，并给「本人那一行」加一条独立的 RLS 策略。
+-- spaces / space_members / rooms 三张表保留仅为兼容旧数据，联机已完全不依赖它们。
+alter table public.space_data drop constraint if exists space_data_space_id_fkey;
+
+drop policy if exists data_owner_all on public.space_data;
+create policy data_owner_all on public.space_data
+  for all using (space_id = auth.uid())
+  with check (space_id = auth.uid());
+
+notify pgrst, 'reload schema';
