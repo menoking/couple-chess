@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Cloud, Github, Moon, Sun } from 'lucide-react';
 import { useGameState } from './hooks/useGameState';
 import { GameMode, MineTaskChoice, TaskEventData, ThemeMode } from './types';
@@ -44,7 +44,8 @@ import { OnlinePlayView, OnlineRoomInfo } from './cloud/OnlinePlayView';
 import { cloudConfigured } from './cloud/client';
 import { enterOnlineRoom, leaveOnlineRoom, announceRoom, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
 import { ONLINE_MODES, OnlineModeKey } from './cloud/games/adapters';
-import { Seat } from './cloud/types';
+import { OnlineCard, Seat } from './cloud/types';
+import { collectThemeTasks } from './utils/modeKit';
 
 /** 需要双方选择“抽卡”类主题的玩法。 */
 const CARD_THEME_MODES = new Set<GameMode>([
@@ -275,6 +276,20 @@ function App() {
     onRemote: replaceThemes,
     enabled: cloudConfigured && !!cloud.space
   });
+
+  /** 联机抽卡的题库：优先用双方选中的任务包，没选时退回到全部抽卡主题，保证一定有卡可抽。 */
+  const onlineCardPool = useMemo<OnlineCard[]>(() => {
+    const selected = collectThemeTasks(state.players, state.themes).map(entry => ({
+      task: entry.task.text,
+      themeName: entry.themeName
+    }));
+    const pool = selected.length > 0
+      ? selected
+      : state.themes
+          .filter(theme => theme.modes.includes('card'))
+          .flatMap(theme => theme.tasks.map(task => ({ task: task.text, themeName: theme.name })));
+    return pool.filter(item => typeof item.task === 'string' && item.task.trim().length > 0);
+  }, [state.players, state.themes]);
 
   const handlePoseDone = () => {
     setPoseImageSrc(null);
@@ -791,6 +806,8 @@ function App() {
             name: player.name,
             color: player.color
           }))}
+          localPlayers={state.players}
+          cardPool={onlineCardPool}
           kind={cloudConfigured ? 'supabase' : 'local'}
           onExit={() => {
             if (onlineSession) void leaveOnlineRoom(onlineSession.room.roomId);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { GameAdapter, RoomPlayer, Seat } from './types';
+import { GameAdapter, OnlineCard, RoomPlayer, Seat } from './types';
 import { RoomTransport, TransportKind, createTransport } from './transport';
 
 export interface UseRoomInput<S, A, V> {
@@ -8,6 +8,8 @@ export interface UseRoomInput<S, A, V> {
   mySeat: Seat;
   hostSeat: Seat;
   players: RoomPlayer[];
+  /** 可选任务卡池，只有房主设备的生效，写进初始 state 后双方共用 */
+  cardPool?: OnlineCard[];
   kind: TransportKind;
   enabled: boolean;
 }
@@ -26,7 +28,7 @@ export interface UseRoomResult<V, A> {
  * 这样私密信息（如骰子）不会广播给对手。
  */
 export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V, A> {
-  const { adapter, roomId, mySeat, hostSeat, players, kind, enabled } = input;
+  const { adapter, roomId, mySeat, hostSeat, players, cardPool, kind, enabled } = input;
 
   const [status, setStatus] = useState<UseRoomResult<V, A>['status']>('idle');
   const [view, setView] = useState<V | null>(null);
@@ -38,6 +40,9 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
   // players 每次渲染都是新数组，用 ref 避免它触发重连
   const playersRef = useRef(players);
   playersRef.current = players;
+  // 题库可能随云同步变化，用 ref 读取，避免触发重连导致对局重置
+  const cardPoolRef = useRef(cardPool);
+  cardPoolRef.current = cardPool;
   const isHost = mySeat === hostSeat;
 
   const publish = useCallback(
@@ -111,7 +116,7 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
         await transport.connect();
         if (cancelled) return;
         if (isHost) {
-          const initial = adapter.createInitial(playersRef.current);
+          const initial = adapter.createInitial(playersRef.current, cardPoolRef.current);
           stateRef.current = initial;
           publish(initial);
           setStatus('playing');

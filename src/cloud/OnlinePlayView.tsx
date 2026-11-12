@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
-import { ArrowLeft, CircleDot, Dices, PawPrint, Wifi, WifiOff } from 'lucide-react';
-import { Seat } from './types';
+import { createPortal } from 'react-dom';
+import { ArrowLeft, CircleDot, Dices, PawPrint, Sparkles, Wifi, WifiOff } from 'lucide-react';
+import { Player, TaskEventData } from '../types';
+import { OnlineCard, Seat } from './types';
 import { useRoom } from './useRoom';
 import { TransportKind } from './transport';
 import {
@@ -12,12 +14,14 @@ import {
   JungleAction,
   JungleState,
   OnlineModeKey,
+  OnlinePendingCard,
   bluffAdapter,
   goAdapter,
   jungleAdapter
 } from './games/adapters';
 import { GO_SIZE } from '../utils/go';
 import { JUNGLE_COLS, PIECE_NAMES, cellMeta, getLegalMoves } from '../utils/jungle';
+import { TaskCardModal } from '../components/modals/TaskCardModal';
 
 export interface OnlineRoomInfo {
   roomId: string;
@@ -32,9 +36,13 @@ export interface OnlineSeatPlayer {
 
 interface OnlinePlayViewProps {
   room: OnlineRoomInfo;
-  /** 房主由 rooms 表的 host_device 决定：房主固定坐 0，另一台坐 1 */
+  /** 房主由 Presence 选出：房主固定坐 0，另一台坐 1 */
   isHost: boolean;
   players: OnlineSeatPlayer[];
+  /** 本地玩家信息，用于任务卡上显示「抽卡 · A → 执行 · B」 */
+  localPlayers: Player[];
+  /** 任务卡池，只有房主设备的值会被写进对局状态，双方看到同一张卡 */
+  cardPool: OnlineCard[];
   kind: TransportKind;
   onExit: () => void;
 }
@@ -49,13 +57,84 @@ const MODE_META: Record<OnlineModeKey, { label: string; icon: typeof Dices }> = 
   jungle: { label: '斗兽棋', icon: PawPrint }
 };
 
+const MODE_CARD_RULE: Record<OnlineModeKey, string> = {
+  bluff: '开牌判负 · 赢家抽卡、输家执行',
+  go: '每提满 3 子抽 1 张（你抽、对方执行）；终局胜方再抽 2 张，全由败方执行',
+  jungle: '每吃掉对方一子抽 1 张（你抽、对方执行）；终局胜方再抽 1 张'
+};
+
+function buildOnlineTaskEvent(pending: OnlinePendingCard, queueLength: number): TaskEventData {
+  return {
+    type: 'card',
+    initiatorPlayerId: pending.drawerSeat,
+    executorPlayerId: pending.executorSeat,
+    title: pending.reason,
+    subtitle: `任务来自「${pending.card.themeName}」${queueLength > 1 ? ` · 后面还有 ${queueLength - 1} 张` : ''}`,
+    icon: 'sparkles',
+    color: pending.executorSeat === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
+    task: pending.card.task,
+    taskSourceId: 'online',
+    moveDelta: 0
+  };
+}
+
+/** 两台设备同时弹同一张卡：执行人负责确认，另一方只读等待。 */
+function OnlineCardGate({
+  pending,
+  players,
+  mySeat,
+  onAck
+}: {
+  pending: OnlinePendingCard[] | undefined;
+  players: Player[];
+  mySeat: Seat;
+  onAck: () => void;
+}) {
+  const first = pending?.[0] ?? null;
+  const taskData = useMemo(
+    () => (first ? buildOnlineTaskEvent(first, pending?.length ?? 1) : null),
+    [first, pending?.length]
+  );
+  if (!first || !taskData) return null;
+
+  const isExecutor = first.executorSeat === mySeat;
+  const executorName = players.find(player => player.id === first.executorSeat)?.name ?? '对方';
+  const drawerName = players.find(player => player.id === first.drawerSeat)?.name ?? '对方';
+
+  return createPortal(
+    <div className="fixed inset-0 z-[140]">
+      <TaskCardModal
+        players={players}
+        isOpen
+        taskData={taskData}
+        readOnly={!isExecutor}
+        readOnlyNote={`${drawerName} 抽的卡 · 等 ${executorName} 在自己手机上确认后自动关闭${pending && pending.length > 1 ? `（共 ${pending.length} 张）` : ''}`}
+        onAccept={onAck}
+        onReject={onAck}
+        onClose={onAck}
+      />
+    </div>,
+    document.body
+  );
+}
+
+function CardRuleHint({ mode }: { mode: OnlineModeKey }) {
+  return (
+    <div className="flex items-start gap-2 rounded-2xl border border-[#FFD60A]/20 bg-[#FFD60A]/[0.06] px-3 py-2.5 text-[10px] font-bold leading-relaxed text-[#FFD60A]">
+      <Sparkles size={13} className="mt-0.5 shrink-0" />
+      <span>{MODE_CARD_RULE[mode]}</span>
+    </div>
+  );
+}
+
 function StatusBar({
   mode,
   status,
   presence,
   turnSeat,
   mySeat,
-  players
+  players,
+  cardPending
 }: {
   mode: OnlineModeKey;
   status: string;
@@ -63,6 +142,7 @@ function StatusBar({
   turnSeat: Seat | null;
   mySeat: Seat;
   players: OnlineSeatPlayer[];
+  cardPending: boolean;
 }) {
   const meta = MODE_META[mode];
   const Icon = meta.icon;
@@ -82,11 +162,13 @@ function StatusBar({
         </span>
       </div>
       <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-2.5 text-sm font-bold text-white">
-        {status !== 'playing'
-          ? (status === 'error' ? '连接失败' : '正在同步…')
-          : turnPlayer
-            ? `${turnPlayer.name} 的回合`
-            : '对局进行中'}
+        {cardPending
+          ? '抽卡中 · 等执行方确认'
+          : status !== 'playing'
+            ? (status === 'error' ? '连接失败' : '正在同步…')
+            : turnPlayer
+              ? `${turnPlayer.name} 的回合`
+              : '对局进行中'}
       </div>
     </div>
   );
@@ -99,12 +181,14 @@ function GoOnline({ props }: { props: SeatProps }) {
     mySeat: props.mySeat,
     hostSeat: 0,
     players: props.players,
+    cardPool: props.cardPool,
     kind: props.kind,
     enabled: true
   });
 
   const state = room.view;
-  const myTurn = state?.turn === props.mySeat && state?.winner === null;
+  const pending = state?.pending ?? [];
+  const myTurn = state?.turn === props.mySeat && state?.winner === null && pending.length === 0;
 
   return (
     <div className="space-y-3">
@@ -115,7 +199,9 @@ function GoOnline({ props }: { props: SeatProps }) {
         turnSeat={state?.turn ?? null}
         mySeat={props.mySeat}
         players={props.players}
+        cardPending={pending.length > 0}
       />
+      <CardRuleHint mode="go" />
 
       {state && (
         <>
@@ -161,7 +247,7 @@ function GoOnline({ props }: { props: SeatProps }) {
             </button>
             <button
               type="button"
-              disabled={state.winner !== null}
+              disabled={state.winner !== null || pending.length > 0}
               onClick={() => room.dispatch({ type: 'resign' })}
               className="ios-btn h-11 flex-1 rounded-full bg-[#3A3A3C] text-xs font-bold text-[#FF453A] disabled:opacity-30"
             >
@@ -177,6 +263,13 @@ function GoOnline({ props }: { props: SeatProps }) {
         </>
       )}
       <div className="text-[10px] text-gray-600">棋盘尺寸 {GO_SIZE}×{GO_SIZE}</div>
+
+      <OnlineCardGate
+        pending={state?.pending}
+        players={props.localPlayers}
+        mySeat={props.mySeat}
+        onAck={() => room.dispatch({ type: 'ackCard' })}
+      />
     </div>
   );
 }
@@ -188,21 +281,23 @@ function JungleOnline({ props }: { props: SeatProps }) {
     mySeat: props.mySeat,
     hostSeat: 0,
     players: props.players,
+    cardPool: props.cardPool,
     kind: props.kind,
     enabled: true
   });
 
   const state = room.view;
   const [selected, setSelected] = useState<number | null>(null);
-  const myTurn = state?.turn === props.mySeat && state?.winner === null;
+  const pending = state?.pending ?? [];
+  const myTurn = state?.turn === props.mySeat && state?.winner === null && pending.length === 0;
 
   const legal = useMemo(() => {
-    if (!state || selected === null) return [];
+    if (!state || selected === null || pending.length > 0) return [];
     return getLegalMoves(state.board, selected);
-  }, [state, selected]);
+  }, [state, selected, pending.length]);
 
   const handle = (index: number) => {
-    if (!state || !myTurn) return;
+    if (!state || !myTurn || pending.length > 0) return;
     const piece = state.board[index];
     if (piece && piece.owner === props.mySeat) {
       setSelected(prev => (prev === index ? null : index));
@@ -223,7 +318,9 @@ function JungleOnline({ props }: { props: SeatProps }) {
         turnSeat={state?.turn ?? null}
         mySeat={props.mySeat}
         players={props.players}
+        cardPending={pending.length > 0}
       />
+      <CardRuleHint mode="jungle" />
 
       {state && (
         <>
@@ -242,6 +339,7 @@ function JungleOnline({ props }: { props: SeatProps }) {
                   key={index}
                   type="button"
                   onClick={() => handle(index)}
+                  disabled={pending.length > 0}
                   className={`jungle-cell relative flex aspect-square items-center justify-center border-l border-t border-white/[0.06] ${
                     meta.water ? 'bg-[#0A84FF]/15' : meta.trap ? 'bg-[#FF9F0A]/12' : meta.den ? 'bg-[#FFD60A]/15' : 'bg-white/[0.02]'
                   }`}
@@ -268,7 +366,7 @@ function JungleOnline({ props }: { props: SeatProps }) {
 
           <button
             type="button"
-            disabled={state.winner !== null}
+            disabled={state.winner !== null || pending.length > 0}
             onClick={() => room.dispatch({ type: 'resign' })}
             className="ios-btn h-11 w-full rounded-full bg-[#3A3A3C] text-xs font-bold text-[#FF453A] disabled:opacity-30"
           >
@@ -283,6 +381,13 @@ function JungleOnline({ props }: { props: SeatProps }) {
         </>
       )}
       <div className="text-[10px] text-gray-600">棋盘 {JUNGLE_COLS} 列 × 9 行</div>
+
+      <OnlineCardGate
+        pending={state?.pending}
+        players={props.localPlayers}
+        mySeat={props.mySeat}
+        onAck={() => room.dispatch({ type: 'ackCard' })}
+      />
     </div>
   );
 }
@@ -294,6 +399,7 @@ function BluffOnline({ props }: { props: SeatProps }) {
     mySeat: props.mySeat,
     hostSeat: 0,
     players: props.players,
+    cardPool: props.cardPool,
     kind: props.kind,
     enabled: true
   });
@@ -301,7 +407,8 @@ function BluffOnline({ props }: { props: SeatProps }) {
   const view = room.view;
   const [qty, setQty] = useState(2);
   const [face, setFace] = useState(1);
-  const myTurn = view?.turn === props.mySeat && view?.phase === 'bid';
+  const pending = view?.pending ?? [];
+  const myTurn = view?.turn === props.mySeat && view?.phase === 'bid' && pending.length === 0;
 
   const legal = useMemo(() => {
     if (!view?.bid) return true;
@@ -317,7 +424,9 @@ function BluffOnline({ props }: { props: SeatProps }) {
         turnSeat={view?.turn ?? null}
         mySeat={props.mySeat}
         players={props.players}
+        cardPending={pending.length > 0}
       />
+      <CardRuleHint mode="bluff" />
 
       {view && (
         <>
@@ -397,13 +506,14 @@ function BluffOnline({ props }: { props: SeatProps }) {
                   实际 {view.reveal.count} 个 · {view.reveal.loser === props.mySeat ? '你受罚' : '对方受罚'}
                 </div>
                 <div className="mt-1 text-[10px] text-gray-500">
-                  {view.reveal.loser === props.mySeat ? '抽一张任务卡自己执行' : '对方抽一张任务卡'}
+                  赢家抽一张任务卡，输家执行
                 </div>
               </div>
               <button
                 type="button"
+                disabled={pending.length > 0}
                 onClick={() => room.dispatch({ type: 'next' })}
-                className="ios-btn h-12 w-full rounded-full bg-white text-sm font-bold text-black"
+                className="ios-btn h-12 w-full rounded-full bg-white text-sm font-bold text-black disabled:opacity-30"
               >
                 下一轮
               </button>
@@ -411,6 +521,13 @@ function BluffOnline({ props }: { props: SeatProps }) {
           )}
         </>
       )}
+
+      <OnlineCardGate
+        pending={view?.pending}
+        players={props.localPlayers}
+        mySeat={props.mySeat}
+        onAck={() => room.dispatch({ type: 'ackCard' })}
+      />
     </div>
   );
 }
@@ -438,6 +555,12 @@ export function OnlinePlayView(props: OnlinePlayViewProps) {
             <meta.icon size={22} />
           </div>
         </header>
+
+        {props.cardPool.length === 0 && (
+          <div className="mx-5 mb-1 rounded-2xl border border-[#FF9F0A]/30 bg-[#FF9F0A]/10 px-3 py-2 text-center text-[10px] font-bold text-[#FF9F0A]">
+            还没选任务包 · 请回首页为双方选择支持抽卡的主题
+          </div>
+        )}
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-3 no-scrollbar">
           {props.room.mode === 'go' && <GoOnline props={{ ...props, mySeat }} />}

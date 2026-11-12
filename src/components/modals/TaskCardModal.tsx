@@ -10,6 +10,9 @@ interface TaskCardModalProps {
   onClose?: () => void;
   /** 传入双方信息后，卡片会直接显示玩家名字而不是「男方/女方」 */
   players?: Player[];
+  /** 联机时只有执行人能确认；非执行人只看不操作 */
+  readOnly?: boolean;
+  readOnlyNote?: string;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -21,7 +24,16 @@ const iconMap: Record<string, React.ReactNode> = {
   sparkles: <Sparkles size={40} />
 };
 
-export function TaskCardModal({ isOpen, taskData, onAccept, onReject, onClose, players }: TaskCardModalProps) {
+export function TaskCardModal({
+  isOpen,
+  taskData,
+  onAccept,
+  onReject,
+  onClose,
+  players,
+  readOnly = false,
+  readOnlyNote
+}: TaskCardModalProps) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [visibleTaskData, setVisibleTaskData] = useState<TaskEventData | null>(null);
 
@@ -93,7 +105,7 @@ export function TaskCardModal({ isOpen, taskData, onAccept, onReject, onClose, p
       <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
 
       <div className="w-full max-w-sm">
-        {onClose && (
+        {onClose && !readOnly && (
           <div className="mb-2 flex justify-end">
             <button
               type="button"
@@ -149,20 +161,26 @@ export function TaskCardModal({ isOpen, taskData, onAccept, onReject, onClose, p
               </div>
             </div>
 
-            <div className="w-full flex gap-3 mt-auto">
-              <button
-                className="flex-1 min-h-10 rounded-full bg-[#3A3A3C] text-[#FF453A] font-bold text-xs ios-btn border border-transparent hover:border-[#FF453A]/30"
-                onClick={onReject}
-              >
-                {rejectLabel}
-              </button>
-              <button
-                className="flex-1 min-h-10 rounded-full bg-white text-black font-bold text-xs ios-btn shadow-lg"
-                onClick={onAccept}
-              >
-                接受任务
-              </button>
-            </div>
+            {readOnly ? (
+              <div className="mt-auto w-full rounded-full border border-white/10 bg-white/[0.06] px-3 py-3 text-center text-[11px] font-bold leading-relaxed text-gray-300">
+                {readOnlyNote ?? '等待对方在自己的设备上确认，卡片会自动消失'}
+              </div>
+            ) : (
+              <div className="w-full flex gap-3 mt-auto">
+                <button
+                  className="flex-1 min-h-10 rounded-full bg-[#3A3A3C] text-[#FF453A] font-bold text-xs ios-btn border border-transparent hover:border-[#FF453A]/30"
+                  onClick={onReject}
+                >
+                  {rejectLabel}
+                </button>
+                <button
+                  className="flex-1 min-h-10 rounded-full bg-white text-black font-bold text-xs ios-btn shadow-lg"
+                  onClick={onAccept}
+                >
+                  接受任务
+                </button>
+              </div>
+            )}
           </div>
         </div>
         </div>
