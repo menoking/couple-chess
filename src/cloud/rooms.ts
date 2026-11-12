@@ -84,7 +84,8 @@ export function hostRoleOf(peers: RoomPresence[], myId: string, fallback: Role):
 export async function enterOnlineRoom(
   space: SpaceInfo,
   mode: GameMode,
-  myRole: Role
+  myRole: Role,
+  forceHost = false
 ): Promise<RoomTicket | null> {
   const client = supabase;
   if (!client) {
@@ -124,7 +125,8 @@ export async function enterOnlineRoom(
   await new Promise<void>(resolve => window.setTimeout(resolve, 1100));
 
   const peers = readPresence(channel);
-  const isHost = decideHost(peers, myId, at);
+  // forceHost：对方已离线时由本机接管，避免永远停在「正在连接房间」
+  const isHost = forceHost || decideHost(peers, myId, at);
   const hostRole = isHost ? myRole : hostRoleOf(peers, myId, myRole);
   diagLog('room:decided', {
     ms: Date.now() - at,

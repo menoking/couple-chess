@@ -44,7 +44,7 @@ import { OnlineStage } from './cloud/OnlineStage';
 import { cloudConfigured } from './cloud/client';
 import { enterOnlineRoom, leaveOnlineRoom, startRoomHeartbeat, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
 import type { Role, Seat } from './rules/types';
-import { resolveSeats, roleOfSeat } from './rules/identity';
+import { resolveSeats, roleOfSeat, seatOfRole } from './rules/identity';
 import { MODE_LABEL } from './rules/registry';
 import { setDiagnosticContext, diagLog } from './cloud/diagnostics';
 import { getDeviceId } from './cloud/device';
@@ -331,6 +331,31 @@ function App() {
     }
   };
 
+  /** 对方已离线时由本机接管房主，避免访客永远停在「正在连接房间」 */
+  const takeOverRoom = async () => {
+    if (!cloud.space || !onlineSession) return;
+    const mode = onlineSession.mode;
+    try {
+      const ticket = await enterOnlineRoom(cloud.space, mode, myRole, true);
+      if (!ticket) return;
+      const seat = seatOfRole(myRole);
+      setOnlineSession({
+        roomId: ticket.roomId,
+        mode: ticket.mode,
+        isHost: true,
+        mySeat: seat,
+        hostSeat: seat,
+        roles: [roleOfSeat(0), roleOfSeat(1)],
+        myRole,
+        hostRole: myRole
+      });
+      showOnlineNotice('已接管房间，你现在是房主', true);
+      diagLog('room:takeover', { roomId: ticket.roomId.slice(-8), seat });
+    } catch (error) {
+      showOnlineNotice(error instanceof Error ? error.message : '接管房间失败');
+    }
+  };
+
   // 房主持续广播房间，另一台设备什么时候打开页面都能发现
   useEffect(() => {
     if (!cloud.space || !onlineSession || !onlineSession.isHost) return;
@@ -536,6 +561,7 @@ function App() {
               onSelectMode={selectGameMode}
               onSelectTheme={handleSelectTheme}
               onStartGame={handleStartGame}
+              online={Boolean(cloud.space)}
             />
           </div>
 
@@ -921,6 +947,7 @@ function App() {
             void leaveOnlineRoom(onlineSession.roomId);
             setOnlineSession(null);
           }}
+          onTakeOver={() => void takeOverRoom()}
         />
       )}
     </div>

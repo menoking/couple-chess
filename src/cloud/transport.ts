@@ -82,7 +82,8 @@ class LocalRoomTransport implements RoomTransport {
     }
     const channel = new BroadcastChannel(`cfc-room:${this.roomId}:s${seat}`);
     channel.postMessage({ kind, data });
-    channel.close();
+    // postMessage 是异步派发，立即 close 可能把首包一起丢掉
+    window.setTimeout(() => channel.close(), 0);
   }
 
   close(): void {
@@ -99,6 +100,8 @@ class SupabaseRoomTransport implements RoomTransport {
   kind: TransportKind = 'supabase';
   private publicChannel: RealtimeChannel | null = null;
   private seatChannels = new Map<Seat, RealtimeChannel>();
+  /** 频道还没 SUBSCRIBED 时先排队，避免首包（往往就是房主的开局视图）直接丢掉 */
+  private pendingSeats = new Map<Seat, Array<{ kind: string; data: unknown }>>();
 
   constructor(
     private roomId: string,
@@ -131,12 +134,23 @@ class SupabaseRoomTransport implements RoomTransport {
       this.handlers.onPresence?.(seats.sort());
     });
 
-    await channel.subscribe(async status => {
-      if (status === 'SUBSCRIBED') {
-        await channel.track({ seat: this.mySeat });
-      }
-    });
     this.publicChannel = channel;
+    // subscribe() 本身不返回 Promise，必须等 SUBSCRIBED 回调，否则紧接着的 send 会丢
+    await new Promise<void>(resolve => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+      channel.subscribe(async status => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ seat: this.mySeat });
+          finish();
+        }
+      });
+      window.setTimeout(finish, 6000);
+    });
 
     // 自己的收件频道
     const mineTopic = `cfc-room-${this.roomId}-s${this.mySeat}`;
@@ -146,7 +160,18 @@ class SupabaseRoomTransport implements RoomTransport {
       if (!message) return;
       this.handlers.onSeat?.(message.kind ?? '', message.data);
     });
-    await mine.subscribe();
+    await new Promise<void>(resolve => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+      mine.subscribe(status => {
+        if (status === 'SUBSCRIBED') finish();
+      });
+      window.setTimeout(finish, 6000);
+    });
     this.seatChannels.set(this.mySeat, mine);
   }
 
@@ -157,7 +182,15 @@ class SupabaseRoomTransport implements RoomTransport {
     const channel = supabase.channel(`cfc-room-${this.roomId}-s${seat}`, {
       config: { broadcast: { self: true } }
     });
-    channel.subscribe();
+    this.pendingSeats.set(seat, []);
+    channel.subscribe(status => {
+      if (status !== 'SUBSCRIBED') return;
+      const queued = this.pendingSeats.get(seat) ?? [];
+      this.pendingSeats.delete(seat);
+      queued.forEach(item => {
+        channel.send({ type: 'broadcast', event: 'msg', payload: item });
+      });
+    });
     this.seatChannels.set(seat, channel);
     return channel;
   }
@@ -171,7 +204,15 @@ class SupabaseRoomTransport implements RoomTransport {
   }
 
   sendTo(seat: Seat, kind: string, data: unknown): void {
-    this.channelFor(seat)?.send({
+    const channel = this.channelFor(seat);
+    if (!channel) return;
+    // 频道刚创建、还没订阅完成：先入队，SUBSCRIBED 后自动补发
+    const queue = this.pendingSeats.get(seat);
+    if (queue) {
+      queue.push({ kind, data });
+      return;
+    }
+    channel.send({
       type: 'broadcast',
       event: 'msg',
       payload: { kind, data }
@@ -187,6 +228,7 @@ class SupabaseRoomTransport implements RoomTransport {
       if (this.publicChannel) client.removeChannel(this.publicChannel);
     }
     this.seatChannels.clear();
+    this.pendingSeats.clear();
     this.publicChannel = null;
   }
 }

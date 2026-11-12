@@ -177,6 +177,18 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
     return () => window.clearInterval(timer);
   }, [enabled, roomId, isHost, mySeat]);
 
+  // 房主定期把局面补发给对方：即使 request-view 和首包都丢了，也能在 2.5 秒内自愈
+  useEffect(() => {
+    if (!enabled || !roomId || !isHost) return;
+    const peer: Seat = mySeat === 0 ? 1 : 0;
+    const timer = window.setInterval(() => {
+      const current = authoritativeRef.current;
+      if (!current) return;
+      transportRef.current?.sendTo(peer, 'view', viewFor(current, peer));
+    }, 2500);
+    return () => window.clearInterval(timer);
+  }, [enabled, roomId, isHost, mySeat]);
+
   const dispatch = useCallback(
     (action: RoomAction) => {
       if (isHost) {

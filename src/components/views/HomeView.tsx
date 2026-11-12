@@ -11,6 +11,8 @@ interface HomeViewProps {
   onSelectMode: (mode: GameMode) => void;
   onSelectTheme: (playerId: number) => void;
   onStartGame: () => void;
+  /** 登录态：卡包改为进房后各自选择，首页不再提供旧入口 */
+  online?: boolean;
 }
 
 interface ModeDef {
@@ -151,10 +153,14 @@ export function HomeView({
   gameMode,
   onSelectMode,
   onSelectTheme,
-  onStartGame
+  onStartGame,
+  online = false
 }: HomeViewProps) {
-  const shouldShowThemeSelectors = !THEME_FREE_MODES.has(gameMode);
-  const themeHint = MODE_THEME_HINTS[gameMode] ?? '选择游戏模式和双方任务主题包';
+  // 登录态下卡包在房间大厅里各自选，首页不再显示旧的主题选择卡
+  const shouldShowThemeSelectors = !online && !THEME_FREE_MODES.has(gameMode);
+  const themeHint = online
+    ? '点开始自动进房，两台设备各自选卡包并锁定'
+    : MODE_THEME_HINTS[gameMode] ?? '选择游戏模式和双方任务主题包';
   const [activeCategory, setActiveCategory] = useState<string>(() => findCategoryOf(gameMode));
   const activeModes = CATEGORIES.find(category => category.id === activeCategory)?.modes ?? CATEGORIES[0].modes;
 
@@ -268,6 +274,15 @@ export function HomeView({
           </div>
         </div>
 
+        {online && (
+          <div className="rounded-2xl border border-[#30D158]/25 bg-[#30D158]/10 px-4 py-3">
+            <div className="text-xs font-bold text-white">双设备联机 · 进房后各自选卡包</div>
+            <div className="mt-1 text-[11px] leading-relaxed text-gray-400">
+              点开始会自动进入房间。两台设备各自勾选卡包并点「锁定我的卡包」，双方都锁定后自动合并成公共题库并开局。
+            </div>
+          </div>
+        )}
+
         {shouldShowThemeSelectors && (
         <div className="space-y-4">
           {[...players]
@@ -323,7 +338,7 @@ export function HomeView({
           onClick={onStartGame}
         >
           <span>
-            {MODE_START_LABELS[gameMode] ?? '开始游戏'}
+            {online ? '进房并开始' : MODE_START_LABELS[gameMode] ?? '开始游戏'}
           </span>
           <ChevronRight size={20} />
         </button>

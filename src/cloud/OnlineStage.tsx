@@ -69,6 +69,8 @@ export interface OnlineStageProps {
   themes: Theme[];
   kind: TransportKind;
   onExit: () => void;
+  /** 对方已离线时，本机接管当房主 */
+  onTakeOver: () => void;
 }
 
 const other = (seat: Seat): Seat => (seat === 0 ? 1 : 0);
@@ -227,7 +229,7 @@ function CardGate({
 }
 
 export function OnlineStage(props: OnlineStageProps) {
-  const { roomId, mode, mySeat, hostSeat, roles, myRole, themes, kind, onExit } = props;
+  const { roomId, mode, mySeat, hostSeat, roles, myRole, themes, kind, onExit, onTakeOver } = props;
   const isHost = mySeat === hostSeat;
 
   const createInitial = useCallback(
@@ -240,6 +242,17 @@ export function OnlineStage(props: OnlineStageProps) {
 
   const [selected, setSelected] = useState<string[]>([]);
   const [bombOpen, setBombOpen] = useState(false);
+  const [waitSeconds, setWaitSeconds] = useState(0);
+
+  // 访客长时间收不到房主视图时给出接管入口，避免永远停在「正在连接房间」
+  useEffect(() => {
+    if (snap || shared.status !== 'connecting') {
+      setWaitSeconds(value => (value === 0 ? value : 0));
+      return;
+    }
+    const timer = window.setInterval(() => setWaitSeconds(value => value + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, [snap, shared.status]);
 
   useEffect(() => {
     if (snap) setSelected(snap.picks[mySeat].themeIds);
@@ -280,7 +293,20 @@ export function OnlineStage(props: OnlineStageProps) {
         <Wifi size={32} className="animate-pulse text-[#64D2FF]" />
         <div className="text-base font-bold text-white">正在连接房间…</div>
         <div className="text-xs text-gray-500">房间 {roomId.slice(-8)} · 座位 {mySeat === 0 ? '男方' : '女方'} · {isHost ? '房主' : '访客'}</div>
+        <div className="text-[10px] text-gray-600">已等待 {waitSeconds} 秒{isHost ? ' · 正在建立房间' : ' · 等房主把局面发过来'}</div>
         <button type="button" onClick={shared.requestView} className="ios-btn rounded-full border border-white/10 px-4 py-2 text-xs text-gray-300">重试连接</button>
+        {!isHost && waitSeconds >= 8 && (
+          <div className="w-full max-w-[280px] rounded-2xl border border-[#FF9F0A]/30 bg-[#FF9F0A]/10 p-3">
+            <div className="text-[11px] leading-relaxed text-gray-300">对方可能已经离开这个房间，或者两台设备没有连上同一个服务。</div>
+            <button
+              type="button"
+              onClick={onTakeOver}
+              className="ios-btn mt-2 h-10 w-full rounded-full bg-[#FF9F0A] text-xs font-bold text-black"
+            >
+              我来开房（接管房间）
+            </button>
+          </div>
+        )}
         <button type="button" onClick={onExit} className="ios-btn text-xs text-gray-500">退出房间</button>
       </div>
     );
