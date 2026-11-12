@@ -22,9 +22,6 @@ import { JUNGLE_COLS, PIECE_NAMES, cellMeta, getLegalMoves } from '../utils/jung
 export interface OnlineRoomInfo {
   roomId: string;
   mode: OnlineModeKey;
-  hostSeat: Seat;
-  /** 发起邀请的设备（同一账号的两台手机靠它区分） */
-  fromDevice?: string;
 }
 
 export interface OnlineSeatPlayer {
@@ -35,10 +32,15 @@ export interface OnlineSeatPlayer {
 
 interface OnlinePlayViewProps {
   room: OnlineRoomInfo;
-  mySeat: Seat;
+  /** 房主由 rooms 表的 host_device 决定：房主固定坐 0，另一台坐 1 */
+  isHost: boolean;
   players: OnlineSeatPlayer[];
   kind: TransportKind;
   onExit: () => void;
+}
+
+interface SeatProps extends OnlinePlayViewProps {
+  mySeat: Seat;
 }
 
 const MODE_META: Record<OnlineModeKey, { label: string; icon: typeof Dices }> = {
@@ -90,12 +92,12 @@ function StatusBar({
   );
 }
 
-function GoOnline({ props }: { props: OnlinePlayViewProps }) {
+function GoOnline({ props }: { props: SeatProps }) {
   const room = useRoom<GoState, GoAction, GoState>({
     adapter: goAdapter,
     roomId: props.room.roomId,
     mySeat: props.mySeat,
-    hostSeat: props.room.hostSeat,
+    hostSeat: 0,
     players: props.players,
     kind: props.kind,
     enabled: true
@@ -179,12 +181,12 @@ function GoOnline({ props }: { props: OnlinePlayViewProps }) {
   );
 }
 
-function JungleOnline({ props }: { props: OnlinePlayViewProps }) {
+function JungleOnline({ props }: { props: SeatProps }) {
   const room = useRoom<JungleState, JungleAction, JungleState>({
     adapter: jungleAdapter,
     roomId: props.room.roomId,
     mySeat: props.mySeat,
-    hostSeat: props.room.hostSeat,
+    hostSeat: 0,
     players: props.players,
     kind: props.kind,
     enabled: true
@@ -285,12 +287,12 @@ function JungleOnline({ props }: { props: OnlinePlayViewProps }) {
   );
 }
 
-function BluffOnline({ props }: { props: OnlinePlayViewProps }) {
+function BluffOnline({ props }: { props: SeatProps }) {
   const room = useRoom<BluffState, BluffAction, BluffView>({
     adapter: bluffAdapter,
     roomId: props.room.roomId,
     mySeat: props.mySeat,
-    hostSeat: props.room.hostSeat,
+    hostSeat: 0,
     players: props.players,
     kind: props.kind,
     enabled: true
@@ -415,6 +417,7 @@ function BluffOnline({ props }: { props: OnlinePlayViewProps }) {
 
 export function OnlinePlayView(props: OnlinePlayViewProps) {
   const meta = MODE_META[props.room.mode];
+  const mySeat: Seat = props.isHost ? 0 : 1;
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-[120] flex flex-col bg-black">
@@ -426,7 +429,10 @@ export function OnlinePlayView(props: OnlinePlayViewProps) {
           </button>
           <div className="flex-1 text-center">
             <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#64D2FF]">Online</div>
-            <div className="mt-1 text-sm font-bold text-white">{meta.label}</div>
+            <div className="mt-1 text-sm font-bold text-white">
+              {meta.label}
+              <span className="ml-1.5 text-[10px] text-gray-500">{props.isHost ? '房主' : '访客'}</span>
+            </div>
           </div>
           <div className="flex h-10 w-10 items-center justify-center text-gray-500">
             <meta.icon size={22} />
@@ -434,9 +440,9 @@ export function OnlinePlayView(props: OnlinePlayViewProps) {
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-3 no-scrollbar">
-          {props.room.mode === 'go' && <GoOnline props={props} />}
-          {props.room.mode === 'jungle' && <JungleOnline props={props} />}
-          {props.room.mode === 'bluff' && <BluffOnline props={props} />}
+          {props.room.mode === 'go' && <GoOnline props={{ ...props, mySeat }} />}
+          {props.room.mode === 'jungle' && <JungleOnline props={{ ...props, mySeat }} />}
+          {props.room.mode === 'bluff' && <BluffOnline props={{ ...props, mySeat }} />}
         </main>
       </div>
     </div>

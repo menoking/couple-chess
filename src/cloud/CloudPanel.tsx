@@ -1,9 +1,8 @@
-import { useRef, useState } from 'react';
-import { Cloud, Copy, Download, LogOut, Upload, Users, X } from 'lucide-react';
+import { useState } from 'react';
+import { Cloud, Download, LogOut, Upload, X } from 'lucide-react';
 import { useCloud } from './useCloud';
 import { supabase } from './client';
 import { ONLINE_MODES, OnlineModeKey } from './games/adapters';
-import { OnlineRoomInfo } from './OnlinePlayView';
 import { TransportKind } from './transport';
 import { LocalBackup, exportLocalBackup, importLocalBackup, isSandbox } from '../utils/localStorage';
 import { getDeviceId } from './device';
@@ -13,37 +12,25 @@ interface CloudPanelProps {
   onClose: () => void;
   cloud: ReturnType<typeof useCloud>;
   transportKind: TransportKind;
-  onStartRoom: (room: OnlineRoomInfo) => void;
+  onEnterRoom: (room: { roomId: string; mode: OnlineModeKey }, isHost: boolean) => void;
   syncStatus: string;
   lastSyncedAt: string | null;
-  incoming: OnlineRoomInfo | null;
-  onAcceptInvite: (room: OnlineRoomInfo) => void;
-  onDismissInvite: () => void;
 }
-
-type AuthMode = 'signin' | 'signup';
 
 export function CloudPanel({
   open,
   onClose,
   cloud,
   transportKind,
-  onStartRoom,
+  onEnterRoom,
   syncStatus,
-  lastSyncedAt,
-  incoming,
-  onAcceptInvite,
-  onDismissInvite
+  lastSyncedAt
 }: CloudPanelProps) {
-  const [authMode, setAuthMode] = useState<AuthMode>('signin');
-  const [email, setEmail] = useState('');
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [name, setName] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [spaceName, setSpaceName] = useState('我们的小屋');
-  const [joinCode, setJoinCode] = useState('');
-  const channelRef = useRef<ReturnType<NonNullable<typeof supabase>['channel']> | null>(null);
-  const space = cloud.space;
 
   if (!open) return null;
 
@@ -59,43 +46,67 @@ export function CloudPanel({
     }
   };
 
-  const startRoom = (mode: OnlineModeKey) => {
-    if (!space) return;
-    const roomId = Math.random().toString(36).slice(2, 10).toUpperCase();
-    const hostSeat = space.seat;
-    const info: OnlineRoomInfo = { roomId, mode, hostSeat, fromDevice: getDeviceId() };
-    channelRef.current?.send({ type: 'broadcast', event: 'invite', payload: info });
-    onStartRoom(info);
+  /** 进房间：谁先创谁当房主，靠 rooms 表主键抢占（原子） */
+  const enterRoom = async (target: OnlineModeKey, forceHost = false) => {
+    const client = supabase;
+    if (!client || !cloud.space) return;
+    const roomId = `${cloud.space.id}:${target}`;
+    const device = getDeviceId();
+
+    const { error: insertError } = await client
+      .from('rooms')
+      .insert({ id: roomId, space_id: cloud.space.id, host_device: device });
+
+    if (insertError && insertError.code !== '23505') {
+      setNotice(insertError.message);
+      return;
+    }
+
+    if (forceHost) {
+      await client.from('rooms').update({ host_device: device, updated_at: new Date().toISOString() }).eq('id', roomId);
+    }
+
+    const { data } = await client.from('rooms').select('host_device').eq('id', roomId).maybeSingle();
+    const isHost = data?.host_device === device;
+    onEnterRoom({ roomId, mode: target }, isHost);
   };
 
-  const copyCode = async (code: string) => {
-    try {
-      await navigator.clipboard.writeText(code);
-      setNotice('邀请码已复制');
-    } catch {
-      setNotice(`邀请码：${code}`);
+  /** 对方退出后接管房主，避免卡在「等待对方」 */
+  const takeOverRooms = async () => {
+    const client = supabase;
+    if (!client || !cloud.space) return;
+    const device = getDeviceId();
+    for (const item of ONLINE_MODES) {
+      const roomId = `${cloud.space.id}:${item.key}`;
+      const { error } = await client
+        .from('rooms')
+        .upsert({ id: roomId, space_id: cloud.space.id, host_device: device, updated_at: new Date().toISOString() });
+      if (error) {
+        setNotice(error.message);
+        return;
+      }
     }
+    setNotice('已接管房主，重新进入玩法即可');
   };
+
 
   const doExport = () => {
-    const backup = exportLocalBackup();
-    const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(exportLocalBackup(), null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `couple-backup-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
-    setNotice('已导出备份文件');
+    setNotice('已导出备份');
   };
 
   const doImport = (file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
       try {
-        const backup = JSON.parse(String(reader.result)) as LocalBackup;
-        const count = importLocalBackup(backup);
-        setNotice(`已导入 ${count} 项数据，刷新后生效`);
+        const count = importLocalBackup(JSON.parse(String(reader.result)) as LocalBackup);
+        setNotice(`已导入 ${count} 项，刷新后生效`);
       } catch (error) {
         setNotice(error instanceof Error ? error.message : '导入失败');
       }
@@ -108,7 +119,7 @@ export function CloudPanel({
       <div className="max-h-[88vh] w-full max-w-[430px] overflow-y-auto rounded-t-3xl border-t border-white/10 bg-[#1C1C1E] p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] no-scrollbar">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2 text-base font-bold text-white">
-            <Cloud size={18} className="text-[#64D2FF]" /> 云同步与联机
+            <Cloud size={18} className="text-[#64D2FF]" /> 账号与联机
           </div>
           <button type="button" onClick={onClose} className="ios-btn flex h-8 w-8 items-center justify-center rounded-full bg-white/10 text-gray-300">
             <X size={15} />
@@ -117,21 +128,18 @@ export function CloudPanel({
 
         {isSandbox && (
           <div className="mb-3 rounded-xl border border-[#FF9F0A]/30 bg-[#FF9F0A]/10 px-3 py-2 text-[11px] font-bold text-[#FFB340]">
-            沙盒模式：当前数据与正式数据完全隔离（URL 带 ?sandbox=1）
+            沙盒模式：与正式数据完全隔离
           </div>
         )}
 
         {!cloud.configured && (
           <div className="space-y-3 text-[12px] leading-relaxed text-gray-400">
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-              <div className="mb-2 font-bold text-white">云服务未配置</div>
-              <div>1. 在 Supabase 新建项目，执行仓库里的 <code className="text-[#FFD60A]">supabase/schema.sql</code></div>
-              <div>2. 在 Vercel 环境变量里填 <code className="text-[#FFD60A]">VITE_SUPABASE_URL</code> 与 <code className="text-[#FFD60A]">VITE_SUPABASE_ANON_KEY</code></div>
-              <div>3. 重新部署后这里就能登录了</div>
+              <div className="mb-1 font-bold text-white">云服务未配置</div>
+              <div>在 Vercel 加环境变量 `VITE_SUPABASE_URL` 与 `VITE_SUPABASE_ANON_KEY`，然后重新部署即可。</div>
             </div>
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
-              <div className="mb-2 font-bold text-white">本地玩法不受影响</div>
-              <div>未配置时所有 24 个玩法照常可用，数据仍然只存在本机。</div>
+              未配置时 24 个本地玩法照常可用，数据只在这台设备上。
             </div>
           </div>
         )}
@@ -139,14 +147,13 @@ export function CloudPanel({
         {cloud.configured && !cloud.user && (
           <div className="space-y-3">
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-[11px] leading-relaxed text-gray-400">
-              用一个家庭账号登录，两台设备都登同一个号。题库、战绩会跟着账号走，换手机登录即可恢复。
+              用<b className="text-white">用户名 + 密码</b>即可，不需要邮箱。两台设备登录同一个用户名，就会自动进入同一间屋子。
             </div>
             <input
-              type="email"
-              value={email}
-              onChange={event => setEmail(event.target.value)}
-              placeholder="邮箱"
-              autoComplete="email"
+              value={name}
+              onChange={event => setName(event.target.value)}
+              placeholder="用户名（字母/数字）"
+              autoCapitalize="none"
               className="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder:text-gray-500"
             />
             <input
@@ -154,151 +161,93 @@ export function CloudPanel({
               value={password}
               onChange={event => setPassword(event.target.value)}
               placeholder="密码（至少 6 位）"
-              autoComplete="current-password"
               className="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white placeholder:text-gray-500"
             />
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled={busy || !email || password.length < 6}
+                disabled={busy || name.trim().length < 2 || password.length < 6}
                 onClick={() => run(async () => {
-                  if (authMode === 'signup') await cloud.signUp(email, password);
-                  else await cloud.signIn(email, password);
+                  if (mode === 'signup') await cloud.signUp(name, password);
+                  else await cloud.signIn(name, password);
                 })}
                 className="ios-btn h-12 flex-[2] rounded-full bg-white text-sm font-bold text-black disabled:opacity-30"
               >
-                {busy ? '处理中…' : authMode === 'signin' ? '登录' : '注册'}
+                {busy ? '处理中…' : mode === 'signin' ? '登录' : '注册'}
               </button>
               <button
                 type="button"
-                onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
+                onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')}
                 className="ios-btn h-12 flex-1 rounded-full bg-white/10 text-xs font-bold text-white"
               >
-                切到{authMode === 'signin' ? '注册' : '登录'}
+                切到{mode === 'signin' ? '注册' : '登录'}
               </button>
             </div>
-          </div>
-        )}
-
-        {cloud.configured && cloud.user && !space && (
-          <div className="space-y-3">
-            <div className="text-[11px] text-gray-500">已登录：{cloud.user.email}</div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-[11px] leading-relaxed text-gray-400">
-              创建一间「小屋」，把邀请码发给对方；对方登录后输入邀请码即完成配对。配对一次，以后不再需要输码。
-            </div>
-            <input
-              value={spaceName}
-              onChange={event => setSpaceName(event.target.value)}
-              placeholder="小屋名字"
-              className="w-full rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm text-white"
-            />
             <button
               type="button"
               disabled={busy}
-              onClick={() => run(async () => { await cloud.createSpace(spaceName); })}
-              className="ios-btn h-12 w-full rounded-full bg-white text-sm font-bold text-black disabled:opacity-30"
+              onClick={() => run(async () => { await cloud.signInTest(); })}
+              className="ios-btn h-11 w-full rounded-full border border-dashed border-white/20 text-xs font-bold text-[#64D2FF] disabled:opacity-30"
             >
-              创建小屋
-            </button>
-            <div className="flex gap-2">
-              <input
-                value={joinCode}
-                onChange={event => setJoinCode(event.target.value.toUpperCase())}
-                placeholder="输入邀请码"
-                maxLength={6}
-                className="flex-1 rounded-xl border border-white/10 bg-white/[0.06] px-4 py-3 text-sm tracking-[0.3em] text-white"
-              />
-              <button
-                type="button"
-                disabled={busy || joinCode.length < 4}
-                onClick={() => run(async () => { await cloud.joinSpace(joinCode); })}
-                className="ios-btn h-12 rounded-full bg-white/10 px-5 text-sm font-bold text-white disabled:opacity-30"
-              >
-                加入
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => void cloud.signOut()}
-              className="ios-btn flex h-10 w-full items-center justify-center gap-2 rounded-full text-xs font-bold text-gray-500"
-            >
-              <LogOut size={13} />退出登录
+              一键进入测试账号（test / test1234）
             </button>
           </div>
         )}
 
-        {cloud.configured && space && (
+        {cloud.configured && cloud.user && (
           <div className="space-y-3">
             <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-white">{space.name}</span>
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-bold text-gray-400">
-                  座位 {space.seat + 1}
-                </span>
+                <span className="text-sm font-bold text-white">@{cloud.username}</span>
+                {cloud.isTestAccount && (
+                  <span className="rounded-full bg-[#FFD60A]/20 px-2 py-0.5 text-[10px] font-bold text-[#FFD60A]">测试账号</span>
+                )}
               </div>
-              <div className="mt-3 flex items-center justify-between rounded-xl bg-black/30 px-3 py-2">
-                <span className="text-[10px] text-gray-500">邀请码（发给对方）</span>
-                <button type="button" onClick={() => void copyCode(space.inviteCode)} className="flex items-center gap-1.5 text-sm font-bold tracking-[0.2em] text-[#64D2FF]">
-                  {space.inviteCode}<Copy size={12} />
-                </button>
-              </div>
-              <div className="mt-2 flex items-center gap-1.5 text-[10px] text-gray-500">
-                <Users size={11} />小屋已就绪 · 两台设备登录同一账号即可联机
+              <div className="mt-1 text-[10px] text-gray-500">
+                {cloud.space ? `已自动创建小屋「${cloud.space.name}」` : '正在初始化小屋…'}
               </div>
             </div>
 
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4 text-[10px] text-gray-500">
-              题库同步：{syncStatus === 'error' ? '失败' : syncStatus === 'pushing' ? '上传中…' : syncStatus === 'pulling' ? '拉取中…' : '已同步'}
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-[10px] text-gray-500">
+              题库同步：
+              {syncStatus === 'error' ? '失败' : syncStatus === 'pushing' ? '上传中…' : syncStatus === 'pulling' ? '拉取中…' : '已同步'}
               {lastSyncedAt && <span className="ml-1">· {new Date(lastSyncedAt).toLocaleTimeString()}</span>}
-              <span className="ml-1">· 通道 {transportKind === 'supabase' ? 'Supabase' : '本地测试'}</span>
+              <span className="ml-1">· 通道 {transportKind === 'supabase' ? 'Supabase' : '本地'}</span>
             </div>
-
-            {incoming && (
-              <div className="rounded-xl border border-[#30D158]/30 bg-[#30D158]/10 p-4">
-                <div className="text-xs font-bold text-white">对方邀请你玩「{ONLINE_MODES.find(m => m.key === incoming.mode)?.label}」</div>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => onAcceptInvite(incoming)}
-                    className="ios-btn h-10 flex-1 rounded-full bg-white text-xs font-bold text-black"
-                  >
-                    接受
-                  </button>
-                  <button
-                    type="button"
-                    onClick={onDismissInvite}
-                    className="ios-btn h-10 flex-1 rounded-full bg-white/10 text-xs font-bold text-white"
-                  >
-                    忽略
-                  </button>
-                </div>
-              </div>
-            )}
 
             <div className="space-y-2">
-              <div className="text-[10px] font-bold text-gray-500">发起联机对局</div>
-              {ONLINE_MODES.map(mode => (
+              <div className="text-[10px] font-bold text-gray-500">进房间（两台设备选同一个玩法即可）</div>
+              {ONLINE_MODES.map(item => (
                 <button
-                  key={mode.key}
+                  key={item.key}
                   type="button"
-                  onClick={() => startRoom(mode.key)}
-                  className="ios-btn flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left"
+                  disabled={!cloud.space}
+                  onClick={() => void enterRoom(item.key)}
+                  className="ios-btn flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-left disabled:opacity-40"
                 >
                   <div>
-                    <div className="text-sm font-bold text-white">{mode.label}</div>
-                    <div className="text-[10px] text-gray-500">{mode.desc}</div>
+                    <div className="text-sm font-bold text-white">{item.label}</div>
+                    <div className="text-[10px] text-gray-500">{item.desc}</div>
                   </div>
-                  <span className="text-[10px] font-bold text-[#64D2FF]">邀请对方</span>
+                  <span className="text-[10px] font-bold text-[#64D2FF]">进入</span>
                 </button>
               ))}
+              <button
+                type="button"
+                disabled={!cloud.space}
+                onClick={() => void takeOverRooms()}
+                className="ios-btn h-9 w-full rounded-full text-[10px] font-bold text-gray-500 disabled:opacity-40"
+              >
+                把三个房间的房主都改成我（对方已关页面时用）
+              </button>
             </div>
 
             <div className="flex gap-2">
               <button type="button" onClick={doExport} className="ios-btn flex h-10 flex-1 items-center justify-center gap-1.5 rounded-full bg-white/10 text-[11px] font-bold text-white">
-                <Download size={12} />导出数据
+                <Download size={12} />导出
               </button>
               <label className="ios-btn flex h-10 flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-full bg-white/10 text-[11px] font-bold text-white">
-                <Upload size={12} />导入数据
+                <Upload size={12} />导入
                 <input
                   type="file"
                   accept="application/json"

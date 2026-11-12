@@ -40,7 +40,6 @@ import { AiImportModal } from './components/modals/AiImportModal';
 import { useCloud } from './cloud/useCloud';
 import { useCloudSync } from './cloud/useCloudSync';
 import { CloudPanel } from './cloud/CloudPanel';
-import { useSpaceInvite } from './cloud/useSpaceInvite';
 import { OnlinePlayView, OnlineRoomInfo } from './cloud/OnlinePlayView';
 import { cloudConfigured } from './cloud/client';
 import { Seat } from './cloud/types';
@@ -109,13 +108,7 @@ function App() {
 
   const [cloudOpen, setCloudOpen] = useState(false);
   const [onlineSession, setOnlineSession] = useState<{ room: OnlineRoomInfo; isHost: boolean } | null>(null);
-  const [pendingInvite, setPendingInvite] = useState<OnlineRoomInfo | null>(null);
   const cloud = useCloud();
-
-  useSpaceInvite(cloud.space, invite => {
-    setPendingInvite(invite);
-    setCloudOpen(true);
-  });
 
   const {
     state,
@@ -650,24 +643,15 @@ function App() {
         onClose={() => setCloudOpen(false)}
         cloud={cloud}
         transportKind={cloudConfigured ? 'supabase' : 'local'}
-        onStartRoom={room => { setOnlineSession({ room, isHost: true }); setCloudOpen(false); }}
+        onEnterRoom={(room, isHost) => { setOnlineSession({ room, isHost }); setCloudOpen(false); }}
         syncStatus={cloudSync.status}
         lastSyncedAt={cloudSync.lastSyncedAt}
-        incoming={pendingInvite}
-        onAcceptInvite={room => { setOnlineSession({ room, isHost: false }); setPendingInvite(null); setCloudOpen(false); }}
-        onDismissInvite={() => setPendingInvite(null)}
       />
 
       {onlineSession && cloud.space && (
         <OnlinePlayView
           room={onlineSession.room}
-          mySeat={
-            (onlineSession.isHost
-              ? onlineSession.room.hostSeat
-              : onlineSession.room.hostSeat === 0
-                ? 1
-                : 0) as Seat
-          }
+          isHost={onlineSession.isHost}
           players={state.players.map(player => ({
             seat: player.id as Seat,
             name: player.name,

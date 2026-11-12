@@ -120,3 +120,27 @@ grant execute on function public.join_space_by_code(text) to authenticated;
 
 -- Realtime 用不到表级订阅（对局状态走 broadcast），如需跨设备推送题库更新，
 -- 可在 Database → Replication 里把 space_data 加入 publication。
+
+-- ---------- 房间（一个「账号 + 玩法」固定一间，先进者为主机） ----------
+create table if not exists public.rooms (
+  id text primary key,
+  space_id uuid not null references public.spaces(id) on delete cascade,
+  host_device text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.rooms enable row level security;
+
+drop policy if exists rooms_all on public.rooms;
+create policy rooms_all on public.rooms
+  for all using (public.is_space_member(space_id))
+  with check (public.is_space_member(space_id));
+
+-- 让「插入若冲突则忽略」在策略下也能读到自己的行
+drop policy if exists rooms_select_member on public.rooms;
+create policy rooms_select_member on public.rooms
+  for select using (public.is_space_member(space_id));
+
+-- 一个账号只能有一间小屋，避免两台设备同时首次登录各建一间
+create unique index if not exists spaces_one_per_creator on public.spaces(created_by);
