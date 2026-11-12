@@ -45,6 +45,9 @@ import { cloudConfigured } from './cloud/client';
 import { enterOnlineRoom, leaveOnlineRoom, startRoomHeartbeat, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
 import { ONLINE_MODES, OnlineModeKey } from './cloud/games/adapters';
 import { OnlineCard, Seat } from './cloud/types';
+import { setDiagnosticContext, diagLog } from './cloud/diagnostics';
+import { getDeviceId } from './cloud/device';
+import { isSandbox } from './utils/localStorage';
 import { collectThemeTasks } from './utils/modeKit';
 
 /** 需要双方选择“抽卡”类主题的玩法。 */
@@ -258,18 +261,39 @@ function App() {
   const handleStartGame = () => {
     const onlineMode = ONLINE_MODES.find(item => item.key === state.gameMode);
     if (cloud.space && onlineMode) {
+      setDiagnosticContext({ lastStart: { at: Date.now(), branch: '弹联机选择', reason: '已登录且玩法支持联机' } });
+      diagLog('start:prompt', { gameMode: state.gameMode, spaceId: cloud.space.id.slice(0, 8) });
       setOnlinePrompt(onlineMode.key);
       return;
     }
+    const reason = !cloud.space
+      ? cloudConfigured ? '未登录或会话丢失（cloud.space 为空）' : '构建缺少 VITE_SUPABASE_*'
+      : `玩法 ${state.gameMode} 不支持联机`;
+    setDiagnosticContext({ lastStart: { at: Date.now(), branch: '直接同屏', reason } });
+    diagLog('start:local', {
+      gameMode: state.gameMode,
+      configured: cloud.configured,
+      user: Boolean(cloud.user),
+      space: Boolean(cloud.space),
+      reason
+    });
     startLocalGame();
   };
 
   const enterOnline = async (mode: OnlineModeKey) => {
-    if (!cloud.space) return;
+    if (!cloud.space) {
+      diagLog('enter:abort', { reason: 'cloud.space 为空' });
+      return;
+    }
+    diagLog('enter:begin', { mode, spaceId: cloud.space.id.slice(0, 8) });
     try {
       // 房间 ID 固定为「账号 + 玩法」，无论从首页还是云面板进入，都是同一间
       const ticket = await enterOnlineRoom(cloud.space, mode);
-      if (!ticket) return;
+      if (!ticket) {
+        diagLog('enter:null', { reason: 'enterOnlineRoom 返回 null' });
+        return;
+      }
+      diagLog('enter:ok', { roomId: ticket.roomId.slice(-8), isHost: ticket.isHost });
       setOnlineSession({ room: { roomId: ticket.roomId, mode: ticket.mode }, isHost: ticket.isHost });
       setOnlinePrompt(null);
       setRemoteRoom(null);
@@ -280,6 +304,7 @@ function App() {
         true
       );
     } catch (error) {
+      diagLog('enter:error', { message: error instanceof Error ? error.message : String(error) });
       showOnlineNotice(error instanceof Error ? error.message : '进房间失败');
     }
   };
@@ -350,6 +375,34 @@ function App() {
       return null;
     }
   }, []);
+
+  // 诊断层：只把当前状态写进快照，不参与任何业务判断
+  useEffect(() => {
+    setDiagnosticContext({
+      configured: cloud.configured,
+      host: supabaseHost,
+      userId: cloud.user?.id ?? null,
+      username: cloud.username,
+      spaceId: cloud.space?.id ?? null,
+      deviceId: getDeviceId(),
+      sandbox: isSandbox,
+      gameMode: state.gameMode,
+      onlineModeAvailable: ONLINE_MODES.some(item => item.key === state.gameMode),
+      onlineSession: onlineSession
+        ? {
+            roomId: onlineSession.room.roomId,
+            mode: onlineSession.room.mode,
+            isHost: onlineSession.isHost
+          }
+        : null,
+      cloudError: cloud.error,
+      syncStatus: cloudSync.status,
+      syncError: cloudSync.error
+    });
+  }, [
+    cloud.configured, cloud.user, cloud.username, cloud.space, cloud.error,
+    cloudSync.status, cloudSync.error, state.gameMode, onlineSession, supabaseHost
+  ]);
 
   /** 联机抽卡的题库：优先用双方选中的任务包，没选时退回到全部抽卡主题，保证一定有卡可抽。 */
   const onlineCardPool = useMemo<OnlineCard[]>(() => {
@@ -854,6 +907,7 @@ function App() {
         cloud={cloud}
         transportKind={cloudConfigured ? 'supabase' : 'local'}
         onEnterRoom={(room, isHost) => {
+          diagLog('panel:session', { room: room.roomId.slice(-8), isHost });
           setOnlineSession({ room, isHost });
           setCloudOpen(false);
           setRemoteRoom(null);

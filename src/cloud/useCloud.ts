@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { SupabaseClient, User } from '@supabase/supabase-js';
 import { cloudConfigured, supabase } from './client';
 import { SpaceInfo } from './types';
+import { diagLog } from './diagnostics';
 import { resetLocalState } from '../utils/localStorage';
 
 const FAKE_MAIL_DOMAIN = 'cfc.local';
@@ -119,9 +120,11 @@ export function useCloud() {
   const ensureSpace = useCallback((authUser: User, name: string) => {
     if (preparedRef.current === authUser.id) return;
     preparedRef.current = authUser.id;
-    setSpaceId(spaceIdOf(authUser));
+    const id = spaceIdOf(authUser);
+    setSpaceId(id);
     setSpaceName(name.trim() || usernameOf(authUser));
     setError(null);
+    diagLog('space:ready', { spaceId: id.slice(0, 8) });
     if (supabase) void migrateLegacyThemes(supabase, authUser);
   }, []);
 
@@ -140,9 +143,11 @@ export function useCloud() {
         if (sessionError) throw sessionError;
         if (cancelled) return;
         const nextUser = data.session?.user ?? null;
+        diagLog('auth:getSession', { user: Boolean(nextUser), username: nextUser?.user_metadata?.username ?? null });
         setUser(nextUser);
         if (nextUser) ensureSpace(nextUser, (nextUser.user_metadata?.username as string) || '');
       } catch (err) {
+        diagLog('auth:getSession-error', { message: err instanceof Error ? err.message : String(err) });
         if (!cancelled) setError(friendlyAuthError(err instanceof Error ? err.message : '读取登录状态失败'));
       } finally {
         if (!cancelled) setLoading(false);
@@ -151,6 +156,7 @@ export function useCloud() {
 
     const { data: subscription } = client.auth.onAuthStateChange((_event, session) => {
       const nextUser = session?.user ?? null;
+      diagLog('auth:event', { event: _event, user: Boolean(nextUser) });
       setUser(nextUser);
       if (nextUser) {
         // 这里以前是 void ensureSpace(...) 且没有 catch，数据库报错会被静默吞掉，

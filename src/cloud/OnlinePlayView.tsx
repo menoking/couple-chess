@@ -5,6 +5,7 @@ import { Player, TaskEventData } from '../types';
 import { OnlineCard, Seat } from './types';
 import { useRoom } from './useRoom';
 import { TransportKind } from './transport';
+import { BUILD_TAG } from './diagnostics';
 import {
   BluffAction,
   BluffState,
@@ -555,6 +556,11 @@ export function OnlinePlayView(props: OnlinePlayViewProps) {
             <meta.icon size={22} />
           </div>
         </header>
+
+        <div className="mx-5 mb-1 flex items-center justify-between rounded-lg bg-white/[0.04] px-3 py-1.5 text-[9px] text-gray-500">
+          <span>房间 {props.room.roomId.slice(-8)} · 座位 {mySeat} · {props.isHost ? '房主' : '访客'}</span>
+          <span>{BUILD_TAG}</span>
+        </div>
 
         {props.cardPool.length === 0 && (
           <div className="mx-5 mb-1 rounded-2xl border border-[#FF9F0A]/30 bg-[#FF9F0A]/10 px-3 py-2 text-center text-[10px] font-bold text-[#FF9F0A]">

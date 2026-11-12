@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { GameAdapter, OnlineCard, RoomPlayer, Seat } from './types';
 import { RoomTransport, TransportKind, createTransport } from './transport';
+import { setDiagnosticContext, diagLog } from './diagnostics';
 
 export interface UseRoomInput<S, A, V> {
   adapter: GameAdapter<S, A, V>;
@@ -85,6 +86,18 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
     setView(null);
     viewReadyRef.current = false;
     lastPresenceRef.current = '';
+    setDiagnosticContext({
+      roomStatus: 'connecting',
+      roomError: null,
+      presence: [],
+      viewReady: false
+    });
+    diagLog('room:transport', {
+      kind,
+      room: roomId.slice(-8),
+      seat: mySeat,
+      isHost
+    });
 
     const transport = createTransport(kind, roomId, mySeat, {
       onPublic: (messageKind, data) => {
@@ -107,11 +120,15 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
           viewReadyRef.current = true;
           setView(data as V);
           setStatus('playing');
+          setDiagnosticContext({ roomStatus: 'playing', viewReady: true });
+          diagLog('room:view', { seat: mySeat });
         }
       },
       onPresence: seats => {
         if (cancelled) return;
         setPresence(seats);
+        setDiagnosticContext({ presence: seats });
+        diagLog('room:presence', { seats });
         // 有新设备上线时，房主把当前局面补发一次，后来者不必等下一次操作
         const key = [...seats].sort().join(',');
         if (isHost && key !== lastPresenceRef.current && stateRef.current) {
@@ -132,14 +149,20 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
           stateRef.current = initial;
           publish(initial);
           setStatus('playing');
+          setDiagnosticContext({ roomStatus: 'playing', viewReady: true });
+          diagLog('room:host-ready', { seat: mySeat });
         } else {
           transport.send('request-view', { seat: mySeat });
           setStatus('connecting');
+          diagLog('room:guest-waiting', { seat: mySeat });
         }
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : '联机初始化失败');
+        const message = err instanceof Error ? err.message : '联机初始化失败';
+        setError(message);
         setStatus('error');
+        setDiagnosticContext({ roomStatus: 'error', roomError: message });
+        diagLog('room:error', { message });
       }
     })();
 

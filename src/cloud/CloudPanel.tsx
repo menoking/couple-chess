@@ -1,6 +1,14 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Cloud, Download, LogOut, Upload, X } from 'lucide-react';
 import { useCloud } from './useCloud';
+import {
+  clockTime,
+  copyDiagnostics,
+  diagLog,
+  diagnosticSnapshot,
+  shortId,
+  subscribeDiagnostics
+} from './diagnostics';
 import { ONLINE_MODES, OnlineModeKey } from './games/adapters';
 import { TransportKind } from './transport';
 import { LocalBackup, exportLocalBackup, importLocalBackup, isSandbox } from '../utils/localStorage';
@@ -36,8 +44,12 @@ export function CloudPanel({
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [, setDiagTick] = useState(0);
+  useEffect(() => subscribeDiagnostics(() => setDiagTick(value => value + 1)), []);
 
   if (!open) return null;
+
+  const snap = diagnosticSnapshot();
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -52,12 +64,21 @@ export function CloudPanel({
   };
 
   const enterRoom = async (target: OnlineModeKey) => {
-    if (!cloud.space) return;
+    if (!cloud.space) {
+      diagLog('panel:enter-abort', { reason: 'cloud.space 为空' });
+      return;
+    }
+    diagLog('panel:enter-begin', { mode: target });
     try {
       const ticket = await enterOnlineRoom(cloud.space, target);
-      if (!ticket) return;
+      if (!ticket) {
+        diagLog('panel:enter-null', { mode: target });
+        return;
+      }
+      diagLog('panel:enter-ok', { room: ticket.roomId.slice(-8), isHost: ticket.isHost });
       onEnterRoom({ roomId: ticket.roomId, mode: ticket.mode }, ticket.isHost);
     } catch (error) {
+      diagLog('panel:enter-error', { message: error instanceof Error ? error.message : String(error) });
       setNotice(error instanceof Error ? error.message : '进房间失败');
     }
   };
@@ -211,7 +232,7 @@ export function CloudPanel({
             </div>
 
             <div className="px-1 text-[9px] leading-relaxed text-gray-600">
-              诊断 · 账号 {cloud.user?.id?.slice(0, 8) ?? '—'} · 服务 {supabaseHost ?? '未配置'} · 版本 2
+              构建 {snap.build} · 服务 {supabaseHost ?? snap.host ?? '未配置'}
             </div>
 
             <div className="space-y-2">
@@ -273,6 +294,64 @@ export function CloudPanel({
             {cloud.error}
           </div>
         )}
+
+        <div className="mt-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 text-[10px] leading-relaxed text-gray-500">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="font-bold text-white">连接诊断</span>
+            <button
+              type="button"
+              onClick={() => {
+                void copyDiagnostics().then(copied => {
+                  setNotice(copied ? '诊断已复制，直接粘贴给我' : '复制失败，请长按下方文字手动复制');
+                });
+              }}
+              className="ios-btn rounded-full bg-white/10 px-2.5 py-1 text-[10px] font-bold text-[#64D2FF]"
+            >
+              复制诊断
+            </button>
+          </div>
+          <div className="space-y-0.5 break-all">
+            <div>构建 {snap.build} · 云配置 {snap.configured ? '已注入' : '缺失'}</div>
+            <div>服务 {snap.host ?? '—'} · 沙盒 {snap.sandbox ? '是' : '否'}</div>
+            <div>账号 {shortId(snap.userId)} · 小屋 {shortId(snap.spaceId)}</div>
+            <div>
+              设备 {snap.deviceId === 'dev-unknown' ? 'dev-unknown（两台会撞房主）' : shortId(snap.deviceId)}
+            </div>
+            <div>当前玩法 {snap.gameMode ?? '—'} · 支持联机 {snap.onlineModeAvailable ? '是' : '否'}</div>
+            <div>
+              上次开局{' '}
+              {snap.lastStart
+                ? `${clockTime(snap.lastStart.at)} ${snap.lastStart.branch}（${snap.lastStart.reason}）`
+                : '未开始'}
+            </div>
+            <div>
+              房间{' '}
+              {snap.onlineSession
+                ? `${snap.onlineSession.roomId.slice(-8)} / ${snap.onlineSession.isHost ? '房主' : '访客'}`
+                : '未进入'}
+            </div>
+            <div>
+              连接 {snap.roomStatus ?? '—'} · 在线座位 [{snap.presence.join(',')}] · 视图{' '}
+              {snap.viewReady ? '已收到' : '未收到'}
+            </div>
+            {snap.roomError && <div className="text-[#FF7A96]">房间错误 {snap.roomError}</div>}
+            {snap.cloudError && <div className="text-[#FF7A96]">云错误 {snap.cloudError}</div>}
+            {snap.syncError && <div className="text-[#FF7A96]">同步错误 {snap.syncError}</div>}
+          </div>
+          <div className="no-scrollbar mt-2 max-h-28 overflow-y-auto rounded-lg bg-black/20 p-2 font-mono text-[9px] leading-relaxed text-gray-500">
+            {snap.events.length === 0
+              ? '暂无事件'
+              : snap.events
+                  .slice()
+                  .reverse()
+                  .map((event, index) => (
+                    <div key={`${event.t}-${index}`}>
+                      {clockTime(event.t)} {event.step}{' '}
+                      {Object.keys(event.detail).length > 0 ? JSON.stringify(event.detail) : ''}
+                    </div>
+                  ))}
+          </div>
+        </div>
       </div>
     </div>
   );

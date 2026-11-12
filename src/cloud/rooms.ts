@@ -2,6 +2,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './client';
 import { SpaceInfo } from './types';
 import { getDeviceId } from './device';
+import { diagLog } from './diagnostics';
 import { OnlineModeKey } from './games/adapters';
 
 export interface RoomTicket {
@@ -78,11 +79,15 @@ export async function enterOnlineRoom(
   mode: OnlineModeKey
 ): Promise<RoomTicket | null> {
   const client = supabase;
-  if (!client) return null;
+  if (!client) {
+    diagLog('room:no-client', { mode });
+    return null;
+  }
 
   const roomId = roomIdOf(space.id, mode);
   const myId = getDeviceId();
   const at = Date.now();
+  diagLog('room:begin', { room: roomId.slice(-8), device: myId.slice(0, 8) });
 
   await leaveOnlineRoom(roomId);
 
@@ -98,6 +103,7 @@ export async function enterOnlineRoom(
       resolve();
     };
     channel.subscribe(async status => {
+      diagLog('room:subscribe', { status, ms: Date.now() - at });
       if (status === 'SUBSCRIBED') {
         await channel.track({ role: 'peer', at });
         finish();
@@ -110,8 +116,15 @@ export async function enterOnlineRoom(
   // 等 Presence 把同房间的其它设备同步过来
   await new Promise<void>(resolve => window.setTimeout(resolve, 1100));
 
-  const isHost = decideHost(readPresence(channel), myId, at);
+  const peers = readPresence(channel);
+  const isHost = decideHost(peers, myId, at);
+  diagLog('room:decided', {
+    ms: Date.now() - at,
+    peers: peers.map(entry => `${entry.deviceId.slice(0, 8)}:${entry.role}`),
+    isHost
+  });
   await channel.track({ role: isHost ? 'host' : 'guest', at });
+  diagLog('room:done', { ms: Date.now() - at });
 
   return { roomId, mode, isHost };
 }
