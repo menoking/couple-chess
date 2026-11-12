@@ -37,6 +37,8 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
 
   const transportRef = useRef<RoomTransport | null>(null);
   const stateRef = useRef<S | null>(null);
+  const viewReadyRef = useRef(false);
+  const lastPresenceRef = useRef('');
   // players 每次渲染都是新数组，用 ref 避免它触发重连
   const playersRef = useRef(players);
   playersRef.current = players;
@@ -48,6 +50,7 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
   const publish = useCallback(
     (state: S) => {
       const transport = transportRef.current;
+      viewReadyRef.current = true;
       setView(adapter.viewFor(state, mySeat));
       if (!transport) return;
       ([0, 1] as Seat[]).forEach(seat => {
@@ -80,6 +83,8 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
     setStatus('connecting');
     setError(null);
     setView(null);
+    viewReadyRef.current = false;
+    lastPresenceRef.current = '';
 
     const transport = createTransport(kind, roomId, mySeat, {
       onPublic: (messageKind, data) => {
@@ -99,6 +104,7 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
       onSeat: (messageKind, data) => {
         if (cancelled) return;
         if (messageKind === 'view') {
+          viewReadyRef.current = true;
           setView(data as V);
           setStatus('playing');
         }
@@ -106,6 +112,12 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
       onPresence: seats => {
         if (cancelled) return;
         setPresence(seats);
+        // 有新设备上线时，房主把当前局面补发一次，后来者不必等下一次操作
+        const key = [...seats].sort().join(',');
+        if (isHost && key !== lastPresenceRef.current && stateRef.current) {
+          lastPresenceRef.current = key;
+          publish(stateRef.current);
+        }
       }
     });
 
@@ -138,6 +150,17 @@ export function useRoom<S, A, V>(input: UseRoomInput<S, A, V>): UseRoomResult<V,
       stateRef.current = null;
     };
   }, [adapter, enabled, isHost, kind, mySeat, publish, roomId, applyAction]);
+
+  // 访客可能在房主订阅公共频道之前就发出了 request-view，消息会丢。
+  // 拿到第一份视图前持续重试，保证「后进房间」一定能同步到房主的局面。
+  useEffect(() => {
+    if (!enabled || !roomId || isHost) return;
+    const timer = window.setInterval(() => {
+      if (viewReadyRef.current) return;
+      transportRef.current?.send('request-view', { seat: mySeat });
+    }, 900);
+    return () => window.clearInterval(timer);
+  }, [enabled, roomId, isHost, mySeat]);
 
   const dispatch = useCallback(
     (action: A) => {

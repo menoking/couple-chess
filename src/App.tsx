@@ -42,7 +42,7 @@ import { useCloudSync } from './cloud/useCloudSync';
 import { CloudPanel } from './cloud/CloudPanel';
 import { OnlinePlayView, OnlineRoomInfo } from './cloud/OnlinePlayView';
 import { cloudConfigured } from './cloud/client';
-import { enterOnlineRoom, leaveOnlineRoom, announceRoom, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
+import { enterOnlineRoom, leaveOnlineRoom, startRoomHeartbeat, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
 import { ONLINE_MODES, OnlineModeKey } from './cloud/games/adapters';
 import { OnlineCard, Seat } from './cloud/types';
 import { collectThemeTasks } from './utils/modeKit';
@@ -88,6 +88,51 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
   mine: 'mineTheme'
 };
 
+/** 无文字的 ♂ / ♀ 滑动开关，靠颜色和滑块表达当前性别 */
+function RoleSwitch({
+  role,
+  onChange
+}: {
+  role: 'male' | 'female';
+  onChange: (role: 'male' | 'female') => void;
+}) {
+  const female = role === 'female';
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={female}
+      aria-label="切换性别"
+      title={female ? '当前：女生，点击切换' : '当前：男生，点击切换'}
+      onClick={() => onChange(female ? 'male' : 'female')}
+      className="ios-btn relative h-9 w-[60px] shrink-0 rounded-full border"
+      style={{ backgroundColor: 'var(--theme-surface)', borderColor: 'var(--theme-line)' }}
+    >
+      <span
+        className={`pointer-events-none absolute left-[3px] top-[3px] h-7 w-7 rounded-full shadow-md transition-transform duration-300 ease-out ${
+          female
+            ? 'translate-x-[26px] bg-[#FF375F]/35 ring-1 ring-[#FF375F]/60'
+            : 'translate-x-0 bg-[#0A84FF]/35 ring-1 ring-[#0A84FF]/60'
+        }`}
+      />
+      <span
+        className={`pointer-events-none absolute left-[9px] top-1/2 -translate-y-1/2 text-[15px] font-bold leading-none text-[#0A84FF] transition-all duration-300 ${
+          female ? 'scale-90 opacity-45' : 'scale-110 opacity-100'
+        }`}
+      >
+        ♂
+      </span>
+      <span
+        className={`pointer-events-none absolute right-[9px] top-1/2 -translate-y-1/2 text-[15px] font-bold leading-none text-[#FF375F] transition-all duration-300 ${
+          female ? 'scale-110 opacity-100' : 'scale-90 opacity-45'
+        }`}
+      >
+        ♀
+      </span>
+    </button>
+  );
+}
+
 function App() {
   const [theme, setTheme] = useState<'dark' | 'light'>(() => {
     try {
@@ -131,8 +176,15 @@ function App() {
   const [onlineSession, setOnlineSession] = useState<{ room: OnlineRoomInfo; isHost: boolean } | null>(null);
   const [onlinePrompt, setOnlinePrompt] = useState<OnlineModeKey | null>(null);
   const [remoteRoom, setRemoteRoom] = useState<RoomAnnounce | null>(null);
-  const [onlineNotice, setOnlineNotice] = useState<string | null>(null);
+  const [onlineNotice, setOnlineNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const cloud = useCloud();
+
+  const showOnlineNotice = (text: string, ok = false) => {
+    setOnlineNotice({ text, ok });
+    window.setTimeout(() => {
+      setOnlineNotice(current => (current?.text === text ? null : current));
+    }, 5000);
+  };
 
   const {
     state,
@@ -215,17 +267,30 @@ function App() {
   const enterOnline = async (mode: OnlineModeKey) => {
     if (!cloud.space) return;
     try {
+      // 房间 ID 固定为「账号 + 玩法」，无论从首页还是云面板进入，都是同一间
       const ticket = await enterOnlineRoom(cloud.space, mode);
       if (!ticket) return;
       setOnlineSession({ room: { roomId: ticket.roomId, mode: ticket.mode }, isHost: ticket.isHost });
       setOnlinePrompt(null);
-      void announceRoom(cloud.space, ticket.roomId, ticket.mode);
+      setRemoteRoom(null);
+      showOnlineNotice(
+        ticket.isHost
+          ? '房间已开好，对方点「两台设备联机」就会自动进来'
+          : '已自动匹配到对方的房间',
+        true
+      );
     } catch (error) {
-      setOnlineNotice(error instanceof Error ? error.message : '进房间失败');
+      showOnlineNotice(error instanceof Error ? error.message : '进房间失败');
     }
   };
 
-  // 对方进房间时提示「一起来」
+  // 房主持续广播房间，另一台设备什么时候打开页面都能发现
+  useEffect(() => {
+    if (!cloud.space || !onlineSession || !onlineSession.isHost) return;
+    return startRoomHeartbeat(cloud.space, onlineSession.room.roomId, onlineSession.room.mode);
+  }, [cloud.space, onlineSession]);
+
+  // 对方正在玩时，给一个随时可点的「一键跟上」入口
   useEffect(() => {
     if (!cloud.space) {
       setRemoteRoom(null);
@@ -323,25 +388,6 @@ function App() {
 
       <div className="relative z-10 w-full max-w-[430px] h-full flex flex-col bg-black/20">
         <header className="app-header pb-2 px-6 shrink-0">
-          <div className="mb-2 flex items-center justify-center gap-1.5">
-            <span className="text-[10px] font-bold text-gray-500">我是</span>
-            {(['male', 'female'] as const).map(role => (
-              <button
-                key={role}
-                type="button"
-                onClick={() => changeMyRole(role)}
-                className={`ios-btn rounded-full px-3 py-1 text-[11px] font-bold transition-colors ${
-                  myRole === role
-                    ? role === 'male'
-                      ? 'bg-[#0A84FF] text-white'
-                      : 'bg-[#FF375F] text-white'
-                    : 'bg-white/10 text-gray-400'
-                }`}
-              >
-                {role === 'male' ? '男生' : '女生'}
-              </button>
-            ))}
-          </div>
           <div className="flex justify-between items-start">
           <div>
             <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-1">
@@ -350,7 +396,8 @@ function App() {
             <h1 className="text-3xl font-bold text-white tracking-tight">情侣飞行棋</h1>
           </div>
           <div className="flex flex-col items-end gap-2 mt-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
+              <RoleSwitch role={myRole} onChange={changeMyRole} />
               <button
                 type="button"
                 onClick={() => setCloudOpen(true)}
@@ -768,21 +815,26 @@ function App() {
         <button
           type="button"
           onClick={() => {
-            setOnlineSession({ room: { roomId: remoteRoom.roomId, mode: remoteRoom.mode }, isHost: false });
+            const target = remoteRoom.mode;
             setRemoteRoom(null);
+            void enterOnline(target);
           }}
           className="fixed inset-x-0 bottom-[calc(88px+env(safe-area-inset-bottom))] z-[124] mx-auto flex w-[calc(100%-2.5rem)] max-w-[390px] items-center justify-between rounded-2xl border border-[#30D158]/40 bg-[#30D158]/15 px-4 py-3 backdrop-blur"
         >
           <span className="text-xs font-bold text-white">
             对方正在玩「{ONLINE_MODES.find(item => item.key === remoteRoom.mode)?.label}」
           </span>
-          <span className="text-xs font-bold text-[#30D158]">加入 →</span>
+          <span className="text-xs font-bold text-[#30D158]">一起玩 →</span>
         </button>
       )}
 
       {onlineNotice && (
-        <div className="fixed inset-x-0 top-20 z-[126] mx-auto w-[calc(100%-2.5rem)] max-w-[390px] rounded-2xl border border-[#FF453A]/30 bg-[#FF453A]/15 px-4 py-3 text-center text-xs font-bold text-white backdrop-blur">
-          {onlineNotice}
+        <div className={`fixed inset-x-0 top-20 z-[126] mx-auto w-[calc(100%-2.5rem)] max-w-[390px] rounded-2xl border px-4 py-3 text-center text-xs font-bold text-white backdrop-blur ${
+          onlineNotice.ok
+            ? 'border-[#30D158]/35 bg-[#30D158]/15'
+            : 'border-[#FF453A]/30 bg-[#FF453A]/15'
+        }`}>
+          {onlineNotice.text}
           <button type="button" onClick={() => setOnlineNotice(null)} className="ml-2 text-gray-300">知道了</button>
         </div>
       )}
@@ -792,7 +844,15 @@ function App() {
         onClose={() => setCloudOpen(false)}
         cloud={cloud}
         transportKind={cloudConfigured ? 'supabase' : 'local'}
-        onEnterRoom={(room, isHost) => { setOnlineSession({ room, isHost }); setCloudOpen(false); }}
+        onEnterRoom={(room, isHost) => {
+          setOnlineSession({ room, isHost });
+          setCloudOpen(false);
+          setRemoteRoom(null);
+          showOnlineNotice(
+            isHost ? '房间已开好，对方点「两台设备联机」就会自动进来' : '已自动匹配到对方的房间',
+            true
+          );
+        }}
         syncStatus={cloudSync.status}
         lastSyncedAt={cloudSync.lastSyncedAt}
       />
