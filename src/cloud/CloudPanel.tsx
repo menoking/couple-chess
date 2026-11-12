@@ -6,6 +6,7 @@ import { ONLINE_MODES, OnlineModeKey } from './games/adapters';
 import { OnlineRoomInfo } from './OnlinePlayView';
 import { TransportKind } from './transport';
 import { LocalBackup, exportLocalBackup, importLocalBackup, isSandbox } from '../utils/localStorage';
+import { getDeviceId } from './device';
 
 interface CloudPanelProps {
   open: boolean;
@@ -61,7 +62,8 @@ export function CloudPanel({
   const startRoom = (mode: OnlineModeKey) => {
     if (!space) return;
     const roomId = Math.random().toString(36).slice(2, 10).toUpperCase();
-    const info: OnlineRoomInfo = { roomId, mode, hostSeat: space.seat };
+    const hostSeat = space.seat;
+    const info: OnlineRoomInfo = { roomId, mode, hostSeat, fromDevice: getDeviceId() };
     channelRef.current?.send({ type: 'broadcast', event: 'invite', payload: info });
     onStartRoom(info);
   };
@@ -241,7 +243,7 @@ export function CloudPanel({
                 </button>
               </div>
               <div className="mt-2 flex items-center gap-1.5 text-[10px] text-gray-500">
-                <Users size={11} />已配对 {cloud.members.length} / 2 人
+                <Users size={11} />小屋已就绪 · 两台设备登录同一账号即可联机
               </div>
             </div>
 

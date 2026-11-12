@@ -108,7 +108,7 @@ function App() {
   }, [theme]);
 
   const [cloudOpen, setCloudOpen] = useState(false);
-  const [onlineRoom, setOnlineRoom] = useState<OnlineRoomInfo | null>(null);
+  const [onlineSession, setOnlineSession] = useState<{ room: OnlineRoomInfo; isHost: boolean } | null>(null);
   const [pendingInvite, setPendingInvite] = useState<OnlineRoomInfo | null>(null);
   const cloud = useCloud();
 
@@ -650,25 +650,31 @@ function App() {
         onClose={() => setCloudOpen(false)}
         cloud={cloud}
         transportKind={cloudConfigured ? 'supabase' : 'local'}
-        onStartRoom={room => { setOnlineRoom(room); setCloudOpen(false); }}
+        onStartRoom={room => { setOnlineSession({ room, isHost: true }); setCloudOpen(false); }}
         syncStatus={cloudSync.status}
         lastSyncedAt={cloudSync.lastSyncedAt}
         incoming={pendingInvite}
-        onAcceptInvite={room => { setOnlineRoom(room); setPendingInvite(null); setCloudOpen(false); }}
+        onAcceptInvite={room => { setOnlineSession({ room, isHost: false }); setPendingInvite(null); setCloudOpen(false); }}
         onDismissInvite={() => setPendingInvite(null)}
       />
 
-      {onlineRoom && cloud.space && (
+      {onlineSession && cloud.space && (
         <OnlinePlayView
-          room={onlineRoom}
-          mySeat={cloud.space.seat as Seat}
+          room={onlineSession.room}
+          mySeat={
+            (onlineSession.isHost
+              ? onlineSession.room.hostSeat
+              : onlineSession.room.hostSeat === 0
+                ? 1
+                : 0) as Seat
+          }
           players={state.players.map(player => ({
             seat: player.id as Seat,
             name: player.name,
             color: player.color
           }))}
           kind={cloudConfigured ? 'supabase' : 'local'}
-          onExit={() => setOnlineRoom(null)}
+          onExit={() => setOnlineSession(null)}
         />
       )}
     </div>

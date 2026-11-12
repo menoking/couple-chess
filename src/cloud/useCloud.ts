@@ -37,19 +37,21 @@ export function useCloud() {
       .from('space_members')
       .select('space_id, seat, display_name, spaces(id, name, invite_code)')
       .eq('user_id', userId)
-      .maybeSingle();
+      .order('joined_at', { ascending: true })
+      .limit(1);
 
     if (memberError) {
       setError(memberError.message);
       return;
     }
-    if (!membership) {
+    if (!membership || membership.length === 0) {
       setSpace(null);
       setMembers([]);
       return;
     }
 
-    const info = membership.spaces as unknown as { id: string; name: string; invite_code: string } | null;
+    const row = membership[0];
+    const info = row.spaces as unknown as { id: string; name: string; invite_code: string } | null;
     if (!info) {
       setSpace(null);
       return;
@@ -59,7 +61,7 @@ export function useCloud() {
       id: info.id,
       name: info.name,
       inviteCode: info.invite_code,
-      seat: (membership.seat === 1 ? 1 : 0) as Seat
+      seat: (row.seat === 1 ? 1 : 0) as Seat
     });
 
     const { data: roster } = await supabase

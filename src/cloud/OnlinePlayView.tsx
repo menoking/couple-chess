@@ -23,6 +23,8 @@ export interface OnlineRoomInfo {
   roomId: string;
   mode: OnlineModeKey;
   hostSeat: Seat;
+  /** 发起邀请的设备（同一账号的两台手机靠它区分） */
+  fromDevice?: string;
 }
 
 export interface OnlineSeatPlayer {
