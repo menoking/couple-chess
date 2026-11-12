@@ -167,11 +167,18 @@ export function useCloud() {
 
       for (let attempt = 0; attempt < 5; attempt++) {
         const inviteCode = randomCode();
-        const { data, error: insertError } = await supabase
-          .from('spaces')
-          .insert({ name: name || '我们的小屋', invite_code: inviteCode, created_by: user.id })
-          .select('id, name, invite_code')
-          .single();
+        // 自己先生成 id，避免依赖 insert ... returning 的 SELECT 权限
+        const spaceId =
+          typeof crypto !== 'undefined' && crypto.randomUUID
+            ? crypto.randomUUID()
+            : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
+        const { error: insertError } = await supabase.from('spaces').insert({
+          id: spaceId,
+          name: name || '我们的小屋',
+          invite_code: inviteCode,
+          created_by: user.id
+        });
 
         if (insertError) {
           if (insertError.code === '23505') continue;
@@ -180,7 +187,7 @@ export function useCloud() {
         }
 
         const { error: memberError } = await supabase.from('space_members').insert({
-          space_id: data.id,
+          space_id: spaceId,
           user_id: user.id,
           seat: 0,
           display_name: null

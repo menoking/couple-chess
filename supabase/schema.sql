@@ -55,6 +55,13 @@ drop policy if exists spaces_insert on public.spaces;
 create policy spaces_insert on public.spaces
   for insert with check (created_by = auth.uid());
 
+-- 创建者可以立即读取自己刚建的小屋。
+-- 必须有这条：PostgREST 的 insert ... returning 需要 SELECT 权限，
+-- 而此刻用户还没成为成员，只靠 is_space_member 会触发 RLS 违规。
+drop policy if exists spaces_select_creator on public.spaces;
+create policy spaces_select_creator on public.spaces
+  for select using (created_by = auth.uid());
+
 drop policy if exists members_select on public.space_members;
 create policy members_select on public.space_members
   for select using (public.is_space_member(space_id));
