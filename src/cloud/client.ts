@@ -1,7 +1,19 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+/**
+ * 容错处理：常见的粘贴错误是带上 /rest/v1/ 后缀、末尾斜杠或换行。
+ * 这里统一清洗，避免 createClient 拿到错误 base url。
+ */
+function normalizeUrl(input: string | undefined): string | undefined {
+  if (!input) return undefined;
+  let value = input.trim().replace(/\s+/g, '');
+  value = value.replace(/\/+$/, '');
+  value = value.replace(/\/rest\/v1.*$/i, '');
+  return value || undefined;
+}
+
+const url = normalizeUrl(import.meta.env.VITE_SUPABASE_URL as string | undefined);
+const anonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
 /** 没配置环境变量时，联机功能整体关闭，本地玩法不受影响 */
 export const cloudConfigured = Boolean(url && anonKey);
