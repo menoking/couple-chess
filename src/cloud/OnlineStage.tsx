@@ -131,6 +131,8 @@ function CardGateBody({
   const executorName = executor?.name ?? '对方';
   const face = card.card;
   const flipped = card.phase === 'revealed' || (card.phase === 'drawn' && isDrawer);
+  const canDraw = card.phase === 'locked' && isDrawer;
+  const canReveal = card.phase === 'drawn' && isExecutor;
 
   // 网络抖动时动作可能没到房主，1.2 秒未推进就自动重发，最多 3 次
   const [pending, setPending] = useState<RoomAction | null>(null);
@@ -163,8 +165,19 @@ function CardGateBody({
 
   const busy = pending !== null;
 
-  const strip = (
-    <div className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-bold">
+  // 和离线模式一致：点卡面抽卡 / 翻卡，只有翻牌后才出现接受/跳过
+  const tapFront = () => {
+    if (busy) return;
+    if (canDraw) send({ type: 'drawCard', seat: mySeat });
+    else if (canReveal) send({ type: 'revealCard', seat: mySeat });
+  };
+
+  const frontHint = card.phase === 'locked'
+    ? isDrawer ? '点击卡面抽一张' : `等 ${drawerName} 抽卡`
+    : isExecutor ? '点击卡面翻卡查看' : `等 ${executorName} 翻卡`;
+
+  const assignmentStrip = (
+    <div className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-bold">
       <span
         className="rounded-full px-2 py-0.5"
         style={{ backgroundColor: `${drawer?.color ?? '#0A84FF'}22`, color: drawer?.color ?? '#0A84FF' }}
@@ -181,64 +194,6 @@ function CardGateBody({
     </div>
   );
 
-  let footer: React.ReactNode;
-  if (card.phase === 'locked') {
-    footer = isDrawer ? (
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => send({ type: 'drawCard', seat: mySeat })}
-        className="ios-btn mt-4 h-12 w-full rounded-full bg-white text-sm font-bold text-black disabled:opacity-60"
-      >
-        {busy ? '抽卡中…' : '抽卡并查看'}
-      </button>
-    ) : (
-      <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-400">
-        锁定中 · 等 {drawerName} 先抽卡
-      </div>
-    );
-  } else if (card.phase === 'drawn') {
-    footer = isDrawer ? (
-      <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-300">
-        已抽到 · 等 {executorName} 翻卡查看
-      </div>
-    ) : (
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => send({ type: 'revealCard', seat: mySeat })}
-        className="ios-btn mt-4 h-12 w-full rounded-full bg-white text-sm font-bold text-black disabled:opacity-60"
-      >
-        {busy ? '翻卡中…' : '翻卡查看'}
-      </button>
-    );
-  } else {
-    footer = isExecutor ? (
-      <div className="mt-4 flex w-full gap-3">
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => send({ type: 'ackCard', seat: mySeat })}
-          className="ios-btn h-11 flex-1 rounded-full bg-[#3A3A3C] text-xs font-bold text-[#FF453A] disabled:opacity-60"
-        >
-          跳过任务
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => send({ type: 'ackCard', seat: mySeat })}
-          className="ios-btn h-11 flex-1 rounded-full bg-white text-xs font-bold text-black disabled:opacity-60"
-        >
-          {busy ? '确认中…' : '接受任务'}
-        </button>
-      </div>
-    ) : (
-      <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-300">
-        等 {executorName} 确认后自动关闭
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-5 backdrop-blur-md">
       <div className="task-card-pop w-full max-w-sm rounded-3xl border border-white/10 bg-[#1C1C1E] p-5 shadow-2xl">
@@ -248,39 +203,88 @@ function CardGateBody({
         </div>
 
         <div className="perspective-1000 w-full">
-          <div className={`flip-card-inner ${flipped ? 'flipped' : ''}`} style={{ height: 300 }}>
-            <div className="flip-card-front flex flex-col items-center justify-center border border-white/10 bg-[#1C1C1E] px-5">
-              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.05]">
+          <div className={`flip-card-inner ${flipped ? 'flipped' : ''}`} style={{ height: 320 }}>
+            <button
+              type="button"
+              onClick={tapFront}
+              disabled={!canDraw && !canReveal}
+              className={`flip-card-front flex flex-col items-center justify-center border border-white/10 bg-[#1C1C1E] px-5 transition-transform ${
+                canDraw || canReveal ? 'cursor-pointer active:scale-[0.98]' : 'cursor-default'
+              }`}
+            >
+              <div
+                className={`mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.05] ${
+                  canDraw || canReveal ? 'animate-pulse' : ''
+                }`}
+              >
                 {card.phase === 'locked'
-                  ? <Lock size={28} className="text-gray-400" />
-                  : <Sparkles size={28} className="text-[#FFD60A]" />}
+                  ? <Lock size={28} className={canDraw ? 'text-[#FFD60A]' : 'text-gray-400'} />
+                  : <Sparkles size={28} className={canReveal ? 'text-[#FFD60A]' : 'text-gray-400'} />}
               </div>
               <div className="text-base font-bold text-white">
-                {card.phase === 'locked' ? '卡片已锁定' : '等待翻卡'}
+                {card.phase === 'locked' ? (isDrawer ? '你赢了' : '卡片已锁定') : '等待翻卡'}
               </div>
-              <div className="mt-1 text-[11px] text-gray-500">
-                {card.phase === 'locked' ? `等 ${drawerName} 先抽卡并查看` : '卡面尚未展开'}
+              <div className={`mt-1 text-[11px] font-bold ${canDraw || canReveal ? 'text-[#FFD60A]' : 'text-gray-500'}`}>
+                {busy ? '处理中…' : frontHint}
               </div>
               <div className="mt-5 grid grid-cols-3 gap-1.5 opacity-25">
                 {Array.from({ length: 9 }).map((_, index) => (
                   <span key={index} className="h-1.5 w-1.5 rounded-full bg-white" />
                 ))}
               </div>
-            </div>
+            </button>
 
             <div className="flip-card-back overflow-y-auto border border-white/10 px-5 py-6">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{card.reason}</div>
-              <div className="mt-3 text-lg font-bold leading-relaxed text-white">
-                {face?.task ?? '卡面加载中…'}
+              <div className="flex w-full flex-col items-center">
+                <Sparkles size={24} className="mb-2 text-[#FFD60A]" />
+                <div className="text-base font-bold text-white">{card.reason}</div>
+                <div className="mt-3 w-full">{assignmentStrip}</div>
+                <div className="mt-3 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-4 text-center text-base font-medium leading-relaxed text-white">
+                  {face?.task ?? '卡面加载中…'}
+                </div>
+                {face && <div className="mt-2 text-[11px] text-gray-500">来自「{face.themeName}」</div>}
+                <div className="mt-3 text-[11px] font-bold text-gray-400">由 {executorName} 执行</div>
               </div>
-              {face && <div className="mt-2 text-[11px] text-gray-500">来自「{face.themeName}」</div>}
-              <div className="mt-auto pt-4 text-[11px] font-bold text-gray-400">由 {executorName} 执行</div>
             </div>
           </div>
         </div>
 
-        {footer}
-        {strip}
+        {card.phase === 'revealed' && isExecutor && (
+          <div className="mt-4 flex w-full gap-3">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => send({ type: 'ackCard', seat: mySeat })}
+              className="ios-btn h-11 flex-1 rounded-full bg-[#3A3A3C] text-xs font-bold text-[#FF453A] disabled:opacity-60"
+            >
+              跳过任务
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => send({ type: 'ackCard', seat: mySeat })}
+              className="ios-btn h-11 flex-1 rounded-full bg-white text-xs font-bold text-black disabled:opacity-60"
+            >
+              {busy ? '确认中…' : '接受任务'}
+            </button>
+          </div>
+        )}
+
+        {card.phase === 'revealed' && !isExecutor && (
+          <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-300">
+            等 {executorName} 确认后自动关闭
+          </div>
+        )}
+
+        {card.phase !== 'revealed' && (
+          <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-400">
+            {canDraw
+              ? '点击卡面抽卡，抽到后只有你能先看到'
+              : canReveal
+                ? '点击卡面翻卡，翻牌后双方同时看到'
+                : `等 ${isDrawer ? executorName : drawerName} 操作`}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -356,6 +360,15 @@ export function OnlineStage(props: OnlineStageProps) {
     const timer = window.setInterval(() => setWaitSeconds(value => value + 1), 1000);
     return () => window.clearInterval(timer);
   }, [snap, shared.status]);
+
+  // 回合以玩法视图自己的 turn 为准：围棋/斗兽棋/数独等都在视图内部翻回合，
+  // 房间的 turn 只在这些玩法没有内部 turn 时才用。
+  const currentTurn = useMemo(() => {
+    const entry = Object.entries(snap?.data ?? {}).find(([key]) => key.endsWith('.turn'));
+    const value = entry?.[1];
+    if (typeof value === 'number') return value;
+    return snap?.turn ?? 0;
+  }, [snap?.data, snap?.turn]);
 
   const myPool = useMemo(() => picksToPool(themes, selected), [themes, selected]);
   const myLocked = Boolean(snap?.picks[mySeat]?.locked);
@@ -469,7 +482,7 @@ export function OnlineStage(props: OnlineStageProps) {
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-bold text-white">{MODE_LABEL[mode]}</div>
           <div className="truncate text-[10px] text-gray-500">
-            房间 {roomId.slice(-8)} · 我是 {PLAYER_NAME[roles[mySeat]]}（{mySeat + 1} 号位）· {isHost ? '房主' : '访客'} · 先手 {PLAYER_NAME[roles[snap.turn]]}
+            房间 {roomId.slice(-8)} · 我是 {PLAYER_NAME[roles[mySeat]]}（{mySeat + 1} 号位）· {isHost ? '房主' : '访客'} · 当前 {PLAYER_NAME[roles[currentTurn]]}
           </div>
         </div>
         <button
@@ -620,7 +633,7 @@ export function OnlineStage(props: OnlineStageProps) {
   const onBombTrigger = () => setBombOpen(true);
   const onChooseBomb = (choice: MineTaskChoice) => {
     setBombOpen(false);
-    const turnSeat: Seat = snap.turn === 1 ? 1 : 0;
+    const turnSeat: Seat = currentTurn === 1 ? 1 : 0;
     const task = createMineTaskEvent(players, onlineThemes, turnSeat, choice, other(turnSeat));
     if (task) enqueue(task);
     else endTurn();
@@ -632,11 +645,11 @@ export function OnlineStage(props: OnlineStageProps) {
   const onMove = (delta: number) => {
     const current = (data['stage.steps'] as number[] | undefined) ?? [0, 0];
     const next = [...current];
-    next[snap.turn] = calculateNewPosition(next[snap.turn] ?? 0, delta);
+    next[currentTurn] = calculateNewPosition(next[currentTurn] ?? 0, delta);
     patch('stage.steps', next);
   };
   const onCheckTile = (landingStep: number): TaskEventData | 'win' | null =>
-    resolveBoardTile({ landingStep, players, themes: onlineThemes, turn: snap.turn, boardMap });
+    resolveBoardTile({ landingStep, players, themes: onlineThemes, turn: currentTurn, boardMap });
   const onRevealTile = (index: number): MineRevealResult | null => {
     const board = [...mineBoard];
     if (!board[index] || board[index].revealed) return null;
@@ -646,12 +659,12 @@ export function OnlineStage(props: OnlineStageProps) {
     if (type === 'blank') return { type: 'blank' };
     if (type === 'bomb') return { type: 'bomb' };
     const choice: MineTaskChoice = type === 'truth' ? 'truth' : type === 'dare' ? 'dare' : 'theme';
-    const task = createMineTaskEvent(players, onlineThemes, snap.turn, choice);
+    const task = createMineTaskEvent(players, onlineThemes, currentTurn, choice);
     return task ? { type: 'task', task } : { type: 'blank' };
   };
   const onCompleteCell = (index: number): BingoCellResult | null => {
     if (!bingoBoard) return null;
-    const done = completeBingoCellOnBoard(bingoBoard, index, snap.turn, players, onlineThemes);
+    const done = completeBingoCellOnBoard(bingoBoard, index, currentTurn, players, onlineThemes);
     if (!done) return null;
     patch('stage.bingoBoard', done.board);
     return done.result;
@@ -659,19 +672,19 @@ export function OnlineStage(props: OnlineStageProps) {
   // restart 会清空玩法局部状态，房主 effect 随即重生成 Bingo 棋盘
   const onRestart = () => dispatch({ type: 'restart', seat: mySeat });
 
-  const common = { players, themes: onlineThemes, currentTurn: snap.turn, onBack, onEndTurn: endTurn };
+  const common = { players, themes: onlineThemes, currentTurn, onBack, onEndTurn: endTurn };
   const withThemes = { players, themes: onlineThemes, onBack };
 
   const renderMode = () => {
     switch (mode) {
       case 'board':
-        return <GameView players={players} boardMap={boardMap} pathCoords={pathCoords} currentTurn={snap.turn} isRolling={isRolling} onMove={onMove} onCheckTile={onCheckTile} onEndTurn={endTurn} onSetRolling={onSetRolling} onWin={onWin} onTaskTrigger={onTaskTrigger} onBack={onBack} />;
+        return <GameView players={players} boardMap={boardMap} pathCoords={pathCoords} currentTurn={currentTurn} isRolling={isRolling} onMove={onMove} onCheckTile={onCheckTile} onEndTurn={endTurn} onSetRolling={onSetRolling} onWin={onWin} onTaskTrigger={onTaskTrigger} onBack={onBack} />;
       case 'card':
         return <CardModeView {...common} onDrawTask={onDrawTask} onTaskTrigger={onTaskTrigger} />;
       case 'mine':
         return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} />;
       case 'pose':
-        return <PoseModeView players={players} currentTurn={snap.turn} onPoseTrigger={onPoseTrigger} onBack={onBack} />;
+        return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onBack={onBack} />;
       case 'roulette':
         return <RouletteModeView {...common} />;
       case 'bingo':
@@ -741,8 +754,8 @@ export function OnlineStage(props: OnlineStageProps) {
         )}
         <MineBombChoiceModal
           isOpen={bombOpen}
-          activePlayer={players[snap.turn] ?? null}
-          selectorPlayer={players[snap.turn === 1 ? 0 : 1] ?? null}
+          activePlayer={players[currentTurn] ?? null}
+          selectorPlayer={players[currentTurn === 1 ? 0 : 1] ?? null}
           onChoose={onChooseBomb}
         />
         <CardGate snap={snap} mySeat={mySeat} players={players} dispatch={dispatch} />

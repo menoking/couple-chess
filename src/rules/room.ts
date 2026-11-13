@@ -45,6 +45,11 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       // 统一抽卡入口：任何玩法视图想弹自己的任务卡，都改写成公共四阶段卡片
       const found = extractCard(action.value);
       if (found) {
+        // 两端会同时执行同一段「自动弹卡」逻辑，队首已经是同一张就不要再入队
+        const head = state.cards[0];
+        if (head && head.executorSeat === found.executorSeat && head.card?.task === found.card.task) {
+          return state;
+        }
         return bump(enqueueCard(state, {
           drawerSeat: found.drawerSeat,
           executorSeat: found.executorSeat,

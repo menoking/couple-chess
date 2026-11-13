@@ -123,6 +123,17 @@ export interface ExtractedCard {
 export function extractCard(value: unknown): ExtractedCard | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
   const record = value as Record<string, unknown>;
+  // 只认「任务弹窗」对象：TaskEventData（有 initiator/executor）或 Bingo 连线奖励（有 lines + task）。
+  // 否则像惩罚阶梯的 currentTask（只是当前展示的任务）会被误当成抽卡，一渲染就弹一张。
+  const isTaskEvent =
+    typeof record.initiatorPlayerId === 'number' ||
+    typeof record.executorPlayerId === 'number';
+  const isBingoReward =
+    typeof record.lines === 'number' &&
+    record.task !== null &&
+    typeof record.task === 'object';
+  if (!isTaskEvent && !isBingoReward) return null;
+
   let text: string | null = null;
   if (typeof record.task === 'string') text = record.task;
   else if (record.task && typeof record.task === 'object') {

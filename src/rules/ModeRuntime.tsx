@@ -106,7 +106,9 @@ export function useModeState<T>(
   const scopedKey = scope === 'seat' && runtime ? seatScopedKey(key, runtime.seat) : key;
 
   useEffect(() => {
-    if (!runtime) return;
+    // 只有权威端负责写初值。访客也写的话，晚到的初始 patch 会把已经翻过的回合
+    // 或已经抽掉的卡覆盖回开局状态（表现为「一直男方回合」）。
+    if (!runtime || !runtime.authority) return;
     if (runtime.get(scopedKey) === undefined) {
       runtime.patch(scopedKey, resolveInitial(initialRef.current));
     }

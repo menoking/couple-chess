@@ -1,5 +1,4 @@
 import { useModeState } from '../../rules/ModeRuntime';
-import { useMemo } from 'react';
 import { ArrowLeft, Coins, Gavel, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, shuffle, themeIntensity } from '../../utils/modeKit';
@@ -19,7 +18,9 @@ const BID_STEP = 5;
 type Phase = 'roll' | 'intro' | 'bid-first' | 'bid-second' | 'reveal' | 'task' | 'over';
 
 function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: Theme[]; onExit: () => void }) {
-  const queue = useMemo<ThemeTaskEntry[]>(() => shuffle(buildTaskPool(players, themes) ?? []).slice(0, TOTAL_ROUNDS), [players, themes]);
+  const [queue] = useModeState<ThemeTaskEntry[]>('AuctionModeView.queue', () =>
+    shuffle(buildTaskPool(players, themes) ?? []).slice(0, TOTAL_ROUNDS)
+  );
   const [round, setRound] = useModeState('AuctionModeView.round', 0);
   const [phase, setPhase] = useModeState<Phase>('AuctionModeView.phase', 'roll');
   const [firstBidder, setFirstBidder] = useModeState('AuctionModeView.firstBidder', 0);
