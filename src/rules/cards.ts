@@ -36,8 +36,8 @@ export function enqueueCard(state: RoomSnapshot, spec: {
     drawerSeat: spec.drawerSeat,
     executorSeat: spec.executorSeat,
     reason: spec.reason,
-    phase: 'locked',
-    // 权威状态里可以先存具体卡面，viewFor 在 locked 阶段一律下发 null
+    // 抽到即对双方可见：不再走「抽卡人先看 → 执行人翻卡」的锁定流程
+    phase: 'revealed',
     card: spec.card ?? null,
     moveDelta: spec.moveDelta ?? 0
   };
