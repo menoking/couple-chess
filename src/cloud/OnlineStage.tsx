@@ -57,7 +57,7 @@ import {
   generateSpiralPath
 } from '../utils/gameLogic';
 import { completeBingoCellOnBoard, createMineTaskEvent, resolveBoardTile } from '../rules/modeRules';
-import { useSharedRoom } from './useSharedRoom';
+import { loadRoomSnapshot, useSharedRoom } from './useSharedRoom';
 import type { TransportKind } from './transport';
 
 export interface OnlineStageProps {
@@ -333,10 +333,12 @@ export function OnlineStage(props: OnlineStageProps) {
   const { roomId, mode, mySeat, hostSeat, roles, themes, kind, onExit, onTakeOver } = props;
   const isHost = mySeat === hostSeat;
 
-  const createInitial = useCallback(
-    () => createRoom(mode, roles, hostSeat, hostSeat),
-    [mode, roles, hostSeat]
-  );
+  const createInitial = useCallback(() => {
+    // 恢复本机上一次的房间快照：组件重挂/刷新后不会把已锁定的卡包清空
+    const restored = loadRoomSnapshot(roomId);
+    if (restored && restored.mode === mode && restored.hostSeat === hostSeat) return restored;
+    return createRoom(mode, roles, hostSeat, hostSeat);
+  }, [mode, roles, hostSeat, roomId]);
   const shared = useSharedRoom({ roomId, mySeat, hostSeat, kind, enabled: true, createInitial });
   const snap = shared.snapshot;
   const dispatch = shared.dispatch;
@@ -364,6 +366,8 @@ export function OnlineStage(props: OnlineStageProps) {
     if (lockPending) return;
     lockTries.current = 0;
     setLockPending(true);
+    // 双通道：Presence（头像已证明可用）+ 普通动作
+    shared.announce({ lobbyLocked: true, themeIds: selected });
     dispatch({ type: 'lockLobby', seat: mySeat, themeIds: selected, pool: myPool });
   };
 
@@ -374,16 +378,17 @@ export function OnlineStage(props: OnlineStageProps) {
       setLockPending(false);
       return;
     }
-    if (lockTries.current >= 4) {
+    if (lockTries.current >= 10) {
       setLockPending(false);
       return;
     }
     const timer = window.setTimeout(() => {
       lockTries.current += 1;
+      shared.announce({ lobbyLocked: true, themeIds: selected });
       dispatch({ type: 'lockLobby', seat: mySeat, themeIds: selected, pool: myPool });
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [lockPending, myLocked, selected, myPool, dispatch, mySeat]);
+  }, [lockPending, myLocked, selected, myPool, dispatch, mySeat, shared.announce]);
 
   useEffect(() => {
     if (snap) setSelected(snap.picks[mySeat].themeIds);
@@ -571,7 +576,10 @@ export function OnlineStage(props: OnlineStageProps) {
               </div>
               <button
                 type="button"
-                onClick={() => dispatch({ type: 'unlockLobby', seat: mySeat })}
+                onClick={() => {
+                  shared.announce({ lobbyLocked: false, themeIds: [] });
+                  dispatch({ type: 'unlockLobby', seat: mySeat });
+                }}
                 className="ios-btn mt-3 rounded-full border border-white/10 px-4 py-2 text-[11px] text-gray-300"
               >
                 修改我的选择

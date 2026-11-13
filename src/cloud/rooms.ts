@@ -226,7 +226,7 @@ export function startRoomHeartbeat(
   const channel = getRoomChannel(client, space.id);
   const send = () => broadcastRoom(channel, { roomId, mode, hostRole });
   send();
-  const timer = window.setInterval(send, 2500);
+  const timer = window.setInterval(send, 1500);
 
   return () => window.clearInterval(timer);
 }

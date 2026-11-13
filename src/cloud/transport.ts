@@ -4,10 +4,16 @@ import { Seat } from './types';
 
 export type TransportKind = 'supabase' | 'local';
 
+export interface PresenceMeta {
+  seat: Seat;
+  lobbyLocked?: boolean;
+  themeIds?: string[];
+}
+
 export interface TransportHandlers {
   onPublic?: (kind: string, data: unknown) => void;
   onSeat?: (kind: string, data: unknown) => void;
-  onPresence?: (seats: Seat[]) => void;
+  onPresence?: (seats: Seat[], metas?: PresenceMeta[]) => void;
 }
 
 export interface RoomTransport {
@@ -15,6 +21,8 @@ export interface RoomTransport {
   connect(): Promise<void>;
   send(kind: string, data: unknown): void;
   sendTo(seat: Seat, kind: string, data: unknown): void;
+  /** 更新 Presence（锁卡包等关键状态走这条已验证可用的通道兜底） */
+  track(meta: Omit<PresenceMeta, 'seat'>): void;
   close(): void;
 }
 
@@ -86,6 +94,10 @@ class LocalRoomTransport implements RoomTransport {
     window.setTimeout(() => channel.close(), 0);
   }
 
+  track(meta: Record<string, unknown>): void {
+    this.pub?.postMessage({ kind: 'presence', seat: this.mySeat, ...meta });
+  }
+
   close(): void {
     if (this.heartbeat !== null) window.clearInterval(this.heartbeat);
     this.pub?.close();
@@ -124,14 +136,27 @@ class SupabaseRoomTransport implements RoomTransport {
     });
 
     channel.on('presence', { event: 'sync' }, () => {
-      const state = channel.presenceState() as Record<string, unknown[]>;
+      const state = channel.presenceState() as Record<string, Array<Record<string, unknown>>>;
       const seats: Seat[] = [];
-      Object.keys(state).forEach(key => {
+      const metas: PresenceMeta[] = [];
+      Object.entries(state).forEach(([key, entries]) => {
         const seat = Number(key.replace('s', ''));
-        if (seat === 0 || seat === 1) seats.push(seat);
+        if (seat !== 0 && seat !== 1) return;
+        seats.push(seat);
+        const meta = entries?.[0] ?? {};
+        metas.push({
+          seat,
+          lobbyLocked: meta.lobbyLocked === true,
+          themeIds: Array.isArray(meta.themeIds)
+            ? meta.themeIds.filter((item): item is string => typeof item === 'string')
+            : []
+        });
       });
       if (!seats.includes(this.mySeat)) seats.push(this.mySeat);
-      this.handlers.onPresence?.(seats.sort());
+      this.handlers.onPresence?.(
+        seats.sort(),
+        metas.sort((a, b) => a.seat - b.seat)
+      );
     });
 
     this.publicChannel = channel;
@@ -146,6 +171,8 @@ class SupabaseRoomTransport implements RoomTransport {
       channel.subscribe(async status => {
         if (status === 'SUBSCRIBED') {
           await channel.track({ seat: this.mySeat });
+          // 先把自己点亮，对方的头像由 presence sync 补上，避免开场两个人都是灰的
+          this.handlers.onPresence?.([this.mySeat]);
           finish();
         }
       });
@@ -217,6 +244,10 @@ class SupabaseRoomTransport implements RoomTransport {
       event: 'msg',
       payload: { kind, data }
     });
+  }
+
+  track(meta: Record<string, unknown>): void {
+    void this.publicChannel?.track({ seat: this.mySeat, ...meta });
   }
 
   close(): void {

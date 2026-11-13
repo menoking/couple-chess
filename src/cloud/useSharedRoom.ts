@@ -24,6 +24,36 @@ export interface SharedRoomResult {
   dispatch: (action: RoomAction) => void;
   runtime: ModeRuntimeValue;
   requestView: () => void;
+  /** 把关键状态写进 Presence，作为动作丢失时的兜底 */
+  announce: (meta: Record<string, unknown>) => void;
+}
+
+const ROOM_SNAPSHOT_PREFIX = 'cfc:room-snapshot:';
+
+/** 房主房间快照落 sessionStorage：组件重挂 / 刷新后不会退回「重新选卡包」。 */
+export function loadRoomSnapshot(roomId: string): RoomSnapshot | null {
+  try {
+    const raw = window.sessionStorage.getItem(ROOM_SNAPSHOT_PREFIX + roomId);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as RoomSnapshot;
+    return parsed && typeof parsed.seq === 'number' ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveRoomSnapshot(roomId: string, snapshot: RoomSnapshot): void {
+  try {
+    // 只保留房间结构：玩法局部状态和超长题库不进 sessionStorage，避免超配额
+    const slim: RoomSnapshot = {
+      ...snapshot,
+      cardPool: snapshot.cardPool.slice(0, 500),
+      data: {}
+    };
+    window.sessionStorage.setItem(ROOM_SNAPSHOT_PREFIX + roomId, JSON.stringify(slim));
+  } catch {
+    // 隐私模式/容量不足时忽略
+  }
 }
 
 /** 公共频道兜底快照：去掉卡面明文与他人私有状态，只保留房间结构。 */
@@ -88,6 +118,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
   const publish = useCallback(
     (state: RoomSnapshot) => {
       // 先落地本机视图：任何发送失败都不能把房主自己卡在「正在连接」
+      if (roomId) saveRoomSnapshot(roomId, state);
       applySnapshot(viewFor(state, mySeat));
       const transport = transportRef.current;
       if (!transport) return;
@@ -103,7 +134,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         }
       });
     },
-    [applySnapshot, mySeat]
+    [applySnapshot, mySeat, roomId]
   );
 
   const applyAction = useCallback(
@@ -181,7 +212,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         setDiagnosticContext({ roomStatus: 'playing', viewReady: true });
         diagLog('room:view', { seat: mySeat, seq: next.seq });
       },
-      onPresence: seats => {
+      onPresence: (seats, metas) => {
         if (cancelled) return;
         setPresence(seats);
         setDiagnosticContext({ presence: seats });
@@ -189,6 +220,24 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         if (isHost && key !== lastPresence.current && authoritativeRef.current) {
           lastPresence.current = key;
           publish(authoritativeRef.current);
+        }
+        // Presence 兜底：对方已声明锁定但动作没到房主时，房主替它锁定。
+        // 这条通道就是头像亮起用的通道，实测最稳。
+        if (isHost && metas) {
+          const peerSeat: Seat = mySeat === 0 ? 1 : 0;
+          const peer = metas.find(item => item.seat === peerSeat);
+          const current = authoritativeRef.current;
+          if (peer?.lobbyLocked && current && !current.picks[peerSeat].locked) {
+            const next = reduceRoom(current, {
+              type: 'lockLobby',
+              seat: peerSeat,
+              themeIds: peer.themeIds ?? [],
+              pool: current.draftPools[peerSeat]
+            });
+            authoritativeRef.current = next;
+            publish(next);
+            diagLog('room:lock-from-presence', { seat: peerSeat });
+          }
         }
       }
     });
@@ -239,7 +288,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
     return () => window.clearInterval(timer);
   }, [enabled, roomId, isHost, mySeat]);
 
-  // 房主每 2 秒把「去敏房间快照」发到公共频道：
+  // 房主每 1.5 秒把「去敏房间快照」发到公共频道：
   // 座位频道任何环节丢包时，访客仍能进大厅、看到双方锁定状态并正常开局
   useEffect(() => {
     if (!enabled || !roomId || !isHost) return;
@@ -251,7 +300,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
       } catch (error) {
         diagLog('room:sync-error', { message: error instanceof Error ? error.message : String(error) });
       }
-    }, 2000);
+    }, 1500);
     return () => window.clearInterval(timer);
   }, [enabled, roomId, isHost]);
 
@@ -329,5 +378,9 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
     transportRef.current?.send('request-view', { seat: mySeat });
   }, [mySeat]);
 
-  return { snapshot, status, presence, error, dispatch, runtime, requestView };
+  const announce = useCallback((meta: Record<string, unknown>) => {
+    transportRef.current?.track(meta);
+  }, []);
+
+  return { snapshot, status, presence, error, dispatch, runtime, requestView, announce };
 }
