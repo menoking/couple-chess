@@ -39,9 +39,20 @@ export function loadRoomSnapshot(roomId: string): RoomSnapshot | null {
     const raw = window.sessionStorage.getItem(ROOM_SNAPSHOT_PREFIX + roomId);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as RoomSnapshot;
-    return parsed && typeof parsed.seq === 'number' ? parsed : null;
+    if (!parsed || typeof parsed.seq !== 'number') return null;
+    // 快照只用来保留「大厅已锁定 + 卡包」，绝不能把上次没做完的卡带回来
+    return { ...parsed, cards: [], data: {} };
   } catch {
     return null;
+  }
+}
+
+/** 用户主动「开始新一局」时清掉旧快照，避免把上一局的锁定状态带过来 */
+export function clearRoomSnapshot(roomId: string): void {
+  try {
+    window.sessionStorage.removeItem(ROOM_SNAPSHOT_PREFIX + roomId);
+  } catch {
+    // 忽略
   }
 }
 
@@ -50,6 +61,7 @@ export function saveRoomSnapshot(roomId: string, snapshot: RoomSnapshot): void {
     // 只保留房间结构：玩法局部状态和超长题库不进 sessionStorage，避免超配额
     const slim: RoomSnapshot = {
       ...snapshot,
+      cards: [],
       cardPool: snapshot.cardPool.slice(0, 500),
       data: {}
     };

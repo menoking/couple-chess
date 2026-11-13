@@ -42,7 +42,8 @@ import { useCloudSync } from './cloud/useCloudSync';
 import { CloudPanel } from './cloud/CloudPanel';
 import { OnlineStage } from './cloud/OnlineStage';
 import { cloudConfigured } from './cloud/client';
-import { enterOnlineRoom, leaveOnlineRoom, startRoomHeartbeat, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
+import { enterOnlineRoom, leaveOnlineRoom, roomIdOf, startRoomHeartbeat, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
+import { clearRoomSnapshot } from './cloud/useSharedRoom';
 import type { Role, Seat } from './rules/types';
 import { roleOfSeat } from './rules/identity';
 import { MODE_LABEL } from './rules/registry';
@@ -287,11 +288,13 @@ function App() {
     startLocalGame();
   };
 
-  const enterOnline = async (mode: GameMode) => {
+  const enterOnline = async (mode: GameMode, keepSnapshot = false) => {
     if (!cloud.space) {
       diagLog('enter:abort', { reason: 'cloud.space 为空' });
       return;
     }
+    // 主动点「开始」= 新一局，清掉上次的快照；重连/让位时保留
+    if (!keepSnapshot) clearRoomSnapshot(roomIdOf(cloud.space.id, mode));
     diagLog('enter:begin', { mode, spaceId: cloud.space.id.slice(0, 8), myRole });
     try {
       const ticket = await enterOnlineRoom(cloud.space, mode, myRole);
@@ -339,7 +342,7 @@ function App() {
     const mode = onlineSession.mode;
     diagLog('room:rejoin', { mode });
     setOnlineSession(null);
-    void enterOnline(mode);
+    void enterOnline(mode, true);
   };
 
   /** 对方已离线时由本机接管房主，避免访客永远停在「正在连接房间」 */
