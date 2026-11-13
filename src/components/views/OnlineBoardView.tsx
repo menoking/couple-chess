@@ -60,8 +60,19 @@ export function OnlineBoardView({
   turnRef.current = turn;
   const pendingRef = useRef(pendingCards);
   pendingRef.current = pendingCards;
+  const rollingRef = useRef(rolling);
+  rollingRef.current = rolling;
+  const movingRef = useRef(moving);
+  movingRef.current = moving;
+  const diceRef = useRef(dice);
+  diceRef.current = dice;
+  const checkTileRef = useRef(onCheckTile);
+  checkTileRef.current = onCheckTile;
+  const taskTriggerRef = useRef(onTaskTrigger);
+  taskTriggerRef.current = onTaskTrigger;
 
   const handledReq = useRef(0);
+  const rollTimer = useRef<number | null>(null);
   const waitingCard = useRef(false);
   const sawCard = useRef(false);
 
@@ -79,7 +90,7 @@ export function OnlineBoardView({
   const resolveLanding = (landing: number) => {
     setMoving(false);
     const seat = turnRef.current;
-    const tile = onCheckTile(landing);
+    const tile = checkTileRef.current(landing);
     diagLog('board-landing', {
       landing,
       seat,
@@ -95,7 +106,7 @@ export function OnlineBoardView({
     if (tile) {
       waitingCard.current = true;
       sawCard.current = false;
-      onTaskTrigger(tile);
+      taskTriggerRef.current(tile);
       // 卡片没能入队时兜底交回合，避免房主卡死
       window.setTimeout(() => {
         if (waitingCard.current && !sawCard.current) {
@@ -145,19 +156,29 @@ export function OnlineBoardView({
     if (!isAuthority || winner !== null) return;
     if (rollReq <= handledReq.current) return;
     handledReq.current = rollReq;
-    if (rolling || moving || dice !== null) return;
+    // 用 ref 读运行态：如果把这些值写进依赖，setRolling(true) 会让 effect 重跑并
+    // 清掉下方的定时器，骰子就会一直转不停
+    if (rollingRef.current || movingRef.current || diceRef.current !== null) return;
 
     setRolling(true);
     const result = rollDice();
+    const myReq = rollReq;
     diagLog('board-roll', { result, turn: turnRef.current, mySeat });
-    const timer = window.setTimeout(() => {
+    // 定时器放 ref，不用 effect cleanup：cleanup 会在连点/依赖变化时把
+    // 「停骰子」那一步清掉，导致骰子一直转
+    rollTimer.current = window.setTimeout(() => {
+      if (handledReq.current !== myReq) return;
+      rollTimer.current = null;
       setRolling(false);
       setDice(result);
       startMove(result);
     }, ROLL_DELAY);
-    return () => window.clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rollReq, isAuthority, winner, rolling, moving, dice]);
+  }, [rollReq, isAuthority, winner]);
+
+  useEffect(() => () => {
+    if (rollTimer.current !== null) window.clearTimeout(rollTimer.current);
+  }, []);
 
   // 卡片确认后交回合：必须「先看到卡片入队，再看到队列清空」
   useEffect(() => {
