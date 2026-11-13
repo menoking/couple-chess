@@ -130,34 +130,57 @@ export async function enterOnlineRoom(
 
   const peers = readPresence(channel);
   // forceHost：对方已离线时由本机接管，避免永远停在「正在连接房间」
-  const isHost = forceHost || decideHost(peers, myId, at);
+  let isHost = forceHost || decideHost(peers, myId, at);
 
   // 房主坐自己性别对应的座位；访客优先自己座位，只有撞座才换到另一端。
   // 旧版本 Presence 可能没有 seat，用 gender 兜底，再不行就占另一个座。
   const preferred = seatOfRole(myRole);
-  const hostMeta = peers.find(entry => entry.role === 'host' && entry.deviceId !== myId);
-  const hostSeat: Seat = isHost
-    ? preferred
-    : hostMeta?.seat !== undefined
-      ? hostMeta.seat
-      : hostMeta?.gender
-        ? seatOfRole(hostMeta.gender)
-        : otherSeat(preferred);
+  const hostSeatOf = (entry: RoomPresence | undefined, fallback: Seat): Seat =>
+    entry?.seat !== undefined
+      ? entry.seat
+      : entry?.gender
+        ? seatOfRole(entry.gender)
+        : fallback;
 
-  const seats = assignSeats({ myRole, hostSeat, isHost });
-  diagLog('room:decided', {
-    ms: Date.now() - at,
-    peers: peers.map(entry => `${entry.deviceId.slice(0, 8)}:${entry.role}:${entry.gender ?? '-'}:${entry.seat ?? '-'}`),
-    isHost,
-    mySeat: seats.mySeat,
-    hostSeat: seats.hostSeat,
-    flipped: seats.flipped
-  });
+  const hostMeta = peers.find(entry => entry.role === 'host' && entry.deviceId !== myId);
+  let hostSeat: Seat = isHost ? preferred : hostSeatOf(hostMeta, otherSeat(preferred));
+  let seats = assignSeats({ myRole, hostSeat, isHost });
+
   await channel.track({
     role: isHost ? 'host' : 'guest',
     at,
     gender: seats.effectiveRole,
     seat: seats.mySeat
+  });
+
+  // 二次仲裁：两端几乎同时进房时，Presence 可能还没互相同步，会双双自认房主。
+  // 再等一轮后如果发现更早的房主，本机立刻降级为访客，避免两端各跑一份结算
+  // （表现为走两次格子、一次抽两张卡、回合翻两次）。
+  await new Promise<void>(resolve => window.setTimeout(resolve, 900));
+  const settledPeers = readPresence(channel);
+  const rivalHost = settledPeers
+    .filter(entry => entry.role === 'host' && entry.deviceId !== myId)
+    .sort((a, b) => rankOf(a).localeCompare(rankOf(b)))[0];
+  if (isHost && rivalHost && rankOf(rivalHost) < rankOf({ deviceId: myId, role: 'host', at })) {
+    isHost = false;
+    hostSeat = hostSeatOf(rivalHost, otherSeat(preferred));
+    seats = assignSeats({ myRole, hostSeat, isHost });
+    await channel.track({
+      role: 'guest',
+      at,
+      gender: seats.effectiveRole,
+      seat: seats.mySeat
+    });
+    diagLog('room:demoted', { rival: rivalHost.deviceId.slice(0, 8), mySeat: seats.mySeat });
+  }
+
+  diagLog('room:decided', {
+    ms: Date.now() - at,
+    peers: settledPeers.map(entry => `${entry.deviceId.slice(0, 8)}:${entry.role}:${entry.gender ?? '-'}:${entry.seat ?? '-'}`),
+    isHost,
+    mySeat: seats.mySeat,
+    hostSeat: seats.hostSeat,
+    flipped: seats.flipped
   });
   diagLog('room:done', { ms: Date.now() - at });
 

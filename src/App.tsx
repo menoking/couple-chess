@@ -333,6 +333,15 @@ function App() {
     }
   };
 
+  /** 两端都自认房主时，本机重进房间让位（设备号小的保留房主身份） */
+  const rejoinRoom = () => {
+    if (!onlineSession) return;
+    const mode = onlineSession.mode;
+    diagLog('room:rejoin', { mode });
+    setOnlineSession(null);
+    void enterOnline(mode);
+  };
+
   /** 对方已离线时由本机接管房主，避免访客永远停在「正在连接房间」 */
   const takeOverRoom = async () => {
     if (!cloud.space || !onlineSession) return;
@@ -949,6 +958,7 @@ function App() {
             setOnlineSession(null);
           }}
           onTakeOver={() => void takeOverRoom()}
+          onConflict={rejoinRoom}
         />
       )}
     </div>

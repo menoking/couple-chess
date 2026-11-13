@@ -72,6 +72,8 @@ export interface OnlineStageProps {
   onExit: () => void;
   /** 对方已离线时，本机接管当房主 */
   onTakeOver: () => void;
+  /** 两端都自认房主时，本机重进房间让位 */
+  onConflict: () => void;
 }
 
 const other = (seat: Seat): Seat => (seat === 0 ? 1 : 0);
@@ -334,7 +336,7 @@ function SeatAvatars({
 }
 
 export function OnlineStage(props: OnlineStageProps) {
-  const { roomId, mode, mySeat, hostSeat, roles, themes, kind, onExit, onTakeOver } = props;
+  const { roomId, mode, mySeat, hostSeat, roles, themes, kind, onExit, onTakeOver, onConflict } = props;
   const isHost = mySeat === hostSeat;
 
   const createInitial = useCallback(() => {
@@ -343,7 +345,7 @@ export function OnlineStage(props: OnlineStageProps) {
     if (restored && restored.mode === mode && restored.hostSeat === hostSeat) return restored;
     return createRoom(mode, roles, hostSeat, hostSeat);
   }, [mode, roles, hostSeat, roomId]);
-  const shared = useSharedRoom({ roomId, mySeat, hostSeat, kind, enabled: true, createInitial });
+  const shared = useSharedRoom({ roomId, mySeat, hostSeat, kind, enabled: true, createInitial, onConflict });
   const snap = shared.snapshot;
   const dispatch = shared.dispatch;
 

@@ -6,6 +6,7 @@ import { privateKeyOf } from '../rules/registry';
 import { reviveValue, serializeValue, type ModeRuntimeValue } from '../rules/ModeRuntime';
 import { createTransport, type RoomTransport, type TransportKind } from './transport';
 import { diagLog, setDiagnosticContext } from './diagnostics';
+import { getDeviceId } from './device';
 
 export interface SharedRoomInput {
   roomId: string | null;
@@ -14,6 +15,8 @@ export interface SharedRoomInput {
   kind: TransportKind;
   enabled: boolean;
   createInitial: () => RoomSnapshot;
+  /** 两端都自认房主时，由本机主动重进房间让位 */
+  onConflict?: () => void;
 }
 
 export interface SharedRoomResult {
@@ -64,6 +67,7 @@ function publicSnapshot(state: RoomSnapshot): RoomSnapshot {
   });
   return {
     ...state,
+    hostId: getDeviceId(),
     cards: state.cards.map(card => ({ ...card, card: null })),
     data
   };
@@ -89,8 +93,10 @@ function mergeSnapshot(local: RoomSnapshot | null, incoming: RoomSnapshot, seat:
  * 再用 viewFor 给每个座位单独下发视图。24 个玩法共用这一套，不再各写适配器。
  */
 export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
-  const { roomId, mySeat, hostSeat, kind, enabled } = input;
+  const { roomId, mySeat, hostSeat, kind, enabled, onConflict } = input;
   const isHost = mySeat === hostSeat;
+  const onConflictRef = useRef(onConflict);
+  onConflictRef.current = onConflict;
 
   const [snapshot, setSnapshot] = useState<RoomSnapshot | null>(null);
   const [status, setStatus] = useState<SharedRoomResult['status']>('idle');
@@ -180,8 +186,14 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         if (cancelled) return;
         // 公共频道兜底：座位频道丢包时，访客也能从房主心跳拿到房间结构
         if (messageKind === 'room-sync') {
-          if (isHost) return;
           const incoming = data as RoomSnapshot;
+          // 两端都自认房主：设备号大的一方主动重进让位，避免两端各跑一份结算
+          if (isHost && incoming.hostId && incoming.hostId !== getDeviceId() && getDeviceId() > incoming.hostId) {
+            diagLog('room:host-conflict', { myId: getDeviceId(), hostId: incoming.hostId });
+            onConflictRef.current?.();
+            return;
+          }
+          if (isHost) return;
           const current = viewRef.current;
           if (current && incoming.seq <= current.seq) return;
           applySnapshot(mergeSnapshot(current, incoming, mySeat));

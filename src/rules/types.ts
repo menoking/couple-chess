@@ -55,6 +55,8 @@ export interface RoomSnapshot {
   cardSeq: number;
   /** 所有玩法视图的共享局部状态，key 形如「视图名.变量名」 */
   data: Record<string, unknown>;
+  /** 公共频道兜底快照携带的房主设备号，用于两端都自认房主时的仲裁 */
+  hostId?: string;
 }
 
 export type RoomAction =

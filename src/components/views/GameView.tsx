@@ -1,5 +1,6 @@
 import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
-import { useCallback } from 'react';
+import { diagLog } from '../../cloud/diagnostics';
+import { useCallback, useRef } from 'react';
 import { Player, PathCoord, TileType, TaskEventData } from '../../types';
 import { GameBoard } from '../GameBoard';
 import { Dice } from '../Dice';
@@ -37,17 +38,21 @@ export function GameView({
 }: GameViewProps) {
   const [diceResult, setDiceResult] = useModeState<number | null>('GameView.diceResult', null);
   const [isMoving, setIsMoving] = useModeState('GameView.isMoving', false);
-  // 谁摇的骰子：共享的骰子结果会让两端都触发结算，只有摇骰子的设备能真正走格
-  const [rollerSeat, setRollerSeat] = useModeState<number | null>('GameView.rollerSeat', null);
+  // 每次摇骰子自增的令牌：权威端用它保证同一把骰子只结算一次
+  const [diceToken, setDiceToken] = useModeState('GameView.diceToken', 0);
   const runtime = useModeRuntime();
   const mySeat = runtime?.seat ?? null;
+  // 落格结算只由房主执行。骰子结果是共享的，两端都会收到「摇骰完成」回调，
+  // 靠「谁摇的」比较容易因座位/时序出错，直接锁死在权威端最稳。
+  const isAuthority = runtime?.authority ?? true;
+  const settledStamp = useRef('');
 
   const handleRoll = useCallback(() => {
     if (isRolling || isMoving || diceResult) return;
     // 联机时只有当前回合方可以摇骰子
     if (mySeat !== null && currentTurn !== mySeat) return;
 
-    setRollerSeat(currentTurn);
+    setDiceToken(token => token + 1);
     onSetRolling(true);
     const result = rollDice();
 
@@ -59,12 +64,18 @@ export function GameView({
       setDiceResult(result);
       onSetRolling(false);
     }, 1000);
-  }, [isRolling, isMoving, diceResult, onSetRolling, mySeat, currentTurn, setRollerSeat]);
+  }, [isRolling, isMoving, diceResult, onSetRolling, mySeat, currentTurn, setDiceToken]);
 
   const handleRollComplete = useCallback(() => {
-    // 同屏（mySeat 为 null）照旧；联机只有摇骰子的那一端执行走格/抽卡/换回合
-    const isRoller = mySeat === null || rollerSeat === mySeat;
-    if (diceResult && isRoller) {
+    if (!diceResult) return;
+    // 非权威端只负责播放骰子动画，不碰任何状态
+    if (!isAuthority) return;
+    // 同一把骰子只结算一次；即使回调被重复触发也不会走两遍
+    const stamp = `${diceToken}:${diceResult}`;
+    if (settledStamp.current === stamp) return;
+    settledStamp.current = stamp;
+    diagLog('board:resolve', { authority: isAuthority, token: diceToken, result: diceResult, turn: currentTurn });
+    {
       const landingStep = calculateNewPosition(players[currentTurn].step, diceResult);
       setIsMoving(true);
 
@@ -104,7 +115,7 @@ export function GameView({
 
       setTimeout(stepOnce, moveDelayMs);
     }
-  }, [diceResult, players, currentTurn, onMove, onCheckTile, onWin, onTaskTrigger, onEndTurn, mySeat, rollerSeat]);
+  }, [diceResult, diceToken, isAuthority, players, currentTurn, onMove, onCheckTile, onWin, onTaskTrigger, onEndTurn]);
 
   const activePlayer = players[currentTurn];
   const turnNumber = Math.floor(Math.max(...players.map(p => p.step)) / 4) + 1;
