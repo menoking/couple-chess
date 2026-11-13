@@ -70,7 +70,9 @@ export function reduceCard(state: RoomSnapshot, action: RoomAction): RoomSnapsho
   }
 
   if (action.type === 'ackCard') {
-    if (action.seat !== first.executorSeat || first.phase !== 'revealed') return state;
+    // 执行人确认；抽卡人也能关掉，避免座位判定异常时整局卡死在这张卡上
+    if (first.phase !== 'revealed') return state;
+    if (action.seat !== first.executorSeat && action.seat !== first.drawerSeat) return state;
     // 飞行棋的「完成后前进/后退 N 格」在这里落到执行人身上
     let data = state.data;
     if (first.moveDelta !== 0) {

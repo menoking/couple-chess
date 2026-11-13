@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Cloud, Github, Moon, Sun } from 'lucide-react';
 import { useGameState } from './hooks/useGameState';
 import { GameMode, MineTaskChoice, TaskEventData, ThemeMode } from './types';
@@ -194,6 +194,7 @@ function App() {
   const [cloudOpen, setCloudOpen] = useState(false);
   const [onlineSession, setOnlineSession] = useState<OnlineSession | null>(null);
   const [remoteRoom, setRemoteRoom] = useState<RoomAnnounce | null>(null);
+  const remoteRoomAt = useRef(0);
   const [onlineNotice, setOnlineNotice] = useState<{ text: string; ok: boolean } | null>(null);
   const cloud = useCloud();
 
@@ -383,8 +384,18 @@ function App() {
     }
     return subscribeSpaceRooms(cloud.space, announce => {
       setRemoteRoom(announce);
+      remoteRoomAt.current = Date.now();
     });
   }, [cloud.space]);
+
+  // 房主每隔 2.5 秒广播一次；超过 6 秒没再收到就当他退房了，提示必须消失
+  useEffect(() => {
+    if (!remoteRoom) return;
+    const timer = window.setInterval(() => {
+      if (Date.now() - remoteRoomAt.current > 6000) setRemoteRoom(null);
+    }, 1500);
+    return () => window.clearInterval(timer);
+  }, [remoteRoom]);
 
   const handleTaskTrigger = (data: TaskEventData) => {
     setTaskData(data);
@@ -562,6 +573,13 @@ function App() {
               onSelectTheme={handleSelectTheme}
               onStartGame={handleStartGame}
               online={Boolean(cloud.space)}
+              remoteModeLabel={remoteRoom && !onlineSession ? MODE_LABEL[remoteRoom.mode] : null}
+              onJoinRemote={() => {
+                if (!remoteRoom) return;
+                const target = remoteRoom.mode;
+                setRemoteRoom(null);
+                void enterOnline(target);
+              }}
             />
           </div>
 
@@ -886,23 +904,6 @@ function App() {
           currentTurn={state.turn}
           onBack={handleBackFromGame}
         />
-      )}
-
-      {remoteRoom && !onlineSession && (
-        <button
-          type="button"
-          onClick={() => {
-            const target = remoteRoom.mode;
-            setRemoteRoom(null);
-            void enterOnline(target);
-          }}
-          className="fixed inset-x-0 bottom-[calc(88px+env(safe-area-inset-bottom))] z-[124] mx-auto flex w-[calc(100%-2.5rem)] max-w-[390px] items-center justify-between rounded-2xl border border-[#30D158]/40 bg-[#30D158]/15 px-4 py-3 backdrop-blur"
-        >
-          <span className="text-xs font-bold text-white">
-            对方正在玩「{MODE_LABEL[remoteRoom.mode]}」
-          </span>
-          <span className="text-xs font-bold text-[#30D158]">一起玩 →</span>
-        </button>
       )}
 
       {onlineNotice && (

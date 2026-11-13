@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, Lock, RefreshCw, Sparkles, Users, Wifi, WifiOff } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Check, Lock, RefreshCw, Sparkles, User, UserRound, Users, Wifi, WifiOff } from 'lucide-react';
 import type {
   BingoBoard,
   BingoCellResult,
@@ -15,6 +15,7 @@ import type {
   TileType
 } from '../types';
 import { MineBombChoiceModal } from '../components/modals/MineBombChoiceModal';
+import { ThemeTags } from '../components/ThemeTags';
 import { GameView } from '../components/views/GameView';
 import { CardModeView } from '../components/views/CardModeView';
 import { MineModeView } from '../components/views/MineModeView';
@@ -75,6 +76,12 @@ export interface OnlineStageProps {
 
 const other = (seat: Seat): Seat => (seat === 0 ? 1 : 0);
 
+const AUDIENCE_LABEL: Record<Theme['audience'], string> = {
+  common: '通用',
+  male: '男方',
+  female: '女方'
+};
+
 function poolTask(snap: RoomSnapshot, executorSeat: Seat, reason = '抽到一张任务卡'): TaskEventData {
   const card = cardFor(snap.cardPool, snap.cardSeq + 1);
   return {
@@ -92,138 +99,232 @@ function poolTask(snap: RoomSnapshot, executorSeat: Seat, reason = '抽到一张
 }
 
 /** 四阶段抽卡闸门：胜方抽卡看到 → 败方才能翻卡 → 败方确认后出队。 */
-function CardGate({
-  snap,
-  mySeat,
-  players,
-  dispatch
-}: {
+function CardGate(props: {
   snap: RoomSnapshot;
   mySeat: Seat;
   players: Player[];
   dispatch: (action: RoomAction) => void;
 }) {
-  const card = snap.cards[0];
+  const card = props.snap.cards[0];
   if (!card) return null;
+  return <CardGateBody key={card.id} card={card} {...props} />;
+}
 
+function CardGateBody({
+  card,
+  snap,
+  mySeat,
+  players,
+  dispatch
+}: {
+  card: RoomSnapshot['cards'][number];
+  snap: RoomSnapshot;
+  mySeat: Seat;
+  players: Player[];
+  dispatch: (action: RoomAction) => void;
+}) {
   const isDrawer = card.drawerSeat === mySeat;
   const isExecutor = card.executorSeat === mySeat;
-  const drawerName = players.find(p => p.id === card.drawerSeat)?.name ?? '对方';
-  const executorName = players.find(p => p.id === card.executorSeat)?.name ?? '对方';
+  const drawer = players.find(player => player.id === card.drawerSeat);
+  const executor = players.find(player => player.id === card.executorSeat);
+  const drawerName = drawer?.name ?? '对方';
+  const executorName = executor?.name ?? '对方';
   const face = card.card;
+  const flipped = card.phase === 'revealed' || (card.phase === 'drawn' && isDrawer);
+
+  // 网络抖动时动作可能没到房主，1.2 秒未推进就自动重发，最多 3 次
+  const [pending, setPending] = useState<RoomAction | null>(null);
+  const tries = useRef(0);
+  const send = (action: RoomAction) => {
+    if (pending) return;
+    tries.current = 0;
+    setPending(action);
+    dispatch(action);
+  };
+
+  useEffect(() => {
+    if (!pending) return;
+    const advanced =
+      pending.type === 'drawCard'
+        ? card.phase !== 'locked'
+        : pending.type === 'revealCard'
+          ? card.phase === 'revealed'
+          : snap.cards[0]?.id !== card.id;
+    if (advanced || tries.current >= 3) {
+      setPending(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      tries.current += 1;
+      dispatch(pending);
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [pending, card.phase, card.id, snap.cards, dispatch]);
+
+  const busy = pending !== null;
 
   const strip = (
-    <div className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-bold">
-      <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${players[card.drawerSeat]?.color ?? '#0A84FF'}22`, color: players[card.drawerSeat]?.color ?? '#0A84FF' }}>
+    <div className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-bold">
+      <span
+        className="rounded-full px-2 py-0.5"
+        style={{ backgroundColor: `${drawer?.color ?? '#0A84FF'}22`, color: drawer?.color ?? '#0A84FF' }}
+      >
         抽卡 · {drawerName}
       </span>
       <span className="text-gray-500">→</span>
-      <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${players[card.executorSeat]?.color ?? '#FF375F'}22`, color: players[card.executorSeat]?.color ?? '#FF375F' }}>
+      <span
+        className="rounded-full px-2 py-0.5"
+        style={{ backgroundColor: `${executor?.color ?? '#FF375F'}22`, color: executor?.color ?? '#FF375F' }}
+      >
         执行 · {executorName}
       </span>
     </div>
   );
 
-  let body;
+  let footer: React.ReactNode;
   if (card.phase === 'locked') {
-    body = isDrawer ? (
-      <>
-        <Lock size={34} className="mb-4 text-[#FFD60A]" />
-        <h3 className="mb-1 text-xl font-bold text-white">你赢了，来抽一张卡</h3>
-        <p className="mb-5 text-xs text-gray-400">抽出后只有你能先看到，对方仍处锁定状态</p>
-        <button
-          type="button"
-          onClick={() => dispatch({ type: 'drawCard', seat: mySeat })}
-          className="ios-btn h-12 w-full rounded-full bg-white text-sm font-bold text-black"
-        >
-          抽卡并查看
-        </button>
-      </>
+    footer = isDrawer ? (
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => send({ type: 'drawCard', seat: mySeat })}
+        className="ios-btn mt-4 h-12 w-full rounded-full bg-white text-sm font-bold text-black disabled:opacity-60"
+      >
+        {busy ? '抽卡中…' : '抽卡并查看'}
+      </button>
     ) : (
-      <>
-        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-full border border-white/10 bg-white/[0.06]">
-          <Lock size={26} className="text-gray-400" />
-        </div>
-        <h3 className="mb-1 text-xl font-bold text-white">卡片已锁定</h3>
-        <p className="mb-2 text-xs text-gray-400">等 {drawerName} 先抽卡并查看后，你才能翻卡</p>
-        <div className="w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-400">
-          锁定中 · 暂不可翻卡
-        </div>
-      </>
+      <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-400">
+        锁定中 · 等 {drawerName} 先抽卡
+      </div>
     );
   } else if (card.phase === 'drawn') {
-    body = isDrawer ? (
-      <>
-        <Sparkles size={28} className="mb-3 text-[#FFD60A]" />
-        <h3 className="mb-3 text-lg font-bold text-white">你抽到的卡</h3>
-        {face && (
-          <div className="mb-3 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-5 text-center text-base font-medium leading-relaxed text-white">
-            {face.task}
-          </div>
-        )}
-        <div className="w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-300">
-          等 {executorName} 在自己手机上翻卡查看
-        </div>
-      </>
+    footer = isDrawer ? (
+      <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-300">
+        已抽到 · 等 {executorName} 翻卡查看
+      </div>
     ) : (
-      <>
-        <h3 className="mb-1 text-xl font-bold text-white">{drawerName} 已抽卡</h3>
-        <p className="mb-5 text-xs text-gray-400">现在轮到你翻卡查看，卡面尚未显示</p>
-        <button
-          type="button"
-          onClick={() => dispatch({ type: 'revealCard', seat: mySeat })}
-          className="ios-btn h-12 w-full rounded-full bg-white text-sm font-bold text-black"
-        >
-          翻卡查看
-        </button>
-      </>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => send({ type: 'revealCard', seat: mySeat })}
+        className="ios-btn mt-4 h-12 w-full rounded-full bg-white text-sm font-bold text-black disabled:opacity-60"
+      >
+        {busy ? '翻卡中…' : '翻卡查看'}
+      </button>
     );
   } else {
-    body = (
-      <>
-        <Sparkles size={28} className="mb-3 text-[#FFD60A]" />
-        <h3 className="mb-3 text-lg font-bold text-white">{card.reason}</h3>
-        {face && (
-          <div className="mb-3 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-5 text-center text-base font-medium leading-relaxed text-white">
-            {face.task}
-          </div>
-        )}
-        {face && <p className="mb-4 text-[11px] text-gray-500">来自「{face.themeName}」 · 由 {executorName} 执行</p>}
-        {isExecutor ? (
-          <div className="flex w-full gap-3">
-            <button
-              type="button"
-              onClick={() => dispatch({ type: 'ackCard', seat: mySeat })}
-              className="ios-btn h-11 flex-1 rounded-full bg-[#3A3A3C] text-xs font-bold text-[#FF453A]"
-            >
-              跳过任务
-            </button>
-            <button
-              type="button"
-              onClick={() => dispatch({ type: 'ackCard', seat: mySeat })}
-              className="ios-btn h-11 flex-1 rounded-full bg-white text-xs font-bold text-black"
-            >
-              接受任务
-            </button>
-          </div>
-        ) : (
-          <div className="w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-300">
-            等 {executorName} 确认后自动关闭
-          </div>
-        )}
-      </>
+    footer = isExecutor ? (
+      <div className="mt-4 flex w-full gap-3">
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => send({ type: 'ackCard', seat: mySeat })}
+          className="ios-btn h-11 flex-1 rounded-full bg-[#3A3A3C] text-xs font-bold text-[#FF453A] disabled:opacity-60"
+        >
+          跳过任务
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => send({ type: 'ackCard', seat: mySeat })}
+          className="ios-btn h-11 flex-1 rounded-full bg-white text-xs font-bold text-black disabled:opacity-60"
+        >
+          {busy ? '确认中…' : '接受任务'}
+        </button>
+      </div>
+    ) : (
+      <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-300">
+        等 {executorName} 确认后自动关闭
+      </div>
     );
   }
 
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-5 backdrop-blur-md">
-      <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#1C1C1E] p-6 shadow-2xl">
-        <div className="mb-4 text-center text-[10px] font-bold uppercase tracking-widest text-gray-500">
-          {card.reason}{snap.cards.length > 1 ? ` · 后面还有 ${snap.cards.length - 1} 张` : ''}
+      <div className="task-card-pop w-full max-w-sm rounded-3xl border border-white/10 bg-[#1C1C1E] p-5 shadow-2xl">
+        <div className="mb-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-gray-500">
+          <span>{card.reason}</span>
+          {snap.cards.length > 1 && <span>还有 {snap.cards.length - 1} 张</span>}
         </div>
-        {body}
-        <div className="mt-4">{strip}</div>
+
+        <div className="perspective-1000 w-full">
+          <div className={`flip-card-inner ${flipped ? 'flipped' : ''}`} style={{ height: 300 }}>
+            <div className="flip-card-front flex flex-col items-center justify-center border border-white/10 bg-[#1C1C1E] px-5">
+              <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full border border-white/10 bg-white/[0.05]">
+                {card.phase === 'locked'
+                  ? <Lock size={28} className="text-gray-400" />
+                  : <Sparkles size={28} className="text-[#FFD60A]" />}
+              </div>
+              <div className="text-base font-bold text-white">
+                {card.phase === 'locked' ? '卡片已锁定' : '等待翻卡'}
+              </div>
+              <div className="mt-1 text-[11px] text-gray-500">
+                {card.phase === 'locked' ? `等 ${drawerName} 先抽卡并查看` : '卡面尚未展开'}
+              </div>
+              <div className="mt-5 grid grid-cols-3 gap-1.5 opacity-25">
+                {Array.from({ length: 9 }).map((_, index) => (
+                  <span key={index} className="h-1.5 w-1.5 rounded-full bg-white" />
+                ))}
+              </div>
+            </div>
+
+            <div className="flip-card-back overflow-y-auto border border-white/10 px-5 py-6">
+              <div className="text-[10px] font-bold uppercase tracking-widest text-gray-500">{card.reason}</div>
+              <div className="mt-3 text-lg font-bold leading-relaxed text-white">
+                {face?.task ?? '卡面加载中…'}
+              </div>
+              {face && <div className="mt-2 text-[11px] text-gray-500">来自「{face.themeName}」</div>}
+              <div className="mt-auto pt-4 text-[11px] font-bold text-gray-400">由 {executorName} 执行</div>
+            </div>
+          </div>
+        </div>
+
+        {footer}
+        {strip}
       </div>
+    </div>
+  );
+}
+
+/** 可视化房间：两个座位头像，谁进了房间就亮起，没进的是灰色。 */
+function SeatAvatars({
+  roles,
+  presence,
+  mySeat
+}: {
+  roles: [Role, Role];
+  presence: Seat[];
+  mySeat: Seat;
+}) {
+  return (
+    <div className="flex items-center justify-center gap-8">
+      {([0, 1] as Seat[]).map(seat => {
+        const online = presence.includes(seat);
+        const color = roles[seat] === 'male' ? '#0A84FF' : '#FF375F';
+        const name = roles[seat] === 'male' ? '男方' : '女方';
+        return (
+          <div key={seat} className="flex flex-col items-center gap-1.5">
+            <div
+              className={`relative flex h-14 w-14 items-center justify-center rounded-full border-2 transition-all duration-300 ${online ? 'opacity-100' : 'opacity-40 grayscale'}`}
+              style={{
+                borderColor: online ? color : '#48484A',
+                backgroundColor: online ? `${color}22` : 'rgba(255,255,255,0.04)'
+              }}
+            >
+              {roles[seat] === 'male'
+                ? <User size={22} style={{ color: online ? color : '#8E8E93' }} />
+                : <UserRound size={22} style={{ color: online ? color : '#8E8E93' }} />}
+              <span
+                className={`absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full border-2 border-[#1C1C1E] ${online ? 'bg-[#30D158]' : 'bg-[#48484A]'}`}
+              />
+            </div>
+            <div className={`text-[11px] font-bold ${online ? 'text-white' : 'text-gray-600'}`}>{name}</div>
+            <div className="text-[9px] text-gray-600">
+              {online ? (seat === mySeat ? '我' : '已进入') : '未进入'}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -290,22 +391,19 @@ export function OnlineStage(props: OnlineStageProps) {
   if (!snap || shared.status === 'connecting' || shared.status === 'idle') {
     return (
       <div className="mobile-game-screen fixed inset-0 z-50 flex flex-col items-center justify-center gap-4 bg-black px-6 text-center">
-        <Wifi size={32} className="animate-pulse text-[#64D2FF]" />
-        <div className="text-base font-bold text-white">正在连接房间…</div>
-        <div className="text-xs text-gray-500">房间 {roomId.slice(-8)} · 座位 {mySeat === 0 ? '男方' : '女方'} · {isHost ? '房主' : '访客'}</div>
-        <div className="text-[10px] text-gray-600">已等待 {waitSeconds} 秒{isHost ? ' · 正在建立房间' : ' · 等房主把局面发过来'}</div>
+        <Wifi size={28} className="animate-pulse text-[#64D2FF]" />
+        <div className="text-base font-bold text-white">{isHost ? '房间已开好' : '正在进入房间…'}</div>
+        <div className="text-[10px] text-gray-500">房间 {roomId.slice(-8)} · {MODE_LABEL[mode]}</div>
+        <SeatAvatars roles={roles} presence={shared.presence} mySeat={mySeat} />
+        <div className="text-[11px] text-gray-500">
+          {isHost ? '等对方进入，或先单人开局' : '正在同步房主的局面…'}
+          <span className="ml-1 text-gray-600">（{waitSeconds}s）</span>
+        </div>
         <button type="button" onClick={shared.requestView} className="ios-btn rounded-full border border-white/10 px-4 py-2 text-xs text-gray-300">重试连接</button>
         {!isHost && waitSeconds >= 8 && (
-          <div className="w-full max-w-[280px] rounded-2xl border border-[#FF9F0A]/30 bg-[#FF9F0A]/10 p-3">
-            <div className="text-[11px] leading-relaxed text-gray-300">对方可能已经离开这个房间，或者两台设备没有连上同一个服务。</div>
-            <button
-              type="button"
-              onClick={onTakeOver}
-              className="ios-btn mt-2 h-10 w-full rounded-full bg-[#FF9F0A] text-xs font-bold text-black"
-            >
-              我来开房（接管房间）
-            </button>
-          </div>
+          <button type="button" onClick={onTakeOver} className="ios-btn text-[10px] text-gray-500 underline">
+            对方迟迟没进来？由我开房
+          </button>
         )}
         <button type="button" onClick={onExit} className="ios-btn text-xs text-gray-500">退出房间</button>
       </div>
@@ -364,16 +462,13 @@ export function OnlineStage(props: OnlineStageProps) {
             两台设备各选自己想玩的任务包，双方都点「锁定」后自动合并成公共题库，再一起开局。
           </div>
 
-          <div className="mb-4 grid grid-cols-2 gap-2">
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-              <div className="text-[10px] text-gray-500">我 · {PLAYER_NAME[myRole]}</div>
-              <div className="mt-1 text-sm font-bold text-white">{myPick.locked ? '已锁定' : `已选 ${selected.length} 个包`}</div>
-              <div className="text-[10px] text-gray-500">{myPool.length} 张任务</div>
-            </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
-              <div className="text-[10px] text-gray-500">对方 · {PLAYER_NAME[roles[other(mySeat)]]}</div>
-              <div className="mt-1 text-sm font-bold text-white">{oppPick.locked ? '已锁定' : '选择中'}</div>
-              <div className="text-[10px] text-gray-500">{snap.draftPools[other(mySeat)].length} 张任务</div>
+          <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
+            <SeatAvatars roles={roles} presence={shared.presence} mySeat={mySeat} />
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[10px] text-gray-500">
+              <span>我 {myPick.locked ? '已锁定' : `已选 ${selected.length} 个包`} · {myPool.length} 张</span>
+              <span>
+                对方 {oppPick.locked ? '已锁定' : shared.presence.includes(other(mySeat)) ? `已选 ${oppPick.themeIds.length} 个包` : '还没进入'}
+              </span>
             </div>
           </div>
 
@@ -388,13 +483,31 @@ export function OnlineStage(props: OnlineStageProps) {
                       key={theme.id}
                       type="button"
                       onClick={() => setSelected(current => active ? current.filter(id => id !== theme.id) : [...current, theme.id])}
-                      className={`ios-btn flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-left ${active ? 'border-[#30D158]/50 bg-[#30D158]/10' : 'border-white/10 bg-white/[0.04]'}`}
+                      className={`ios-btn w-full rounded-xl border px-3 py-3 text-left ${active ? 'border-[#30D158]/50 bg-[#30D158]/10' : 'border-white/10 bg-white/[0.04]'}`}
                     >
-                      <span className="min-w-0">
-                        <span className="block truncate text-xs font-bold text-white">{theme.name}</span>
-                        <span className="block text-[10px] text-gray-500">{theme.tasks.length} 张任务 · {theme.audience === 'common' ? '通用' : theme.audience === 'male' ? '男方' : '女方'}</span>
-                      </span>
-                      {active && <Check size={15} className="shrink-0 text-[#30D158]" />}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="truncate text-xs font-bold text-white">{theme.name}</span>
+                            <span className="shrink-0 text-[10px] text-gray-500">{theme.tasks.length}卡</span>
+                          </div>
+                          <div className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-gray-500">
+                            {theme.desc || '无描述'}
+                          </div>
+                          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] text-gray-300">
+                              {AUDIENCE_LABEL[theme.audience]}
+                            </span>
+                            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] text-gray-300">
+                              {theme.tasks.length} 张任务
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 items-start gap-1">
+                          <ThemeTags tags={theme.tags} />
+                          {active && <Check size={15} className="mt-0.5 text-[#30D158]" />}
+                        </div>
+                      </div>
                     </button>
                   );
                 })}

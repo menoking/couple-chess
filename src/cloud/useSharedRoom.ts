@@ -74,7 +74,16 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
       const current = authoritativeRef.current;
       if (!current) return;
       const next = reduceRoom(current, action);
-      if (next === current) return;
+      if (next === current) {
+        // 记录被拒的动作，便于真机诊断「点了没反应」
+        diagLog('room:rejected', {
+          type: action.type,
+          seat: 'seat' in action ? action.seat : '-',
+          phase: current.cards[0]?.phase ?? null,
+          cards: current.cards.length
+        });
+        return;
+      }
       authoritativeRef.current = next;
       publish(next);
     },

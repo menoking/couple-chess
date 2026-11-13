@@ -13,6 +13,9 @@ interface HomeViewProps {
   onStartGame: () => void;
   /** 登录态：卡包改为进房后各自选择，首页不再提供旧入口 */
   online?: boolean;
+  /** 对方正在玩的玩法（房主心跳有效期内），显示在标题上方 */
+  remoteModeLabel?: string | null;
+  onJoinRemote?: () => void;
 }
 
 interface ModeDef {
@@ -154,7 +157,9 @@ export function HomeView({
   onSelectMode,
   onSelectTheme,
   onStartGame,
-  online = false
+  online = false,
+  remoteModeLabel = null,
+  onJoinRemote
 }: HomeViewProps) {
   // 登录态下卡包在房间大厅里各自选，首页不再显示旧的主题选择卡
   const shouldShowThemeSelectors = !online && !THEME_FREE_MODES.has(gameMode);
@@ -201,6 +206,19 @@ export function HomeView({
   return (
     <div className="h-full min-h-0 flex flex-col">
       <div className="min-h-0 flex-1 overflow-y-auto no-scrollbar space-y-6 pt-2 pb-4">
+        {remoteModeLabel && (
+          <button
+            type="button"
+            onClick={onJoinRemote}
+            className="ios-btn flex w-full items-center justify-between rounded-2xl border border-[#30D158]/40 bg-[#30D158]/12 px-4 py-2.5"
+          >
+            <span className="min-w-0 truncate text-xs font-bold text-white">
+              对方正在玩「{remoteModeLabel}」
+            </span>
+            <span className="shrink-0 text-xs font-bold text-[#30D158]">一起玩 →</span>
+          </button>
+        )}
+
         <div className="text-center mb-4">
           <h2 className="text-xl text-gray-300 font-medium">配置游戏角色</h2>
           <p className="text-sm text-gray-500 mt-2">
