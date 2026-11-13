@@ -131,19 +131,10 @@ function CardGateBody({
   const drawerName = drawer?.name ?? '对方';
   const executorName = executor?.name ?? '对方';
   const face = card.card;
-  const shouldReveal = card.phase === 'revealed' || (card.phase === 'drawn' && isDrawer);
   const canDraw = card.phase === 'locked' && isDrawer;
   const canReveal = card.phase === 'drawn' && isExecutor;
-  // 先出卡背、再翻到卡面：卡一到就置 true 的话没有翻转过程
+  // 和离线模式一致：卡面不自动翻，点一下才翻
   const [flipped, setFlipped] = useState(false);
-  useEffect(() => {
-    if (!shouldReveal) {
-      setFlipped(false);
-      return;
-    }
-    const timer = window.setTimeout(() => setFlipped(true), 60);
-    return () => window.clearTimeout(timer);
-  }, [shouldReveal, card.id]);
 
   // 网络抖动时动作可能没到房主，1.2 秒未推进就自动重发，最多 3 次
   const [pending, setPending] = useState<RoomAction | null>(null);
@@ -179,12 +170,16 @@ function CardGateBody({
   // 和离线模式一致：点卡面抽卡 / 翻卡，只有翻牌后才出现接受/跳过
   const tapFront = () => {
     if (busy) return;
+    if (card.phase === 'revealed') {
+      setFlipped(true);
+      return;
+    }
     if (canDraw) send({ type: 'drawCard', seat: mySeat });
     else if (canReveal) send({ type: 'revealCard', seat: mySeat });
   };
 
   const frontHint = card.phase === 'revealed'
-    ? '正在翻开…'
+    ? '点击卡面翻开'
     : card.phase === 'locked'
       ? isDrawer ? '点击卡面抽一张' : `等 ${drawerName} 抽卡`
       : isExecutor ? '点击卡面翻卡查看' : `等 ${executorName} 翻卡`;
@@ -220,9 +215,9 @@ function CardGateBody({
             <button
               type="button"
               onClick={tapFront}
-              disabled={!canDraw && !canReveal}
+              disabled={!canDraw && !canReveal && card.phase !== 'revealed'}
               className={`flip-card-front flex flex-col items-center justify-center border border-white/10 bg-[#1C1C1E] px-5 transition-transform ${
-                canDraw || canReveal ? 'cursor-pointer active:scale-[0.98]' : 'cursor-default'
+                canDraw || canReveal || card.phase === 'revealed' ? 'cursor-pointer active:scale-[0.98]' : 'cursor-default'
               }`}
             >
               <div
@@ -237,7 +232,7 @@ function CardGateBody({
               <div className="text-base font-bold text-white">
                 {card.phase === 'locked' ? (isDrawer ? '你赢了' : '卡片已锁定') : '等待翻卡'}
               </div>
-              <div className={`mt-1 text-[11px] font-bold ${canDraw || canReveal ? 'text-[#FFD60A]' : 'text-gray-500'}`}>
+              <div className={`mt-1 text-[11px] font-bold ${canDraw || canReveal || card.phase === 'revealed' ? 'text-[#FFD60A]' : 'text-gray-500'}`}>
                 {busy ? '处理中…' : frontHint}
               </div>
               <div className="mt-5 grid grid-cols-3 gap-1.5 opacity-25">
@@ -262,7 +257,7 @@ function CardGateBody({
           </div>
         </div>
 
-        {card.phase === 'revealed' && isExecutor && (
+        {card.phase === 'revealed' && flipped && isExecutor && (
           <div className="mt-4 flex w-full gap-3">
             <button
               type="button"
@@ -283,9 +278,15 @@ function CardGateBody({
           </div>
         )}
 
-        {card.phase === 'revealed' && !isExecutor && (
+        {card.phase === 'revealed' && flipped && !isExecutor && (
           <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-300">
             等 {executorName} 确认后自动关闭
+          </div>
+        )}
+
+        {card.phase === 'revealed' && !flipped && (
+          <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-400">
+            点击卡面翻开，翻牌后由 {executorName} 确认
           </div>
         )}
 
