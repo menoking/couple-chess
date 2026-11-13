@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Sparkles, User, UserRound } from 'lucide-react';
 import { PathCoord, Player, TaskEventData, TileType } from '../../types';
 import { useModeState } from '../../rules/ModeRuntime';
@@ -48,8 +48,10 @@ export function OnlineBoardView({
   const [turn, setTurn] = useModeState('OnlineBoard.turn', currentTurn);
   // 和房间的 stage.steps 共用同一个 key，OnlineStage 的 players.step 直接读到这里
   const [steps, setSteps] = useModeState<number[]>('stage.steps', [0, 0]);
-  const [dice, setDice] = useModeState<number | null>('OnlineBoard.dice', null);
-  const [rolling, setRolling] = useModeState('OnlineBoard.rolling', false);
+  // 点数和序号一次性写入（不再先写「正在摇」再写「停止」），避免两个 patch 乱序把状态卡住
+  const [roll, setRoll] = useModeState<{ token: number; result: number } | null>('OnlineBoard.roll', null);
+  // 骰子转不转是本地动画，不参与同步
+  const [localRolling, setLocalRolling] = useState(false);
   const [moving, setMoving] = useModeState('OnlineBoard.moving', false);
   const [rollReq, setRollReq] = useModeState('OnlineBoard.rollReq', 0);
   const [winner, setWinner] = useModeState<number | null>('OnlineBoard.winner', null);
@@ -60,12 +62,10 @@ export function OnlineBoardView({
   turnRef.current = turn;
   const pendingRef = useRef(pendingCards);
   pendingRef.current = pendingCards;
-  const rollingRef = useRef(rolling);
-  rollingRef.current = rolling;
   const movingRef = useRef(moving);
   movingRef.current = moving;
-  const diceRef = useRef(dice);
-  diceRef.current = dice;
+  const rollRef = useRef(roll);
+  rollRef.current = roll;
   const checkTileRef = useRef(onCheckTile);
   checkTileRef.current = onCheckTile;
   const taskTriggerRef = useRef(onTaskTrigger);
@@ -73,6 +73,7 @@ export function OnlineBoardView({
 
   const handledReq = useRef(0);
   const rollTimer = useRef<number | null>(null);
+  const seenToken = useRef(0);
   const waitingCard = useRef(false);
   const sawCard = useRef(false);
 
@@ -82,7 +83,6 @@ export function OnlineBoardView({
 
   const nextTurn = () => {
     setTurn(value => (value === 0 ? 1 : 0));
-    setDice(null);
     waitingCard.current = false;
     sawCard.current = false;
   };
@@ -99,7 +99,6 @@ export function OnlineBoardView({
 
     if (tile === 'win') {
       setWinner(seat);
-      setDice(null);
       return;
     }
 
@@ -155,26 +154,22 @@ export function OnlineBoardView({
   useEffect(() => {
     if (!isAuthority || winner !== null) return;
     if (rollReq <= handledReq.current) return;
+    if (movingRef.current) return;
     handledReq.current = rollReq;
-    // 用 ref 读运行态：如果把这些值写进依赖，setRolling(true) 会让 effect 重跑并
-    // 清掉下方的定时器，骰子就会一直转不停
-    if (rollingRef.current || movingRef.current || diceRef.current !== null) return;
 
-    setRolling(true);
     const result = rollDice();
     const myReq = rollReq;
+    const token = (rollRef.current?.token ?? 0) + 1;
+    // 点数和序号一次性写入，两端只认新序号，不会出现「先转后停」两个 patch 乱序
+    setRoll({ token, result });
     diagLog('board-roll', { result, turn: turnRef.current, mySeat });
-    // 定时器放 ref，不用 effect cleanup：cleanup 会在连点/依赖变化时把
-    // 「停骰子」那一步清掉，导致骰子一直转
     rollTimer.current = window.setTimeout(() => {
       if (handledReq.current !== myReq) return;
       rollTimer.current = null;
-      setRolling(false);
-      setDice(result);
       startMove(result);
     }, ROLL_DELAY);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rollReq, isAuthority, winner]);
+  }, [rollReq, isAuthority, winner, moving]);
 
   useEffect(() => () => {
     if (rollTimer.current !== null) window.clearTimeout(rollTimer.current);
@@ -192,10 +187,27 @@ export function OnlineBoardView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCards, isAuthority]);
 
+  // 收到新房就本地播 0.7 秒骰子动画；序号回退直接忽略
+  useEffect(() => {
+    if (!roll) return;
+    if (roll.token <= seenToken.current) return;
+    seenToken.current = roll.token;
+    setLocalRolling(true);
+    const timer = window.setTimeout(() => setLocalRolling(false), ROLL_DELAY);
+    return () => window.clearTimeout(timer);
+  }, [roll]);
+
+  // 房主兜底：移动状态万一没归位，6 秒后强制复位
+  useEffect(() => {
+    if (!isAuthority || !moving) return;
+    const timer = window.setTimeout(() => setMoving(false), 6000);
+    return () => window.clearTimeout(timer);
+  }, [isAuthority, moving, setMoving]);
+
   const handleRoll = () => {
     if (winner !== null) return;
     if (mySeat !== turn) return;
-    if (rolling || moving || dice !== null) return;
+    if (localRolling || moving) return;
     setRollReq(value => value + 1);
   };
 
@@ -273,11 +285,11 @@ export function OnlineBoardView({
           </div>
           <div
             onClick={handleRoll}
-            className={turn === mySeat && !rolling && !moving && dice === null ? 'cursor-pointer' : 'cursor-default'}
+            className={turn === mySeat && !localRolling && !moving ? 'cursor-pointer' : 'cursor-default'}
           >
-            <Dice isRolling={rolling} result={dice} />
+            <Dice isRolling={localRolling} result={roll?.result ?? null} />
           </div>
-          {turn === mySeat && !rolling && !moving && dice === null && (
+          {turn === mySeat && !localRolling && !moving && (
             <div className="mt-2 text-[10px] font-bold text-gray-500">
               {isAuthority ? '本机裁决' : '由房主裁决'}
             </div>
