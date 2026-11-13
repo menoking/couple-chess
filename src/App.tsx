@@ -337,10 +337,19 @@ function App() {
   };
 
   /** 两端都自认房主时，本机重进房间让位（设备号小的保留房主身份） */
+  const rejoinWindow = useRef<number[]>([]);
   const rejoinRoom = () => {
     if (!onlineSession) return;
+    // 15 秒内最多重进 2 次：Presence 迟迟不同步时不能无限重连
+    const now = Date.now();
+    rejoinWindow.current = rejoinWindow.current.filter(at => now - at < 15000);
+    if (rejoinWindow.current.length >= 2) {
+      diagLog('room:rejoin-blocked', { attempts: rejoinWindow.current.length });
+      return;
+    }
+    rejoinWindow.current.push(now);
     const mode = onlineSession.mode;
-    diagLog('room:rejoin', { mode });
+    diagLog('room:rejoin', { mode, attempt: rejoinWindow.current.length });
     setOnlineSession(null);
     void enterOnline(mode, true);
   };

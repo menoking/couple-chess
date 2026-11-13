@@ -74,6 +74,7 @@ export function OnlineBoardView({
   const handledReq = useRef(0);
   const rollTimer = useRef<number | null>(null);
   const seenToken = useRef(0);
+  const rollAnimTimer = useRef<number | null>(null);
   const waitingCard = useRef(false);
   const sawCard = useRef(false);
 
@@ -187,15 +188,24 @@ export function OnlineBoardView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingCards, isAuthority]);
 
-  // 收到新房就本地播 0.7 秒骰子动画；序号回退直接忽略
+  // 收到新房就本地播 0.7 秒骰子动画；序号回退直接忽略。
+  // 定时器必须放 ref：房间每 1.5 秒同步一次快照，roll 的引用会变，
+  // 如果用 effect cleanup 清定时器，「停骰子」那一步会被反复清掉。
   useEffect(() => {
     if (!roll) return;
     if (roll.token <= seenToken.current) return;
     seenToken.current = roll.token;
     setLocalRolling(true);
-    const timer = window.setTimeout(() => setLocalRolling(false), ROLL_DELAY);
-    return () => window.clearTimeout(timer);
+    if (rollAnimTimer.current !== null) window.clearTimeout(rollAnimTimer.current);
+    rollAnimTimer.current = window.setTimeout(() => {
+      rollAnimTimer.current = null;
+      setLocalRolling(false);
+    }, ROLL_DELAY);
   }, [roll]);
+
+  useEffect(() => () => {
+    if (rollAnimTimer.current !== null) window.clearTimeout(rollAnimTimer.current);
+  }, []);
 
   // 房主兜底：移动状态万一没归位，6 秒后强制复位
   useEffect(() => {

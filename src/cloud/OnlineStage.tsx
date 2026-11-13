@@ -131,9 +131,19 @@ function CardGateBody({
   const drawerName = drawer?.name ?? '对方';
   const executorName = executor?.name ?? '对方';
   const face = card.card;
-  const flipped = card.phase === 'revealed' || (card.phase === 'drawn' && isDrawer);
+  const shouldReveal = card.phase === 'revealed' || (card.phase === 'drawn' && isDrawer);
   const canDraw = card.phase === 'locked' && isDrawer;
   const canReveal = card.phase === 'drawn' && isExecutor;
+  // 先出卡背、再翻到卡面：卡一到就置 true 的话没有翻转过程
+  const [flipped, setFlipped] = useState(false);
+  useEffect(() => {
+    if (!shouldReveal) {
+      setFlipped(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setFlipped(true), 60);
+    return () => window.clearTimeout(timer);
+  }, [shouldReveal, card.id]);
 
   // 网络抖动时动作可能没到房主，1.2 秒未推进就自动重发，最多 3 次
   const [pending, setPending] = useState<RoomAction | null>(null);
@@ -173,9 +183,11 @@ function CardGateBody({
     else if (canReveal) send({ type: 'revealCard', seat: mySeat });
   };
 
-  const frontHint = card.phase === 'locked'
-    ? isDrawer ? '点击卡面抽一张' : `等 ${drawerName} 抽卡`
-    : isExecutor ? '点击卡面翻卡查看' : `等 ${executorName} 翻卡`;
+  const frontHint = card.phase === 'revealed'
+    ? '正在翻开…'
+    : card.phase === 'locked'
+      ? isDrawer ? '点击卡面抽一张' : `等 ${drawerName} 抽卡`
+      : isExecutor ? '点击卡面翻卡查看' : `等 ${executorName} 翻卡`;
 
   const assignmentStrip = (
     <div className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-bold">
