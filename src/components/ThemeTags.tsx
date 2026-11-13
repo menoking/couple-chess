@@ -14,12 +14,14 @@ function plainColor(label: string) {
   return plainColors[hash % plainColors.length];
 }
 
-export function ThemeTags({ tags }: { tags: ThemeTag[] }) {
-  if (tags.length === 0) return null;
+export function ThemeTags({ tags }: { tags?: ThemeTag[] }) {
+  // 旧存档 / 云同步来的自定义主题可能没有 tags 字段，缺省时必须安全降级
+  const list = Array.isArray(tags) ? tags : [];
+  if (list.length === 0) return null;
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-1.5 max-w-[46%] shrink-0">
-      {tags.map((tag, index) => {
+      {list.map((tag, index) => {
         const color = plainColor(tag.label);
         return (
           <span

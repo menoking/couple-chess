@@ -292,6 +292,15 @@ function CardGateBody({
   );
 }
 
+/** 棋盘类玩法的数据由房主异步生成，第一帧还没到就先占位，避免视图读到空数组崩溃。 */
+function StagePreparing() {
+  return (
+    <div className="flex h-full min-h-[240px] items-center justify-center text-xs text-gray-500">
+      正在准备棋盘…
+    </div>
+  );
+}
+
 /** 可视化房间：两个座位头像，谁进了房间就亮起，没进的是灰色。 */
 function SeatAvatars({
   roles,
@@ -679,18 +688,22 @@ export function OnlineStage(props: OnlineStageProps) {
 
   const renderMode = () => {
     switch (mode) {
-      case 'board':
+      case 'board': {
+        if (pathCoords.length === 0 || boardMap.length === 0) return <StagePreparing />;
         return <GameView players={players} boardMap={boardMap} pathCoords={pathCoords} currentTurn={currentTurn} isRolling={isRolling} onMove={onMove} onCheckTile={onCheckTile} onEndTurn={endTurn} onSetRolling={onSetRolling} onWin={onWin} onTaskTrigger={onTaskTrigger} onBack={onBack} />;
+      }
       case 'card':
         return <CardModeView {...common} onDrawTask={onDrawTask} onTaskTrigger={onTaskTrigger} />;
-      case 'mine':
+      case 'mine': {
+        if (mineBoard.length === 0) return <StagePreparing />;
         return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} />;
+      }
       case 'pose':
         return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onBack={onBack} />;
       case 'roulette':
         return <RouletteModeView {...common} />;
       case 'bingo':
-        return bingoBoard ? <BingoModeView {...common} bingoBoard={bingoBoard} onCompleteCell={onCompleteCell} onRestart={onRestart} /> : null;
+        return bingoBoard ? <BingoModeView {...common} bingoBoard={bingoBoard} onCompleteCell={onCompleteCell} onRestart={onRestart} /> : <StagePreparing />;
       case 'quiz':
         return <QuizModeView players={players} onBack={onBack} />;
       case 'memory':
