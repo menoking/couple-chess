@@ -355,6 +355,36 @@ export function OnlineStage(props: OnlineStageProps) {
     return () => window.clearInterval(timer);
   }, [snap, shared.status]);
 
+  const myPool = useMemo(() => picksToPool(themes, selected), [themes, selected]);
+  const myLocked = Boolean(snap?.picks[mySeat]?.locked);
+  const [lockPending, setLockPending] = useState(false);
+  const lockTries = useRef(0);
+
+  const lockDeck = () => {
+    if (lockPending) return;
+    lockTries.current = 0;
+    setLockPending(true);
+    dispatch({ type: 'lockLobby', seat: mySeat, themeIds: selected, pool: myPool });
+  };
+
+  // 锁定动作丢失时自动重发，避免「两边都点了锁定却一直不开局」
+  useEffect(() => {
+    if (!lockPending) return;
+    if (myLocked) {
+      setLockPending(false);
+      return;
+    }
+    if (lockTries.current >= 4) {
+      setLockPending(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      lockTries.current += 1;
+      dispatch({ type: 'lockLobby', seat: mySeat, themeIds: selected, pool: myPool });
+    }, 1500);
+    return () => window.clearTimeout(timer);
+  }, [lockPending, myLocked, selected, myPool, dispatch, mySeat]);
+
   useEffect(() => {
     if (snap) setSelected(snap.picks[mySeat].themeIds);
     // 只在对方的锁定动作变化时同步，避免覆盖本机的多选
@@ -454,7 +484,6 @@ export function OnlineStage(props: OnlineStageProps) {
   );
 
   if (!snap.lobbyLocked) {
-    const myPool = picksToPool(themes, selected);
     return (
       <div className="mobile-game-screen fixed inset-0 z-50 flex flex-col bg-black">
         {header}
@@ -516,10 +545,11 @@ export function OnlineStage(props: OnlineStageProps) {
               </div>
               <button
                 type="button"
-                onClick={() => dispatch({ type: 'lockLobby', seat: mySeat, themeIds: selected, pool: myPool })}
-                className="ios-btn mt-4 h-12 w-full rounded-full bg-white text-sm font-bold text-black"
+                disabled={lockPending}
+                onClick={lockDeck}
+                className="ios-btn mt-4 h-12 w-full rounded-full bg-white text-sm font-bold text-black disabled:opacity-60"
               >
-                锁定我的卡包
+                {lockPending ? '锁定中…' : '锁定我的卡包'}
               </button>
               <button
                 type="button"
@@ -532,7 +562,13 @@ export function OnlineStage(props: OnlineStageProps) {
           ) : (
             <div className="rounded-2xl border border-[#30D158]/30 bg-[#30D158]/10 p-4 text-center">
               <div className="text-sm font-bold text-white">我方卡包已锁定</div>
-              <div className="mt-1 text-[11px] text-gray-400">{oppPick.locked ? '正在合并题库…' : '等对方也点「锁定我的卡包」就会自动开局'}</div>
+              <div className="mt-1 text-[11px] text-gray-400">
+                {oppPick.locked
+                  ? '正在合并题库…'
+                  : shared.presence.includes(other(mySeat))
+                    ? '等对方也点「锁定我的卡包」就会自动开局'
+                    : '对方还没进入房间，可以先用我的卡包开局'}
+              </div>
               <button
                 type="button"
                 onClick={() => dispatch({ type: 'unlockLobby', seat: mySeat })}

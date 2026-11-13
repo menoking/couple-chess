@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { RoomAction, RoomSnapshot, Seat } from '../rules/types';
+import type { PendingCard, RoomAction, RoomSnapshot, Seat } from '../rules/types';
 import { reduceRoom, viewFor } from '../rules/room';
 import { extractCard } from '../rules/cards';
+import { privateKeyOf } from '../rules/registry';
 import { reviveValue, serializeValue, type ModeRuntimeValue } from '../rules/ModeRuntime';
 import { createTransport, type RoomTransport, type TransportKind } from './transport';
 import { diagLog, setDiagnosticContext } from './diagnostics';
@@ -23,6 +24,34 @@ export interface SharedRoomResult {
   dispatch: (action: RoomAction) => void;
   runtime: ModeRuntimeValue;
   requestView: () => void;
+}
+
+/** 公共频道兜底快照：去掉卡面明文与他人私有状态，只保留房间结构。 */
+function publicSnapshot(state: RoomSnapshot): RoomSnapshot {
+  const data: Record<string, unknown> = {};
+  Object.entries(state.data).forEach(([key, value]) => {
+    if (privateKeyOf(key) === null) data[key] = value;
+  });
+  return {
+    ...state,
+    cards: state.cards.map(card => ({ ...card, card: null })),
+    data
+  };
+}
+
+/** 兜底快照收到后，保留本机已经看到的卡面明文和自己的私有状态。 */
+function mergeSnapshot(local: RoomSnapshot | null, incoming: RoomSnapshot, seat: Seat): RoomSnapshot {
+  if (!local) return incoming;
+  const cards: PendingCard[] = incoming.cards.map(card => {
+    const mine = local.cards.find(item => item.id === card.id);
+    if (mine && mine.phase === card.phase && mine.card) return { ...card, card: mine.card };
+    return card;
+  });
+  const data = { ...incoming.data };
+  Object.entries(local.data).forEach(([key, value]) => {
+    if (privateKeyOf(key) === seat) data[key] = value;
+  });
+  return { ...incoming, cards, data };
 }
 
 /**
@@ -58,11 +87,20 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
 
   const publish = useCallback(
     (state: RoomSnapshot) => {
+      // 先落地本机视图：任何发送失败都不能把房主自己卡在「正在连接」
       applySnapshot(viewFor(state, mySeat));
       const transport = transportRef.current;
       if (!transport) return;
       ([0, 1] as Seat[]).forEach(seat => {
-        transport.sendTo(seat, 'view', viewFor(state, seat));
+        try {
+          transport.sendTo(seat, 'view', viewFor(state, seat));
+        } catch (error) {
+          // 单个座位发送失败不能拖累另一个座位
+          diagLog('room:send-error', {
+            seat,
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
       });
     },
     [applySnapshot, mySeat]
@@ -108,7 +146,21 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
 
     const transport = createTransport(kind, roomId, mySeat, {
       onPublic: (messageKind, data) => {
-        if (cancelled || !isHost) return;
+        if (cancelled) return;
+        // 公共频道兜底：座位频道丢包时，访客也能从房主心跳拿到房间结构
+        if (messageKind === 'room-sync') {
+          if (isHost) return;
+          const incoming = data as RoomSnapshot;
+          const current = viewRef.current;
+          if (current && incoming.seq <= current.seq) return;
+          applySnapshot(mergeSnapshot(current, incoming, mySeat));
+          viewReady.current = true;
+          setStatus('playing');
+          setDiagnosticContext({ roomStatus: 'playing', viewReady: true });
+          diagLog('room:sync-fallback', { seq: incoming.seq });
+          return;
+        }
+        if (!isHost) return;
         if (messageKind === 'action') {
           const envelope = data as { seat?: Seat; action?: RoomAction } | null;
           if (typeof envelope?.seat !== 'number' || !envelope.action) return;
@@ -150,10 +202,11 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         if (isHost) {
           const initial = initialRef.current();
           authoritativeRef.current = initial;
-          publish(initial);
+          // 先把状态切到 playing，再广播；发送异常也不影响房主进入大厅
           setStatus('playing');
           setDiagnosticContext({ roomStatus: 'playing', viewReady: true });
           diagLog('room:host-ready', { seat: mySeat });
+          publish(initial);
         } else {
           transport.send('request-view', { seat: mySeat });
           diagLog('room:guest-waiting', { seat: mySeat });
@@ -185,6 +238,22 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
     }, 900);
     return () => window.clearInterval(timer);
   }, [enabled, roomId, isHost, mySeat]);
+
+  // 房主每 2 秒把「去敏房间快照」发到公共频道：
+  // 座位频道任何环节丢包时，访客仍能进大厅、看到双方锁定状态并正常开局
+  useEffect(() => {
+    if (!enabled || !roomId || !isHost) return;
+    const timer = window.setInterval(() => {
+      const current = authoritativeRef.current;
+      if (!current) return;
+      try {
+        transportRef.current?.send('room-sync', publicSnapshot(current));
+      } catch (error) {
+        diagLog('room:sync-error', { message: error instanceof Error ? error.message : String(error) });
+      }
+    }, 2000);
+    return () => window.clearInterval(timer);
+  }, [enabled, roomId, isHost]);
 
   // 房主定期把局面补发给对方：即使 request-view 和首包都丢了，也能在 2.5 秒内自愈
   useEffect(() => {
