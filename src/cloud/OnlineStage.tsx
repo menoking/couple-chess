@@ -330,7 +330,7 @@ function SeatAvatars({
 }
 
 export function OnlineStage(props: OnlineStageProps) {
-  const { roomId, mode, mySeat, hostSeat, roles, myRole, themes, kind, onExit, onTakeOver } = props;
+  const { roomId, mode, mySeat, hostSeat, roles, themes, kind, onExit, onTakeOver } = props;
   const isHost = mySeat === hostSeat;
 
   const createInitial = useCallback(
@@ -433,7 +433,9 @@ export function OnlineStage(props: OnlineStageProps) {
         </button>
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-bold text-white">{MODE_LABEL[mode]}</div>
-          <div className="truncate text-[10px] text-gray-500">房间 {roomId.slice(-8)} · 我是 {PLAYER_NAME[myRole]} · {isHost ? '房主' : '访客'} · 先手 {PLAYER_NAME[roles[snap.turn]]}</div>
+          <div className="truncate text-[10px] text-gray-500">
+            房间 {roomId.slice(-8)} · 我是 {PLAYER_NAME[roles[mySeat]]}（{mySeat + 1} 号位）· {isHost ? '房主' : '访客'} · 先手 {PLAYER_NAME[roles[snap.turn]]}
+          </div>
         </div>
         <button
           type="button"

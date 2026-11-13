@@ -44,7 +44,7 @@ import { OnlineStage } from './cloud/OnlineStage';
 import { cloudConfigured } from './cloud/client';
 import { enterOnlineRoom, leaveOnlineRoom, startRoomHeartbeat, subscribeSpaceRooms, RoomAnnounce } from './cloud/rooms';
 import type { Role, Seat } from './rules/types';
-import { resolveSeats, roleOfSeat, seatOfRole } from './rules/identity';
+import { roleOfSeat } from './rules/identity';
 import { MODE_LABEL } from './rules/registry';
 import { setDiagnosticContext, diagLog } from './cloud/diagnostics';
 import { getDeviceId } from './cloud/device';
@@ -299,27 +299,28 @@ function App() {
         diagLog('enter:null', { reason: 'enterOnlineRoom 返回 null' });
         return;
       }
-      const seats = resolveSeats(myRole, ticket.hostRole);
+      const flipped = ticket.myRole !== myRole;
       diagLog('enter:ok', {
         roomId: ticket.roomId.slice(-8),
         isHost: ticket.isHost,
-        mySeat: seats.mySeat,
-        hostSeat: seats.hostSeat,
-        flipped: seats.flipped
+        mySeat: ticket.mySeat,
+        hostSeat: ticket.hostSeat,
+        effectiveRole: ticket.myRole,
+        flipped
       });
       setOnlineSession({
         roomId: ticket.roomId,
         mode: ticket.mode,
         isHost: ticket.isHost,
-        mySeat: seats.mySeat,
-        hostSeat: seats.hostSeat,
+        mySeat: ticket.mySeat,
+        hostSeat: ticket.hostSeat,
         roles: [roleOfSeat(0), roleOfSeat(1)],
-        myRole: seats.effectiveRole,
+        myRole: ticket.myRole,
         hostRole: ticket.hostRole
       });
       setRemoteRoom(null);
       showOnlineNotice(
-        seats.flipped
+        flipped
           ? '两台设备选了同一性别，你已自动调整为另一方'
           : ticket.isHost
             ? '房间已开好，对方点同一玩法就会自动进来'
@@ -339,19 +340,18 @@ function App() {
     try {
       const ticket = await enterOnlineRoom(cloud.space, mode, myRole, true);
       if (!ticket) return;
-      const seat = seatOfRole(myRole);
       setOnlineSession({
         roomId: ticket.roomId,
         mode: ticket.mode,
         isHost: true,
-        mySeat: seat,
-        hostSeat: seat,
+        mySeat: ticket.mySeat,
+        hostSeat: ticket.hostSeat,
         roles: [roleOfSeat(0), roleOfSeat(1)],
-        myRole,
-        hostRole: myRole
+        myRole: ticket.myRole,
+        hostRole: ticket.hostRole
       });
       showOnlineNotice('已接管房间，你现在是房主', true);
-      diagLog('room:takeover', { roomId: ticket.roomId.slice(-8), seat });
+      diagLog('room:takeover', { roomId: ticket.roomId.slice(-8), seat: ticket.mySeat });
     } catch (error) {
       showOnlineNotice(error instanceof Error ? error.message : '接管房间失败');
     }

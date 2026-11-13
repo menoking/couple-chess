@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { GameMode } from '../types';
-import type { Role } from '../rules/types';
+import type { Role, Seat } from '../rules/types';
+import { assignSeats, otherSeat, roleOfSeat, seatOfRole } from '../rules/identity';
 import { supabase } from './client';
 import { SpaceInfo } from './types';
 import { getDeviceId } from './device';
@@ -10,7 +11,12 @@ export interface RoomTicket {
   roomId: string;
   mode: GameMode;
   isHost: boolean;
-  /** 房主设备选择的性别，用来给后进设备分配另一个座位 */
+  /** 本机实际坐的座位（已处理撞座） */
+  mySeat: Seat;
+  /** 权威端（房主）坐的座位 */
+  hostSeat: Seat;
+  /** 本机实际生效的性别（撞座时可能被调整） */
+  myRole: Role;
   hostRole: Role;
 }
 
@@ -35,13 +41,15 @@ export interface RoomPresence {
   role: RoomRole;
   at: number;
   gender?: Role;
+  /** 设备实际坐的座位，后来者据此避开撞座 */
+  seat?: Seat;
 }
 
 /** 每台设备在整局期间都保持自己的选举频道，房主离开后房间状态仍然可读。 */
 const activeChannels = new Map<string, RealtimeChannel>();
 
 function readPresence(channel: RealtimeChannel): RoomPresence[] {
-  const state = channel.presenceState() as Record<string, Array<{ role?: string; at?: number; gender?: string }>>;
+  const state = channel.presenceState() as Record<string, Array<{ role?: string; at?: number; gender?: string; seat?: number }>>;
   const result: RoomPresence[] = [];
   Object.entries(state ?? {}).forEach(([deviceId, metas]) => {
     const meta = metas?.[0] ?? {};
@@ -49,7 +57,8 @@ function readPresence(channel: RealtimeChannel): RoomPresence[] {
       deviceId,
       role: meta.role === 'host' || meta.role === 'guest' ? meta.role : 'peer',
       at: typeof meta.at === 'number' ? meta.at : 0,
-      gender: meta.gender === 'male' || meta.gender === 'female' ? meta.gender : undefined
+      gender: meta.gender === 'male' || meta.gender === 'female' ? meta.gender : undefined,
+      seat: meta.seat === 0 || meta.seat === 1 ? meta.seat : undefined
     });
   });
   return result;
@@ -72,11 +81,6 @@ export function decideHost(peers: RoomPresence[], myId: string, at: number): boo
 }
 
 /** 从在场设备里找到房主的性别；找不到时以我自己的性别兜底。 */
-export function hostRoleOf(peers: RoomPresence[], myId: string, fallback: Role): Role {
-  const host = peers.find(entry => entry.role === 'host' && entry.deviceId !== myId);
-  return host?.gender ?? fallback;
-}
-
 /**
  * 进入「账号 + 玩法」这唯一一间房，并决定我是房主还是访客。
  * 规则：先到先当房主，后来者无条件加入；性别随 Presence 广播，供座位分配用。
@@ -127,17 +131,45 @@ export async function enterOnlineRoom(
   const peers = readPresence(channel);
   // forceHost：对方已离线时由本机接管，避免永远停在「正在连接房间」
   const isHost = forceHost || decideHost(peers, myId, at);
-  const hostRole = isHost ? myRole : hostRoleOf(peers, myId, myRole);
+
+  // 房主坐自己性别对应的座位；访客优先自己座位，只有撞座才换到另一端。
+  // 旧版本 Presence 可能没有 seat，用 gender 兜底，再不行就占另一个座。
+  const preferred = seatOfRole(myRole);
+  const hostMeta = peers.find(entry => entry.role === 'host' && entry.deviceId !== myId);
+  const hostSeat: Seat = isHost
+    ? preferred
+    : hostMeta?.seat !== undefined
+      ? hostMeta.seat
+      : hostMeta?.gender
+        ? seatOfRole(hostMeta.gender)
+        : otherSeat(preferred);
+
+  const seats = assignSeats({ myRole, hostSeat, isHost });
   diagLog('room:decided', {
     ms: Date.now() - at,
-    peers: peers.map(entry => `${entry.deviceId.slice(0, 8)}:${entry.role}:${entry.gender ?? '-'}`),
+    peers: peers.map(entry => `${entry.deviceId.slice(0, 8)}:${entry.role}:${entry.gender ?? '-'}:${entry.seat ?? '-'}`),
     isHost,
-    hostRole
+    mySeat: seats.mySeat,
+    hostSeat: seats.hostSeat,
+    flipped: seats.flipped
   });
-  await channel.track({ role: isHost ? 'host' : 'guest', at, gender: myRole });
+  await channel.track({
+    role: isHost ? 'host' : 'guest',
+    at,
+    gender: seats.effectiveRole,
+    seat: seats.mySeat
+  });
   diagLog('room:done', { ms: Date.now() - at });
 
-  return { roomId, mode, isHost, hostRole };
+  return {
+    roomId,
+    mode,
+    isHost,
+    mySeat: seats.mySeat,
+    hostSeat: seats.hostSeat,
+    myRole: seats.effectiveRole,
+    hostRole: roleOfSeat(seats.hostSeat)
+  };
 }
 
 export async function leaveOnlineRoom(roomId: string): Promise<void> {

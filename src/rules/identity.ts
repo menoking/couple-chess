@@ -6,21 +6,39 @@ export const seatOfRole = (role: Role): Seat => (role === 'male' ? 0 : 1);
 export const roleOfSeat = (seat: Seat): Role => (seat === 0 ? 'male' : 'female');
 export const otherSeat = (seat: Seat): Seat => (seat === 0 ? 1 : 0);
 
+export interface SeatAssignment {
+  mySeat: Seat;
+  hostSeat: Seat;
+  effectiveRole: Role;
+  /** 自己选的性别被别人占用，被迫换到另一端 */
+  flipped: boolean;
+}
+
 /**
- * 两台设备各选自己的性别，房间内必须一男一女。
- * 若与房主撞性别，后进设备自动取另一端并给出提示，避免两端抢同一座位。
+ * 座位分配（唯一入口）：
+ * - 房主：坐自己性别对应的座位，**绝不翻转**；
+ * - 访客：优先坐自己性别对应的座位，只有和房主撞座时才换到另一端。
+ *
+ * 关键点：hostSeat 必须来自房间 Presence 的真实座位，不能拿「房主性别」反推，
+ * 否则房主传入自己时会跟自己撞座，男方进来被显示成女方。
  */
-export function resolveSeats(
-  myRole: Role,
-  hostRole: Role
-): { mySeat: Seat; hostSeat: Seat; effectiveRole: Role; flipped: boolean } {
-  const flipped = myRole === hostRole;
-  const effectiveRole: Role = flipped ? (myRole === 'male' ? 'female' : 'male') : myRole;
+export function assignSeats(input: {
+  myRole: Role;
+  hostSeat: Seat;
+  isHost: boolean;
+}): SeatAssignment {
+  if (input.isHost) {
+    const seat = seatOfRole(input.myRole);
+    return { mySeat: seat, hostSeat: seat, effectiveRole: input.myRole, flipped: false };
+  }
+
+  const preferred = seatOfRole(input.myRole);
+  const mySeat = preferred === input.hostSeat ? otherSeat(input.hostSeat) : preferred;
   return {
-    mySeat: seatOfRole(effectiveRole),
-    hostSeat: seatOfRole(hostRole),
-    effectiveRole,
-    flipped
+    mySeat,
+    hostSeat: input.hostSeat,
+    effectiveRole: roleOfSeat(mySeat),
+    flipped: mySeat !== preferred
   };
 }
 
