@@ -142,8 +142,8 @@ export function extractCard(value: unknown): ExtractedCard | null {
   }   if (!text || !text.trim()) return null;
 
   const executorSeat: Seat = record.executorPlayerId === 1 ? 1 : 0;
-  const declaredDrawer: Seat = record.initiatorPlayerId === 1 ? 1 : 0;
-  const drawerSeat: Seat = declaredDrawer === executorSeat ? (executorSeat === 0 ? 1 : 0) : declaredDrawer;
+  // 抽卡人严格取 initiator：之前在自己抽自己做时翻成对方，导致「男方的回合女方抽卡」
+  const drawerSeat: Seat = record.initiatorPlayerId === 1 ? 1 : 0;
   const themeName =
     typeof record.themeName === 'string'
       ? record.themeName

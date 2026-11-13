@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
 import { useCallback } from 'react';
 import { Player, PathCoord, TileType, TaskEventData } from '../../types';
 import { GameBoard } from '../GameBoard';
@@ -37,10 +37,17 @@ export function GameView({
 }: GameViewProps) {
   const [diceResult, setDiceResult] = useModeState<number | null>('GameView.diceResult', null);
   const [isMoving, setIsMoving] = useModeState('GameView.isMoving', false);
+  // 谁摇的骰子：共享的骰子结果会让两端都触发结算，只有摇骰子的设备能真正走格
+  const [rollerSeat, setRollerSeat] = useModeState<number | null>('GameView.rollerSeat', null);
+  const runtime = useModeRuntime();
+  const mySeat = runtime?.seat ?? null;
 
   const handleRoll = useCallback(() => {
     if (isRolling || isMoving || diceResult) return;
+    // 联机时只有当前回合方可以摇骰子
+    if (mySeat !== null && currentTurn !== mySeat) return;
 
+    setRollerSeat(currentTurn);
     onSetRolling(true);
     const result = rollDice();
 
@@ -52,10 +59,12 @@ export function GameView({
       setDiceResult(result);
       onSetRolling(false);
     }, 1000);
-  }, [isRolling, isMoving, diceResult, onSetRolling]);
+  }, [isRolling, isMoving, diceResult, onSetRolling, mySeat, currentTurn, setRollerSeat]);
 
   const handleRollComplete = useCallback(() => {
-    if (diceResult) {
+    // 同屏（mySeat 为 null）照旧；联机只有摇骰子的那一端执行走格/抽卡/换回合
+    const isRoller = mySeat === null || rollerSeat === mySeat;
+    if (diceResult && isRoller) {
       const landingStep = calculateNewPosition(players[currentTurn].step, diceResult);
       setIsMoving(true);
 
@@ -95,7 +104,7 @@ export function GameView({
 
       setTimeout(stepOnce, moveDelayMs);
     }
-  }, [diceResult, players, currentTurn, onMove, onCheckTile, onWin, onTaskTrigger, onEndTurn]);
+  }, [diceResult, players, currentTurn, onMove, onCheckTile, onWin, onTaskTrigger, onEndTurn, mySeat, rollerSeat]);
 
   const activePlayer = players[currentTurn];
   const turnNumber = Math.floor(Math.max(...players.map(p => p.step)) / 4) + 1;
