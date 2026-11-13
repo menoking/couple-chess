@@ -16,7 +16,7 @@ import type {
 } from '../types';
 import { MineBombChoiceModal } from '../components/modals/MineBombChoiceModal';
 import { ThemeTags } from '../components/ThemeTags';
-import { GameView } from '../components/views/GameView';
+import { OnlineBoardView } from '../components/views/OnlineBoardView';
 import { CardModeView } from '../components/views/CardModeView';
 import { MineModeView } from '../components/views/MineModeView';
 import { PoseModeView } from '../components/views/PoseModeView';
@@ -50,7 +50,6 @@ import { createRoom } from '../rules/room';
 import { ModeRuntimeProvider } from '../rules/ModeRuntime';
 import {
   BINGO_BOARD_SIZE,
-  calculateNewPosition,
   generateBingoBoard,
   generateBoardMap,
   generateMineBoard,
@@ -621,7 +620,6 @@ export function OnlineStage(props: OnlineStageProps) {
   const pathCoords = (data['stage.pathCoords'] as PathCoord[] | undefined) ?? [];
   const mineBoard = (data['stage.mineBoard'] as MineTile[] | undefined) ?? [];
   const bingoBoard = data['stage.bingoBoard'] as BingoBoard | undefined;
-  const isRolling = Boolean(data['stage.isRolling']);
   const patch = shared.runtime.patch;
 
   const enqueue = (task: TaskEventData | null | undefined) => {
@@ -650,15 +648,6 @@ export function OnlineStage(props: OnlineStageProps) {
     else endTurn();
   };
   const onPoseTrigger = (src: string) => patch('stage.poseImage', src);
-  const onWin = (winnerId: number) => enqueue(poolTask(snap, other(winnerId === 1 ? 1 : 0), '终局 · 胜方抽卡'));
-  const onSetRolling = (rolling: boolean) => patch('stage.isRolling', rolling);
-  // GameView 每次只传 +1/-1，按同屏 calculateNewPosition 逐格推进
-  const onMove = (delta: number) => {
-    const current = (data['stage.steps'] as number[] | undefined) ?? [0, 0];
-    const next = [...current];
-    next[currentTurn] = calculateNewPosition(next[currentTurn] ?? 0, delta);
-    patch('stage.steps', next);
-  };
   const onCheckTile = (landingStep: number): TaskEventData | 'win' | null =>
     resolveBoardTile({ landingStep, players, themes: onlineThemes, turn: currentTurn, boardMap });
   const onRevealTile = (index: number): MineRevealResult | null => {
@@ -690,7 +679,20 @@ export function OnlineStage(props: OnlineStageProps) {
     switch (mode) {
       case 'board': {
         if (pathCoords.length === 0 || boardMap.length === 0) return <StagePreparing />;
-        return <GameView players={players} boardMap={boardMap} pathCoords={pathCoords} currentTurn={currentTurn} isRolling={isRolling} onMove={onMove} onCheckTile={onCheckTile} onEndTurn={endTurn} onSetRolling={onSetRolling} onWin={onWin} onTaskTrigger={onTaskTrigger} onBack={onBack} />;
+        return (
+          <OnlineBoardView
+            players={players}
+            boardMap={boardMap}
+            pathCoords={pathCoords}
+            mySeat={mySeat}
+            isAuthority={isHost}
+            currentTurn={currentTurn}
+            pendingCards={snap.cards.length}
+            onCheckTile={onCheckTile}
+            onTaskTrigger={onTaskTrigger}
+            onBack={onBack}
+          />
+        );
       }
       case 'card':
         return <CardModeView {...common} onDrawTask={onDrawTask} onTaskTrigger={onTaskTrigger} />;
