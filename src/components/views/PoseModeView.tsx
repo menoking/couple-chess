@@ -6,6 +6,7 @@ interface PoseModeViewProps {
   players: Player[];
   currentTurn: number;
   onPoseTrigger: (imageSrc: string) => void;
+  onEndTurn: () => void;
   onBack: () => void;
 }
 
@@ -13,6 +14,7 @@ export function PoseModeView({
   players,
   currentTurn,
   onPoseTrigger,
+  onEndTurn,
   onBack
 }: PoseModeViewProps) {
   const activePlayer = players[currentTurn];
@@ -25,6 +27,8 @@ export function PoseModeView({
 
     const imageSrc = POSE_IMAGES[Math.floor(Math.random() * POSE_IMAGES.length)];
     onPoseTrigger(imageSrc);
+    // 抽完一张姿势卡交给对方
+    onEndTurn();
   };
 
   return (

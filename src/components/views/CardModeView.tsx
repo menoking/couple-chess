@@ -9,6 +9,7 @@ interface CardModeViewProps {
   currentTurn: number;
   onDrawTask: () => TaskEventData | null;
   onTaskTrigger: (data: TaskEventData) => void;
+  onEndTurn: () => void;
   onBack: () => void;
 }
 
@@ -18,6 +19,7 @@ export function CardModeView({
   currentTurn,
   onDrawTask,
   onTaskTrigger,
+  onEndTurn,
   onBack
 }: CardModeViewProps) {
   const activePlayer = players[currentTurn];
@@ -49,6 +51,8 @@ export function CardModeView({
       return next;
     });
     onTaskTrigger(task);
+    // 抽卡玩法一次抽卡就是一个回合，抽完交给对方
+    onEndTurn();
   };
 
   return (

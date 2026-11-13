@@ -714,7 +714,7 @@ export function OnlineStage(props: OnlineStageProps) {
         return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} />;
       }
       case 'pose':
-        return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onBack={onBack} />;
+        return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onEndTurn={endTurn} onBack={onBack} />;
       case 'roulette':
         return <RouletteModeView {...common} />;
       case 'bingo':

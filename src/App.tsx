@@ -719,6 +719,7 @@ function App() {
           currentTurn={state.turn}
           onDrawTask={drawCardTask}
           onTaskTrigger={handleTaskTrigger}
+          onEndTurn={endTurn}
           onBack={handleBackFromGame}
         />
       )}
@@ -742,6 +743,7 @@ function App() {
           players={state.players}
           currentTurn={state.turn}
           onPoseTrigger={setPoseImageSrc}
+          onEndTurn={endTurn}
           onBack={handleBackFromGame}
         />
       )}
