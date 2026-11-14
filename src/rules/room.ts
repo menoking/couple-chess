@@ -82,9 +82,9 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       if (turnPrefix) {
         const started = isGameStarted(state, turnPrefix);
         const owner = viewTurnOf(state, turnPrefix);
-        // 首次写入某个键 = 写初值（只有权威端会做），一律放行；
-        // 否则对局中连房主自己的初始化都会被「不是我的回合」拒掉。
-        const isInitialWrite = !(action.key in state.data);
+        // 首次写入某个键 = 房主写初值，一律放行；否则对局中连房主自己的初始化
+        // 都会被「不是我的回合」拒掉。限定 hostSeat，避免对方抢先初始化一个空键。
+        const isInitialWrite = !(action.key in state.data) && action.seat === state.hostSeat;
         // 开局阶段（还没有 started / phase）也一律放行：此时没有回合概念，
         // 定先手的 turn 与 started 可能由任何一方写，顺序也不保证。
         if (started && !isInitialWrite && action.value !== null && action.seat !== owner) {
@@ -121,6 +121,21 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
         data[`${turnPrefix}turn`] = startConfirmTurn;
       }
       return bump({ ...state, data });
+    }
+
+    case 'patchBatch': {
+      // 按顺序逐条应用，每条都走和单个 patch 完全相同的校验
+      let next = state;
+      for (const entry of action.entries) {
+        next = reduceRoom(next, {
+          type: 'patch',
+          key: entry.key,
+          value: entry.value,
+          baseSeq: action.baseSeq,
+          seat: action.seat
+        });
+      }
+      return next;
     }
 
     case 'endTurn':

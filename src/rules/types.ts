@@ -61,6 +61,8 @@ export interface RoomSnapshot {
 
 export type RoomAction =
   | { type: 'patch'; key: string; value: unknown; baseSeq: number; seat: Seat }
+  /** 同一帧内的多个 patch 合并上报：一回合只发一条消息，避免限流丢包 */
+  | { type: 'patchBatch'; entries: Array<{ key: string; value: unknown }>; baseSeq: number; seat: Seat }
   | { type: 'endTurn'; seat: Seat }
   | { type: 'setTurn'; seat: Seat; turn: number }
   | { type: 'enqueueCard'; drawerSeat: Seat; executorSeat: Seat; reason: string; card?: OnlineCard; moveDelta?: number }

@@ -133,27 +133,56 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
     listeners.current.forEach(listener => listener());
   }, []);
 
+  const publishTimer = useRef<number | null>(null);
+  const pendingPublish = useRef<RoomSnapshot | null>(null);
+
   const publish = useCallback(
     (state: RoomSnapshot) => {
-      // 先落地本机视图：任何发送失败都不能把房主自己卡在「正在连接」
-      if (roomId) saveRoomSnapshot(roomId, state);
+      // 本机立刻落地：操作手感不能等广播
       applySnapshot(viewFor(state, mySeat));
-      const transport = transportRef.current;
-      if (!transport) return;
-      ([0, 1] as Seat[]).forEach(seat => {
-        try {
-          transport.sendTo(seat, 'view', viewFor(state, seat));
-        } catch (error) {
-          // 单个座位发送失败不能拖累另一个座位
-          diagLog('room:send-error', {
-            seat,
-            message: error instanceof Error ? error.message : String(error)
-          });
-        }
-      });
+      pendingPublish.current = state;
+      if (publishTimer.current !== null) return;
+      // 一次操作会连发多个 patch（斗兽棋吃子 = 棋盘 / 选中 / 计数 / 队列 / 回合），
+      // 逐条广播很快撞上 Supabase 每秒条数上限，被限流后就「对面同步不出来」。
+      // 合并到同一个 32ms 窗口里只发最后一次。
+      publishTimer.current = window.setTimeout(() => {
+        publishTimer.current = null;
+        const target = pendingPublish.current;
+        pendingPublish.current = null;
+        if (!target) return;
+        if (roomId) saveRoomSnapshot(roomId, target);
+        const transport = transportRef.current;
+        if (!transport) return;
+        ([0, 1] as Seat[]).forEach(seat => {
+          try {
+            transport.sendTo(seat, 'view', viewFor(target, seat));
+          } catch (error) {
+            // 单个座位发送失败不能拖累另一个座位
+            diagLog('room:send-error', {
+              seat,
+              message: error instanceof Error ? error.message : String(error)
+            });
+          }
+        });
+      }, 32);
     },
     [applySnapshot, mySeat, roomId]
   );
+
+  // 卸载前把最后一帧补发出去，避免「刚操作完就退房」把末态丢掉
+  useEffect(() => () => {
+    if (publishTimer.current !== null) window.clearTimeout(publishTimer.current);
+    const target = pendingPublish.current;
+    const transport = transportRef.current;
+    if (!target || !transport) return;
+    ([0, 1] as Seat[]).forEach(seat => {
+      try {
+        transport.sendTo(seat, 'view', viewFor(target, seat));
+      } catch {
+        // 卸载途中发送失败可忽略
+      }
+    });
+  }, []);
 
   const applyAction = useCallback(
     (action: RoomAction) => {
@@ -236,6 +265,13 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
       onSeat: (messageKind, data) => {
         if (cancelled || messageKind !== 'view') return;
         const next = data as RoomSnapshot;
+        // 网络乱序时旧快照可能晚到，无条件覆盖会让界面退回上一帧，
+        // 表现为「操作了但画面没跟上 / 同步不出来」。
+        const current = viewRef.current;
+        if (current && next.seq < current.seq) {
+          diagLog('room:view-stale', { seq: next.seq, current: current.seq });
+          return;
+        }
         viewReady.current = true;
         applySnapshot(next);
         setStatus('playing');
@@ -398,6 +434,9 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
   }, []);
   const readSnapshot = useCallback(() => viewRef.current, []);
 
+  const patchQueue = useRef<Array<{ key: string; value: unknown }>>([]);
+  const patchTimer = useRef<number | null>(null);
+
   const patch = useCallback(
     (key: string, value: unknown) => {
       const encoded = serializeValue(value);
@@ -410,16 +449,31 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         localVersion.current += 1;
         listeners.current.forEach(listener => listener());
       }
-      dispatch({
-        type: 'patch',
-        key,
-        value: encoded,
-        baseSeq: current?.seq ?? 0,
-        seat: mySeat
-      });
+      // 同一帧里的多个 patch 合并成一条消息：斗兽棋一次吃子会写棋盘 / 选中 /
+      // 计数 / 队列 / 回合，逐条发送既慢又容易被限流丢掉其中一条，
+      // 丢掉「回合」就会出现「棋走了但没换人」。
+      patchQueue.current.push({ key, value: encoded });
+      if (patchTimer.current !== null) return;
+      patchTimer.current = window.setTimeout(() => {
+        patchTimer.current = null;
+        const entries = patchQueue.current;
+        patchQueue.current = [];
+        if (entries.length === 0) return;
+        const baseSeq = viewRef.current?.seq ?? 0;
+        if (entries.length === 1) {
+          dispatch({ type: 'patch', key: entries[0].key, value: entries[0].value, baseSeq, seat: mySeat });
+          return;
+        }
+        dispatch({ type: 'patchBatch', entries, baseSeq, seat: mySeat });
+      }, 0);
     },
     [dispatch, mySeat]
   );
+
+  useEffect(() => () => {
+    if (patchTimer.current !== null) window.clearTimeout(patchTimer.current);
+    patchQueue.current = [];
+  }, []);
 
   const runtime = useMemo<ModeRuntimeValue>(
     () => ({ seat: mySeat, authority: isHost, get, patch, subscribe, getVersion, snapshot: readSnapshot }),

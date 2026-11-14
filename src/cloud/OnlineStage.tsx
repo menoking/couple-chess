@@ -138,27 +138,10 @@ function CardGateBody({
   // 和离线模式一致：卡面不自动翻，点一下才翻
   const [flipped, setFlipped] = useState(false);
 
-  // 长按卡面 3 秒强制关闭：对方退出房间 / 卡在翻卡时的逃生通道。
-  // 不做自动关闭，避免正常对局中被误放。
-  const HOLD_MS = 3000;
-  const [holdRatio, setHoldRatio] = useState(0);
-  const holdRaf = useRef<number | null>(null);
-  const holdStartAt = useRef(0);
-  const holdOrigin = useRef<{ x: number; y: number } | null>(null);
-  const suppressTap = useRef(false);
-
-  const cancelHold = () => {
-    if (holdRaf.current !== null) {
-      window.cancelAnimationFrame(holdRaf.current);
-      holdRaf.current = null;
-    }
-    holdOrigin.current = null;
-    setHoldRatio(0);
-  };
-
-  useEffect(() => () => {
-    if (holdRaf.current !== null) window.cancelAnimationFrame(holdRaf.current);
-  }, []);
+  // 双击卡面强制关闭：对方退出房间 / 卡在翻卡时的逃生通道。
+  // 移动端浏览器长按容易被系统菜单抢走，双击更稳。
+  const DOUBLE_TAP_MS = 320;
+  const lastTapAt = useRef(0);
 
   // 网络抖动时动作可能没到房主，1.2 秒未推进就自动重发，最多 3 次
   const [pending, setPending] = useState<RoomAction | null>(null);
@@ -192,12 +175,24 @@ function CardGateBody({
   const busy = pending !== null;
 
   // 和离线模式一致：点卡面抽卡 / 翻卡，只有翻牌后才出现接受/跳过
+  const forceClose = () => {
+    if (navigator.vibrate) navigator.vibrate(30);
+    // 直接覆盖 pending：即使抽卡/翻卡还在重试，逃生也要能发出去
+    tries.current = 0;
+    setPending({ type: 'forceCloseCard', seat: mySeat });
+    dispatch({ type: 'forceCloseCard', seat: mySeat });
+  };
+
   const tapFront = () => {
-    // 长按结束时抬手也会触发 click，这里吃掉它，避免顺便把卡抽了
-    if (suppressTap.current) {
-      suppressTap.current = false;
+    const now = Date.now();
+    // 320ms 内第二击 = 双击强制关闭。第一击的抽卡/翻卡无所谓，
+    // 卡片马上就出队了，不会留下副作用。
+    if (now - lastTapAt.current < DOUBLE_TAP_MS) {
+      lastTapAt.current = 0;
+      forceClose();
       return;
     }
+    lastTapAt.current = now;
     if (busy) return;
     if (canReveal) {
       setFlipped(true);
@@ -205,35 +200,6 @@ function CardGateBody({
       return;
     }
     if (canDraw) send({ type: 'drawCard', seat: mySeat });
-  };
-
-  const startHold = (x: number, y: number) => {
-    cancelHold();
-    holdOrigin.current = { x, y };
-    holdStartAt.current = Date.now();
-    const tick = () => {
-      const ratio = Math.min(1, (Date.now() - holdStartAt.current) / HOLD_MS);
-      setHoldRatio(ratio);
-      if (ratio >= 1) {
-        suppressTap.current = true;
-        cancelHold();
-        if (navigator.vibrate) navigator.vibrate(30);
-        // 直接覆盖 pending：即使之前抽卡/翻卡还在重试，逃生也要能发出去
-        tries.current = 0;
-        setPending({ type: 'forceCloseCard', seat: mySeat });
-        dispatch({ type: 'forceCloseCard', seat: mySeat });
-        return;
-      }
-      holdRaf.current = window.requestAnimationFrame(tick);
-    };
-    holdRaf.current = window.requestAnimationFrame(tick);
-  };
-
-  const moveHold = (x: number, y: number) => {
-    const origin = holdOrigin.current;
-    if (!origin) return;
-    // 手指滑超过 12px 认为在滚动，取消长按
-    if (Math.hypot(x - origin.x, y - origin.y) > 12) cancelHold();
   };
 
   // 抽卡方翻完卡后，对方设备自动弹出卡面并自动翻转
@@ -280,11 +246,6 @@ function CardGateBody({
 
         <div
           className="perspective-1000 relative w-full"
-          onPointerDown={event => startHold(event.clientX, event.clientY)}
-          onPointerMove={event => moveHold(event.clientX, event.clientY)}
-          onPointerUp={cancelHold}
-          onPointerLeave={cancelHold}
-          onPointerCancel={cancelHold}
           onContextMenu={event => event.preventDefault()}
           style={{ WebkitTouchCallout: 'none', userSelect: 'none' }}
         >
@@ -332,16 +293,6 @@ function CardGateBody({
               </div>
             </div>
           </div>
-          {holdRatio > 0 && (
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 mx-auto w-[86%]">
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/40">
-                <div className="h-full rounded-full bg-[#FF9F0A]" style={{ width: `${holdRatio * 100}%` }} />
-              </div>
-              <div className="mt-1 text-center text-[10px] font-bold text-[#FF9F0A]">
-                继续按住可强制关闭 · 松手取消
-              </div>
-            </div>
-          )}
         </div>
 
         {card.phase === 'revealed' && flipped && isExecutor && (
@@ -387,9 +338,9 @@ function CardGateBody({
           </div>
         )}
 
-        {/* 逃生通道：对方退出房间时，卡会一直等人确认，长按可以放掉它继续玩 */}
+        {/* 逃生通道：对方退出房间时，卡会一直等人确认，双击可以放掉它继续玩 */}
         <div className="mt-3 text-center text-[10px] leading-relaxed text-gray-600">
-          长按卡面 3 秒可强制关闭这张卡（对方已退出时用）
+          对方卡住？双击卡面可强制关闭
         </div>
       </div>
     </div>
