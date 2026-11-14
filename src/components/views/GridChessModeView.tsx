@@ -127,6 +127,7 @@ function DotsAndBoxesGame({
   if (!started) {
     return (
       <DiceRollOff
+        stateKey="GridChess"
         players={players}
         title="掷骰定先手"
         hint="点数大的一方先落子，点格棋先手更有优势"

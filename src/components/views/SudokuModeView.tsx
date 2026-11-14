@@ -123,6 +123,7 @@ function SudokuGame({
   if (phase === 'roll') {
     return (
       <DiceRollOff
+        stateKey="Sudoku"
         players={players}
         title="掷骰定开局权"
         hint="双方各掷一次，点数大的一方决定本局难度"

@@ -172,6 +172,7 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
 
       {phase === 'roll' && (
         <DiceRollOff
+          stateKey="Auction"
           players={players}
           title="掷骰定出价顺序"
           hint="点数大的一方先出价，可以先手压价"

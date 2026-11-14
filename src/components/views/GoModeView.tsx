@@ -135,6 +135,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
   if (phase === 'roll') {
     return (
       <DiceRollOff
+        stateKey="Go"
         players={players}
         title="掷骰定先手"
         hint="点数大的一方先落子，围棋先手更占优势"

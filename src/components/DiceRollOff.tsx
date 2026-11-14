@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { useModeState } from '../rules/ModeRuntime';
 import { Dices, User, UserRound } from 'lucide-react';
 import { Player } from '../types';
 import { Dice } from './Dice';
@@ -9,6 +10,8 @@ interface DiceRollOffProps {
   title?: string;
   hint?: string;
   confirmLabel?: string;
+  /** 共享状态的 key 前缀，不同玩法要分开，避免串状态 */
+  stateKey?: string;
   /** 点数大的一方获得选择权后回调 */
   onComplete: (winnerId: number) => void;
 }
@@ -24,13 +27,17 @@ export function DiceRollOff({
   title = '掷骰定开局权',
   hint = '双方各掷一次，点数大的一方获得选择权',
   confirmLabel = '确认，由我选择',
+  stateKey = 'DiceRollOff',
   onComplete
 }: DiceRollOffProps) {
   const duo = players.slice(0, 2);
   const emptyRolls = () => Object.fromEntries(duo.map(player => [player.id, null])) as Record<number, number | null>;
-  const [rolls, setRolls] = useState<Record<number, number | null>>(emptyRolls);
-  const [rollingId, setRollingId] = useState<number | null>(null);
-  const [tie, setTie] = useState(false);
+  // 掷骰结果必须进共享状态，否则对方要点自己那边的骰子才能看到
+  const [rolls, setRolls] = useModeState<Record<number, number | null>>(`${stateKey}.diceRolls`, emptyRolls);
+  const [rollingId, setRollingId] = useModeState<number | null>(`${stateKey}.diceRollingId`, null);
+  const [tie, setTie] = useModeState(`${stateKey}.diceTie`, false);
+  const rollsRef = useRef(rolls);
+  rollsRef.current = rolls;
   const timerRef = useRef<number | null>(null);
 
   useEffect(() => () => {
@@ -47,7 +54,7 @@ export function DiceRollOff({
     setRollingId(id);
     timerRef.current = window.setTimeout(() => {
       const value = Math.floor(Math.random() * 6) + 1;
-      const nextRolls = { ...rolls, [id]: value };
+      const nextRolls = { ...rollsRef.current, [id]: value };
       setRolls(nextRolls);
       setRollingId(null);
       const a = nextRolls[duo[0].id];

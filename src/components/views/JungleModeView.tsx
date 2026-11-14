@@ -142,6 +142,7 @@ function JungleGame({
   if (phase === 'roll') {
     return (
       <DiceRollOff
+        stateKey="Jungle"
         players={players}
         title="掷骰定先手"
         hint="点数大的一方先走，先手更容易抢到中路"
