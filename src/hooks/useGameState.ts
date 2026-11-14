@@ -318,7 +318,14 @@ function normalizeThemes(input: unknown): Theme[] {
 
       return {
         id,
-        name: typeof record.name === 'string' ? record.name : defaultTheme?.name ?? '未命名主题',
+        name: (() => {
+          const rawName = typeof record.name === 'string' ? record.name : '';
+          // 旧云端数据可能把 id 写进了 name（显示成 mine_dare_default），回退到内置主题名
+          if (!rawName || rawName === id || DEFAULT_THEME_IDS.has(rawName)) {
+            return defaultTheme?.name ?? '未命名主题';
+          }
+          return rawName;
+        })(),
         desc: typeof record.desc === 'string' ? record.desc : defaultTheme?.desc ?? '',
         audience:
           audienceValue === 'common' || audienceValue === 'male' || audienceValue === 'female'

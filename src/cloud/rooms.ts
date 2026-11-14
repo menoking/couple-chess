@@ -81,6 +81,21 @@ export function decideHost(peers: RoomPresence[], myId: string, at: number): boo
 }
 
 /** 从在场设备里找到房主的性别；找不到时以我自己的性别兜底。 */
+/** Presence 轮询：看到足够多的设备就立刻返回，不再死等固定时长。 */
+async function waitForPresence(
+  channel: RealtimeChannel,
+  minPeers: number,
+  timeoutMs: number
+): Promise<RoomPresence[]> {
+  const start = Date.now();
+  let peers = readPresence(channel);
+  while (peers.length < minPeers && Date.now() - start < timeoutMs) {
+    await new Promise<void>(resolve => window.setTimeout(resolve, 100));
+    peers = readPresence(channel);
+  }
+  return peers;
+}
+
 /**
  * 进入「账号 + 玩法」这唯一一间房，并决定我是房主还是访客。
  * 规则：先到先当房主，后来者无条件加入；性别随 Presence 广播，供座位分配用。
@@ -126,9 +141,8 @@ export async function enterOnlineRoom(
   });
 
   activeChannels.set(roomId, channel);
-  await new Promise<void>(resolve => window.setTimeout(resolve, 1100));
-
-  const peers = readPresence(channel);
+  // 对方已经在房间时 100~200ms 就能读到，只在「只有我自己」时才等满 600ms
+  const peers = await waitForPresence(channel, 2, 600);
   // forceHost：对方已离线时由本机接管，避免永远停在「正在连接房间」
   let isHost = forceHost || decideHost(peers, myId, at);
 
@@ -154,10 +168,11 @@ export async function enterOnlineRoom(
   });
 
   // 二次仲裁：两端几乎同时进房时，Presence 可能还没互相同步，会双双自认房主。
-  // 再等一轮后如果发现更早的房主，本机立刻降级为访客，避免两端各跑一份结算
-  // （表现为走两次格子、一次抽两张卡、回合翻两次）。
-  await new Promise<void>(resolve => window.setTimeout(resolve, 900));
-  const settledPeers = readPresence(channel);
+  // 只有「自认房主」才需要再确认一轮；访客直接返回，省掉一次等待。
+  let settledPeers = peers;
+  if (isHost) {
+    settledPeers = await waitForPresence(channel, 2, 450);
+  }
   const rivalHost = settledPeers
     .filter(entry => entry.role === 'host' && entry.deviceId !== myId)
     .sort((a, b) => rankOf(a).localeCompare(rankOf(b)))[0];
