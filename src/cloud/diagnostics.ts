@@ -4,7 +4,7 @@
  *
  * 刻意不写任何业务判断：这里只收集信息，不改变流程。
  */
-export const BUILD_TAG = 'rules-20261114-10';
+export const BUILD_TAG = 'rules-20261114-11';
 
 export interface DiagnosticEvent {
   t: number;

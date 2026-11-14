@@ -25,7 +25,8 @@ interface Tile {
   themeId: string;
   themeName: string;
   ownerId: number;
-  icon: typeof PAIR_ICONS[number];
+  /** 只存下标：组件不能进共享状态，否则序列化后变成 {}，渲染时报 React #130 */
+  iconIndex: number;
   flipped: boolean;
   matchedBy: number | null;
 }
@@ -56,9 +57,9 @@ function MemoryGame({
     const pairs = shuffle(unique).slice(0, MAX_PAIRS);
     const deck: Tile[] = [];
     pairs.forEach((entry, pairId) => {
-      const icon = PAIR_ICONS[pairId % PAIR_ICONS.length];
-      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, icon, flipped: false, matchedBy: null });
-      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, icon, flipped: false, matchedBy: null });
+      const iconIndex = pairId % PAIR_ICONS.length;
+      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, iconIndex, flipped: false, matchedBy: null });
+      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, iconIndex, flipped: false, matchedBy: null });
     });
     return shuffle(deck);
   }, [pool]);
@@ -239,7 +240,8 @@ function MemoryGame({
 }
 
 function TileIcon({ tile }: { tile: Tile }) {
-  const Icon = tile.icon;
+  // 兜底：旧数据里可能是丢失的组件对象，回退到第一个图标
+  const Icon = PAIR_ICONS[tile.iconIndex] ?? PAIR_ICONS[tile.pairId % PAIR_ICONS.length] ?? Heart;
   const colors = ['#FF9F0A', '#BF5AF2', '#30D158', '#FF375F', '#0A84FF', '#FFD60A', '#64D2FF', '#FF6B35'];
   const color = colors[tile.pairId % colors.length];
   return (
