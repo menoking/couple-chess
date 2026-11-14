@@ -132,7 +132,8 @@ function CardGateBody({
   const executorName = executor?.name ?? '对方';
   const face = card.card;
   const canDraw = card.phase === 'locked' && isDrawer;
-  const canReveal = card.phase === 'drawn' && isExecutor;
+  // 只有抽卡方本人能翻卡
+  const canReveal = card.phase === 'drawn' && isDrawer;
   // 和离线模式一致：卡面不自动翻，点一下才翻
   const [flipped, setFlipped] = useState(false);
 
@@ -170,19 +171,26 @@ function CardGateBody({
   // 和离线模式一致：点卡面抽卡 / 翻卡，只有翻牌后才出现接受/跳过
   const tapFront = () => {
     if (busy) return;
-    if (card.phase === 'revealed') {
+    if (canReveal) {
       setFlipped(true);
+      send({ type: 'revealCard', seat: mySeat });
       return;
     }
     if (canDraw) send({ type: 'drawCard', seat: mySeat });
-    else if (canReveal) send({ type: 'revealCard', seat: mySeat });
   };
 
-  const frontHint = card.phase === 'revealed'
+  // 抽卡方翻完卡后，对方设备自动弹出卡面并自动翻转
+  useEffect(() => {
+    if (card.phase !== 'revealed' || isDrawer) return;
+    const timer = window.setTimeout(() => setFlipped(true), 140);
+    return () => window.clearTimeout(timer);
+  }, [card.phase, isDrawer, card.id]);
+
+  const frontHint = canReveal
     ? '点击卡面翻开'
     : card.phase === 'locked'
       ? isDrawer ? '点击卡面抽一张' : `等 ${drawerName} 抽卡`
-      : isExecutor ? '点击卡面翻卡查看' : `等 ${executorName} 翻卡`;
+      : `等 ${drawerName} 翻卡`;
 
   const assignmentStrip = (
     <div className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-bold">
@@ -201,6 +209,18 @@ function CardGateBody({
       </span>
     </div>
   );
+
+  if (card.phase === 'drawn' && !isDrawer) {
+    return (
+      <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-6 backdrop-blur-md">
+        <div className="text-center">
+          <Sparkles size={30} className="mx-auto mb-3 animate-pulse text-[#FFD60A]" />
+          <div className="text-sm font-bold text-white">{drawerName} 抽到一张卡</div>
+          <div className="mt-1 text-[11px] text-gray-500">等对方翻卡后，你这边会自动弹出卡面</div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-5 backdrop-blur-md">
@@ -284,9 +304,9 @@ function CardGateBody({
           </div>
         )}
 
-        {card.phase === 'revealed' && !flipped && (
+        {card.phase === 'drawn' && isDrawer && (
           <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-400">
-            点击卡面翻开，翻牌后由 {executorName} 确认
+            点击卡面翻开，翻完后 {executorName} 那边会自动看到
           </div>
         )}
 

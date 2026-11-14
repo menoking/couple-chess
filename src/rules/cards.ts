@@ -36,8 +36,8 @@ export function enqueueCard(state: RoomSnapshot, spec: {
     drawerSeat: spec.drawerSeat,
     executorSeat: spec.executorSeat,
     reason: spec.reason,
-    // 抽到即对双方可见：不再走「抽卡人先看 → 执行人翻卡」的锁定流程
-    phase: 'revealed',
+    // 抽到后先只有抽卡方可见，抽卡方手动翻卡后才对双方可见
+    phase: 'drawn',
     card: spec.card ?? null,
     moveDelta: spec.moveDelta ?? 0
   };
@@ -65,7 +65,8 @@ export function reduceCard(state: RoomSnapshot, action: RoomAction): RoomSnapsho
   }
 
   if (action.type === 'revealCard') {
-    if (action.seat !== first.executorSeat || first.phase !== 'drawn') return state;
+    // 只有抽卡方本人能翻卡（保证「我的回合我自己翻」）
+    if (action.seat !== first.drawerSeat || first.phase !== 'drawn') return state;
     return { ...state, cards: [{ ...first, phase: 'revealed' }, ...state.cards.slice(1)] };
   }
 
