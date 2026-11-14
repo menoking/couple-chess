@@ -106,9 +106,13 @@ function CardGate(props: {
   mySeat: Seat;
   players: Player[];
   dispatch: (action: RoomAction) => void;
+  dismissedUpTo: number;
+  onDismiss: (id: number) => void;
+  peerGone: boolean;
 }) {
   const card = props.snap.cards[0];
   if (!card) return null;
+  if (card.id <= props.dismissedUpTo) return null;
   return <CardGateBody key={card.id} card={card} {...props} />;
 }
 
@@ -117,13 +121,18 @@ function CardGateBody({
   snap,
   mySeat,
   players,
-  dispatch
+  dispatch,
+  onDismiss,
+  peerGone
 }: {
   card: RoomSnapshot['cards'][number];
   snap: RoomSnapshot;
   mySeat: Seat;
   players: Player[];
   dispatch: (action: RoomAction) => void;
+  dismissedUpTo: number;
+  onDismiss: (id: number) => void;
+  peerGone: boolean;
 }) {
   const isDrawer = card.drawerSeat === mySeat;
   const isExecutor = card.executorSeat === mySeat;
@@ -183,13 +192,25 @@ function CardGateBody({
     dispatch({ type: 'forceCloseCard', seat: mySeat });
   };
 
+  /**
+   * 点卡片外空白：只把本机这张卡收起来，**不发同步命令**。
+   * 对方那边不受影响（可能还在读这张卡）。
+   * 例外：对方已经不在房间时没人会确认，这时必须真正出队，否则永远卡住。
+   */
+  const dismissLocal = () => {
+    onDismiss(snap.cardSeq);
+    // 对方已经退出：没人会确认这张卡，本地收起的同时必须真正出队
+    if (peerGone) forceClose();
+  };
+
   const tapFront = () => {
     const now = Date.now();
     // 320ms 内第二击 = 双击强制关闭。第一击的抽卡/翻卡无所谓，
     // 卡片马上就出队了，不会留下副作用。
     if (now - lastTapAt.current < DOUBLE_TAP_MS) {
       lastTapAt.current = 0;
-      forceClose();
+      // 双击和点空白同义：只收起自己这边，真正的出队由「接受 / 跳过」触发
+      dismissLocal();
       return;
     }
     lastTapAt.current = now;
@@ -239,7 +260,7 @@ function CardGateBody({
   return (
     <div
       className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-5 backdrop-blur-md"
-      onClick={forceClose}
+      onClick={dismissLocal}
     >
       <div
         className="task-card-pop w-full max-w-sm rounded-3xl border border-white/10 bg-[#1C1C1E] p-5 shadow-2xl"
@@ -346,7 +367,7 @@ function CardGateBody({
 
         {/* 逃生通道：对方退出房间时，卡会一直等人确认，双击可以放掉它继续玩 */}
         <div className="mt-3 text-center text-[10px] leading-relaxed text-gray-600">
-          对方卡住？点击卡片外的空白处，或双击卡面即可关闭这张卡
+          点空白处只收起自己这边；对方退出房间时会直接放掉这张卡
         </div>
       </div>
     </div>
@@ -422,6 +443,23 @@ export function OnlineStage(props: OnlineStageProps) {
   const [selected, setSelected] = useState<string[]>([]);
   const [bombOpen, setBombOpen] = useState(false);
   const [waitSeconds, setWaitSeconds] = useState(0);
+  // 本机点空白收起的那批卡：只影响自己这台设备的显示，不同步给对方。
+  // 卡片仍然留在队列里，等确认（ackCard）时才会真正出队并同步两端。
+  // 记「已发号到多少」而不是单个 id：队列里排队的卡本来就看不到卡面，
+  // 一起收起来才能真的让本机继续玩；新抽到的卡（id 更大）仍会正常弹出。
+  const [dismissedUpTo, setDismissedUpTo] = useState(0);
+  useEffect(() => {
+    // 换房间后 cardSeq 会从头开始，旧的收起阈值会把新卡一起藏掉
+    setDismissedUpTo(0);
+  }, [roomId]);
+  const pendingCount = (snap?.cards ?? []).filter(card => card.id > dismissedUpTo).length;
+  // 对方「来过又消失」才算离开：刚进房时 Presence 只有自己，
+  // 直接看 length 会把正常的点空白误判成逃生，顺带把对方的卡也关了。
+  const [everHadPeer, setEverHadPeer] = useState(false);
+  useEffect(() => {
+    if (shared.presence.length > 1) setEverHadPeer(true);
+  }, [shared.presence.length]);
+  const peerGone = everHadPeer && shared.presence.length <= 1;
 
   // 访客长时间收不到房主视图时给出接管入口，避免永远停在「正在连接房间」
   useEffect(() => {
@@ -751,7 +789,7 @@ export function OnlineStage(props: OnlineStageProps) {
             mySeat={mySeat}
             isAuthority={isHost}
             currentTurn={currentTurn}
-            pendingCards={snap.cards.length}
+            pendingCards={pendingCount}
             onCheckTile={onCheckTile}
             onTaskTrigger={onTaskTrigger}
             onBack={onBack}
@@ -759,13 +797,13 @@ export function OnlineStage(props: OnlineStageProps) {
         );
       }
       case 'card':
-        return <CardModeView {...common} onDrawTask={onDrawTask} onTaskTrigger={onTaskTrigger} pendingCards={snap.cards.length} />;
+        return <CardModeView {...common} onDrawTask={onDrawTask} onTaskTrigger={onTaskTrigger} pendingCards={pendingCount} />;
       case 'mine': {
         if (mineBoard.length === 0) return <StagePreparing />;
-        return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} pendingCards={snap.cards.length} />;
+        return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} pendingCards={pendingCount} />;
       }
       case 'pose':
-        return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onEndTurn={endTurn} pendingCards={snap.cards.length} onBack={onBack} />;
+        return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onEndTurn={endTurn} pendingCards={pendingCount} onBack={onBack} />;
       case 'roulette':
         return <RouletteModeView {...common} />;
       case 'bingo':
@@ -839,7 +877,15 @@ export function OnlineStage(props: OnlineStageProps) {
           selectorPlayer={players[currentTurn === 1 ? 0 : 1] ?? null}
           onChoose={onChooseBomb}
         />
-        <CardGate snap={snap} mySeat={mySeat} players={players} dispatch={dispatch} />
+        <CardGate
+          snap={snap}
+          mySeat={mySeat}
+          players={players}
+          dispatch={dispatch}
+          dismissedUpTo={dismissedUpTo}
+          onDismiss={setDismissedUpTo}
+          peerGone={peerGone}
+        />
       </div>
     </ModeRuntimeProvider>
   );
