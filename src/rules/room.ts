@@ -14,18 +14,28 @@ function viewTurnOf(state: RoomSnapshot, prefix: string): number {
 }
 
 /**
- * 是否已经真正开始对局。开局阶段（掷骰定先手）任何一方都能写 turn，
- * 对局中只有当前回合方能翻 turn——否则对方可以改 turn 抢回合。
+ * 是否已经真正开始对局。
+ * 只认显式的 started / phase 标记；都没有时视为**未开局**——
+ * 早期版本用「出现 turn 以外的键就算开局」兜底，会把组件挂载时写的初值
+ * 误判成对局中，导致女方赢先手时 started / turn 的写入被拒、永远进不去游戏。
  */
 function isGameStarted(state: RoomSnapshot, prefix: string): boolean {
   const started = state.data[`${prefix}started`];
   if (typeof started === 'boolean') return started;
   const phase = state.data[`${prefix}phase`];
   if (typeof phase === 'string') return phase === 'play' || phase === 'over';
-  // 没有显式阶段标记：出现 turn 以外的玩法状态就算已开局
-  return Object.keys(state.data).some(
-    key => key.startsWith(prefix) && key !== `${prefix}turn`
-  );
+  return false;
+}
+
+/**
+ * 开局确认键：写它的人就是先手。
+ * 必须在同一次 patch 里把 turn 一起落下去，否则「先写 started 再写 turn」
+ * 会被回合校验判定为越权（此时 owner 还是上一方），表现就是女方赢了先手却卡在掷骰页。
+ */
+function isStartConfirmAction(key: string, prefix: string, value: unknown): boolean {
+  if (key === `${prefix}started`) return value === true;
+  if (key === `${prefix}phase`) return value === 'play';
+  return false;
 }
 
 export function createRoom(
@@ -68,17 +78,21 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       // 前端守卫（useMyTurn）会因为座位 / Presence 竞态失效，这里是最终裁决——
       // 只要写的人不是当前回合方，房主直接丢弃，绝不让两端各走各的。
       const turnPrefix = turnBoundPrefixOf(action.key);
+      let startConfirmTurn: number | null = null;
       if (turnPrefix) {
-        const isTurnKey = action.key === `${turnPrefix}turn`;
-        if (isTurnKey) {
-          // 开局定先手：赢家写 turn，此时还没有对局状态，放行。
-          // 对局中翻 turn 必须由当前回合方发起，堵住「对方改 turn 抢回合」。
-          if (isGameStarted(state, turnPrefix) && action.seat !== viewTurnOf(state, turnPrefix)) {
-            return state;
-          }
-        } else if (action.value !== null && action.seat !== viewTurnOf(state, turnPrefix)) {
-          // 其它玩法状态只有当前回合方能写；null 是清理操作，放行避免卡死
+        const started = isGameStarted(state, turnPrefix);
+        const owner = viewTurnOf(state, turnPrefix);
+        // 首次写入某个键 = 写初值（只有权威端会做），一律放行；
+        // 否则对局中连房主自己的初始化都会被「不是我的回合」拒掉。
+        const isInitialWrite = !(action.key in state.data);
+        // 开局阶段（还没有 started / phase）也一律放行：此时没有回合概念，
+        // 定先手的 turn 与 started 可能由任何一方写，顺序也不保证。
+        if (started && !isInitialWrite && action.value !== null && action.seat !== owner) {
           return state;
+        }
+        // 未开局时按下「确认先手」的人就是先手，和 turn 一起原子落地
+        if (!started && isStartConfirmAction(action.key, turnPrefix, action.value)) {
+          startConfirmTurn = action.seat;
         }
       }
       // 统一抽卡入口：任何玩法视图想弹自己的任务卡，都改写成公共四阶段卡片
@@ -101,6 +115,11 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       const data = isRestartState(action.key)
         ? { [action.key]: action.value }
         : { ...state.data, [action.key]: action.value };
+      // 开局确认和 turn 必须原子落地：只写 started 不写 turn 的话，
+      // 另一端仍按旧回合判断，赢了先手反而无法操作。
+      if (turnPrefix && startConfirmTurn !== null) {
+        data[`${turnPrefix}turn`] = startConfirmTurn;
+      }
       return bump({ ...state, data });
     }
 

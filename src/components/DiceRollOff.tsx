@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useModeRuntime, useModeState } from '../rules/ModeRuntime';
 import { Dices, User, UserRound } from 'lucide-react';
 import { Player } from '../types';
@@ -42,6 +42,35 @@ export function DiceRollOff({
   const rollsRef = useRef(rolls);
   rollsRef.current = rolls;
   const timerRef = useRef<number | null>(null);
+  // 确认先手后，若 1.8 秒还没进入游戏（组件未卸载），自动重发，最多 3 次。
+  // 只发一次的话，这一包丢了就永远停在掷骰页。
+  const confirmRef = useRef<number | null>(null);
+  const confirmTries = useRef(0);
+  const [confirmFailed, setConfirmFailed] = useState(false);
+
+  const confirmStart = (id: number) => {
+    if (mySeat !== null && mySeat !== id) return;
+    if (confirmRef.current !== null) return;
+    confirmTries.current = 1;
+    setConfirmFailed(false);
+    onComplete(id);
+    const retry = () => {
+      if (confirmTries.current >= 3) {
+        // 重发用尽仍没进游戏：告诉用户可以再点一次，而不是无声卡住
+        confirmRef.current = null;
+        setConfirmFailed(true);
+        return;
+      }
+      confirmTries.current += 1;
+      onComplete(id);
+      confirmRef.current = window.setTimeout(retry, 1800);
+    };
+    confirmRef.current = window.setTimeout(retry, 1800);
+  };
+
+  useEffect(() => () => {
+    if (confirmRef.current !== null) window.clearTimeout(confirmRef.current);
+  }, []);
 
   useEffect(() => () => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
@@ -157,11 +186,15 @@ export function DiceRollOff({
           </div>
           <button
             type="button"
-            onClick={() => onComplete(winner.id)}
+            onClick={() => confirmStart(winner.id)}
             disabled={mySeat !== null && mySeat !== winner.id}
             className="ios-btn w-full rounded-full bg-white py-3.5 text-base font-bold text-black shadow-lg disabled:opacity-50"
           >
-            {mySeat !== null && mySeat !== winner.id ? `等 ${winner.name} 确认` : confirmLabel}
+            {mySeat !== null && mySeat !== winner.id
+              ? `等 ${winner.name} 确认`
+              : confirmFailed
+                ? '确认没送达，再点一次'
+                : confirmLabel}
           </button>
         </div>
       )}
