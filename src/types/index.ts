@@ -167,6 +167,8 @@ export interface TaskEventData {
   color: string;
   task: string;
   taskSourceId: string;
+  /** 卡面来源的中文主题名；不再拿 taskSourceId（主题 id）当来源展示 */
+  themeName?: string;
   moveDelta: number;
 }
 

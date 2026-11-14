@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 
 import { ArrowLeft, CircleDot, RefreshCw, User, UserRound } from 'lucide-react';
@@ -41,6 +42,11 @@ function DotsAndBoxesGame({
   const [vertical, setVertical] = useModeState<LineOwner[]>('GridChessModeView.vertical', () => new Array(V_LINES).fill(null).map(() => ({ ownerId: null })));
   const [boxes, setBoxes] = useModeState<number[]>('GridChessModeView.boxes', () => new Array(TOTAL_BOXES).fill(-1));
   const [taskData, setTaskData] = useModeState<TaskEventData | null>('GridChessModeView.taskData', null);
+  // 一次闭合 N 格要抽 N 张，用队列逐张弹，和围棋一致
+  const [cardQueue, setCardQueue] = useModeState<Array<{ drawerId: number; executorId: number; reason: string }>>(
+    'GridChessModeView.cardQueue',
+    []
+  );
   const [finished, setFinished] = useModeState('GridChessModeView.finished', false);
   const [started, setStarted] = useModeState('GridChessModeView.started', false);
 
@@ -81,6 +87,24 @@ function DotsAndBoxesGame({
     return top && bottom && left && right;
   };
 
+  // 依次弹出队列里的抽卡
+  useEffect(() => {
+    if (taskData || cardQueue.length === 0) return;
+    const [next, ...rest] = cardQueue;
+    const pool = buildTaskPool(players, themes) ?? [];
+    const entry = pickRandom(pool);
+    setCardQueue(rest);
+    if (!entry) return;
+    setTaskData(
+      createViewTaskEvent({
+        entry,
+        title: next.reason,
+        executorPlayerId: next.executorId,
+        initiatorPlayerId: next.drawerId
+      })
+    );
+  }, [cardQueue, taskData, players, themes, setCardQueue, setTaskData]);
+
   const drawLine = (kind: 'h' | 'v', lineIndex: number) => {
     if (!canAct) return;
     if (finished || taskData) return;
@@ -105,11 +129,15 @@ function DotsAndBoxesGame({
       setVertical(nextV);
       setBoxes(nextBoxes);
 
-      const pool = buildTaskPool(players, themes) ?? [];
-      const entry = pickRandom(pool);
-      if (entry) {
-        setTaskData(createViewTaskEvent({ entry, title: `闭合 ${newlyClosed.length} 格 · 对方执行`, executorPlayerId: turn === 0 ? 1 : 0, initiatorPlayerId: turn }));
-      }
+      // 每闭合 1 格抽 1 张：闭合 3 格就入队 3 张，不再固定只抽 1 张
+      setCardQueue(prev => [
+        ...prev,
+        ...Array.from({ length: newlyClosed.length }, () => ({
+          drawerId: turn,
+          executorId: turn === 0 ? 1 : 0,
+          reason: `闭合 ${newlyClosed.length} 格 · 对方执行`
+        }))
+      ]);
       return;
     }
 
@@ -120,7 +148,8 @@ function DotsAndBoxesGame({
 
   const finishTask = () => {
     setTaskData(null);
-    if (boxes.every(owner => owner !== -1)) {
+    // 队列里还有没抽完的卡时先不结算，等全部弹完再判结束
+    if (cardQueue.length === 0 && boxes.every(owner => owner !== -1)) {
       setFinished(true);
     }
     // 闭合格子者获得额外回合，turn 保持不变

@@ -141,7 +141,13 @@ function BluffDiceGame({
     const entry = pickRandom(pool);
     if (entry) {
       setTaskData(
-        createViewTaskEvent({ entry, title: '吹牛失败 · 惩罚卡', executorPlayerId: loserId })
+        createViewTaskEvent({
+          entry,
+          title: '吹牛失败 · 惩罚卡',
+          // 胜方抽卡、败方执行：不传 initiator 会默认成败方自己抽
+          executorPlayerId: loserId,
+          initiatorPlayerId: winnerId
+        })
       );
     }
   };

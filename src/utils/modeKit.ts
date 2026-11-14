@@ -63,6 +63,7 @@ export function createViewTaskEvent(input: {
     color: playerId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
     task: entry.task.text,
     taskSourceId: entry.themeId,
+    themeName: entry.themeName,
     moveDelta: 0
   };
 }

@@ -95,6 +95,7 @@ function poolTask(snap: RoomSnapshot, executorSeat: Seat, reason = '抽到一张
     color: executorSeat === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
     task: card.task,
     taskSourceId: 'online',
+    themeName: card.themeName,
     moveDelta: 0
   };
 }
@@ -650,11 +651,6 @@ export function OnlineStage(props: OnlineStageProps) {
 
   const enqueue = (task: TaskEventData | null | undefined) => {
     const found = extractCard(task ?? null);
-    // 卡面来源如果还是主题 id（旧数据），换成中文主题名再展示
-    if (found) {
-      const matched = onlineThemes.find(item => item.id === found.card.themeName);
-      if (matched) found.card.themeName = matched.name;
-    }
     dispatch({
       type: 'enqueueCard',
       drawerSeat: found?.drawerSeat ?? other(mySeat),

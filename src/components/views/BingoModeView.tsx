@@ -1,5 +1,5 @@
 import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Check, Grid3x3, PackageOpen, Sparkles, Trophy, User, UserRound } from 'lucide-react';
 import { BingoBoard, BingoCellResult, Player, TaskCard, TaskEventData, Theme } from '../../types';
 import { buildTaskPool, shuffle } from '../../utils/modeKit';
@@ -33,6 +33,8 @@ export function BingoModeView({
   const activePlayer = players[currentTurn] || players[0];
   const [pendingIndex, setPendingIndex] = useModeState<number | null>('BingoModeView.pendingIndex', null);
   const [reward, setReward] = useModeState<{ lines: number; task: TaskCard; themeName: string } | null>('BingoModeView.reward', null);
+  // 一次连成多条线就抽多张，用队列逐张弹（卡包容量共用 drawnCount）
+  const [rewardQueue, setRewardQueue] = useModeState<Array<{ task: TaskCard; themeName: string }>>('BingoModeView.rewardQueue', []);
   const [finished, setFinished] = useModeState('BingoModeView.finished', false);
 
   // 有限卡包：只有赢下回合（连成一线）才能从里面抽一张
@@ -92,15 +94,15 @@ export function BingoModeView({
       return;
     }
 
-    // 只有赢下回合（连成一线）才抽卡
+    // 只有赢下回合（连成一线）才抽卡：连 N 条线抽 N 张，受卡包剩余限制
     if (result.newLines > 0 && drawnCount < cardPack.length) {
-      const entry = cardPack[drawnCount];
-      setDrawnCount(value => value + 1);
-      setReward({
-        lines: result.newLines,
-        task: entry.task,
-        themeName: entry.themeName
-      });
+      const count = Math.min(result.newLines, cardPack.length - drawnCount);
+      const picks = cardPack.slice(drawnCount, drawnCount + count);
+      setDrawnCount(value => value + count);
+      setRewardQueue(prev => [
+        ...prev,
+        ...picks.map(entry => ({ task: entry.task, themeName: entry.themeName }))
+      ]);
       return;
     }
 
@@ -117,13 +119,23 @@ export function BingoModeView({
     setPendingIndex(null);
   };
 
+  // 队列逐张弹：当前这张关掉后才显示下一张
+  useEffect(() => {
+    if (reward || rewardQueue.length === 0) return;
+    const [next, ...rest] = rewardQueue;
+    setRewardQueue(rest);
+    setReward({ lines: 1, task: next.task, themeName: next.themeName });
+  }, [reward, rewardQueue, setReward, setRewardQueue]);
+
   const handleRewardDone = () => {
     setReward(null);
-    onEndTurn();
+    // 队列里还有卡就继续弹，全部抽完才交回合
+    if (rewardQueue.length === 0) onEndTurn();
   };
 
   const handleRestart = () => {
     setReward(null);
+    setRewardQueue([]);
     setFinished(false);
     setPendingIndex(null);
     setDrawnCount(0);
@@ -246,7 +258,7 @@ export function BingoModeView({
             <div className="mt-4 rounded-3xl border border-[#BF5AF2]/25 bg-[#BF5AF2]/10 p-5">
               <div className="flex items-center gap-2 text-xs font-bold text-[#D08BFF]">
                 <Sparkles size={15} />
-                连线抽卡{reward.lines > 1 ? ` ×${reward.lines}` : ''} · {reward.themeName}
+                连线抽卡 · {reward.themeName}{rewardQueue.length > 0 ? ` · 还有 ${rewardQueue.length} 张` : ''}
               </div>
               <div className="mt-3 flex items-center justify-center gap-2 text-[11px] font-bold">
                 <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${activePlayer?.color}22`, color: activePlayer?.color }}>

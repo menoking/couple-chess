@@ -1,5 +1,38 @@
 import type { OnlineCard, PendingCard, RoomAction, RoomSnapshot, Seat } from './types';
 import { applyMoveDelta } from './modeRules';
+import { DEFAULT_THEMES } from '../data/defaultThemes';
+
+/** 内置主题 id → 中文名，用于把旧数据里的 `mine_dare_default` 这类 id 翻成可读名称。 */
+const DEFAULT_THEME_NAME: Record<string, string> = Object.fromEntries(
+  DEFAULT_THEMES.map(theme => [theme.id, theme.name])
+);
+
+/**
+ * 卡面来源名。历史数据里来源字段存的是主题 id（`mine_dare_default`），
+ * 直接展示就是「英文乱码」，所以按「显式中文名 → subtitle 里的中文 → id 反查」逐级解析。
+ */
+function resolveThemeName(record: Record<string, unknown>): string {
+  const candidates: string[] = [];
+  if (typeof record.themeName === 'string') candidates.push(record.themeName);
+  if (typeof record.subtitle === 'string') {
+    const matched = record.subtitle.match(/来自「([^」]+)」/);
+    if (matched?.[1]) candidates.push(matched[1]);
+  }
+  if (typeof record.taskSourceId === 'string' && record.taskSourceId !== 'online') {
+    candidates.push(record.taskSourceId);
+  }
+  for (const raw of candidates) {
+    const trimmed = raw.trim();
+    if (!trimmed) continue;
+    const mapped = DEFAULT_THEME_NAME[trimmed];
+    if (mapped) return mapped;
+    // id 形态（uuid / snake_case）查不到中文名时，宁可不显示也不要甩英文乱码
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}/i.test(trimmed)) continue;
+    if (/^[a-z][a-z0-9]*(_[a-z0-9]+)+$/i.test(trimmed)) continue;
+    return trimmed;
+  }
+  return '双端合并卡包';
+}
 
 export const FALLBACK_CARD: OnlineCard = {
   task: '请先在房间大厅各自选择卡包并锁定，下一局就能抽到具体任务',
@@ -140,17 +173,13 @@ export function extractCard(value: unknown): ExtractedCard | null {
   else if (record.task && typeof record.task === 'object') {
     const inner = record.task as Record<string, unknown>;
     if (typeof inner.text === 'string') text = inner.text;
-  }   if (!text || !text.trim()) return null;
+  }
+  if (!text || !text.trim()) return null;
 
   const executorSeat: Seat = record.executorPlayerId === 1 ? 1 : 0;
   // 抽卡人严格取 initiator：之前在自己抽自己做时翻成对方，导致「男方的回合女方抽卡」
   const drawerSeat: Seat = record.initiatorPlayerId === 1 ? 1 : 0;
-  const themeName =
-    typeof record.themeName === 'string'
-      ? record.themeName
-      : typeof record.taskSourceId === 'string' && record.taskSourceId !== 'online'
-        ? record.taskSourceId
-        : '双端合并卡包';
+  const themeName = resolveThemeName(record);
   const reason = typeof record.title === 'string' && record.title.trim() ? record.title.trim() : '抽到一张任务卡';
 
   const moveDelta = typeof record.moveDelta === 'number' && Number.isFinite(record.moveDelta)
