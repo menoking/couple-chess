@@ -237,8 +237,14 @@ function CardGateBody({
   if (card.phase === 'drawn' && !isDrawer) return null;
 
   return (
-    <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-5 backdrop-blur-md">
-      <div className="task-card-pop w-full max-w-sm rounded-3xl border border-white/10 bg-[#1C1C1E] p-5 shadow-2xl">
+    <div
+      className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-5 backdrop-blur-md"
+      onClick={forceClose}
+    >
+      <div
+        className="task-card-pop w-full max-w-sm rounded-3xl border border-white/10 bg-[#1C1C1E] p-5 shadow-2xl"
+        onClick={event => event.stopPropagation()}
+      >
         <div className="mb-3 flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-gray-500">
           <span>{card.reason}</span>
           {snap.cards.length > 1 && <span>还有 {snap.cards.length - 1} 张</span>}
@@ -340,7 +346,7 @@ function CardGateBody({
 
         {/* 逃生通道：对方退出房间时，卡会一直等人确认，双击可以放掉它继续玩 */}
         <div className="mt-3 text-center text-[10px] leading-relaxed text-gray-600">
-          对方卡住？双击卡面可强制关闭
+          对方卡住？点击卡片外的空白处，或双击卡面即可关闭这张卡
         </div>
       </div>
     </div>

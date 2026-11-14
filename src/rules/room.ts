@@ -14,6 +14,21 @@ function viewTurnOf(state: RoomSnapshot, prefix: string): number {
 }
 
 /**
+ * 抽卡内部键：待抽队列与待弹卡片只是视图的实现细节，最终都会由 extractCard
+ * 转成公共卡，不涉及「谁有权操作」。
+ *
+ * 关键：它们经常在回合已经交给对方之后才被清空——比如斗兽棋吃完子先把 turn 翻给
+ * 对方，下一帧才把队列里的卡弹出来并清空队列。如果这两个键也受回合校验，
+ * `cardQueue = []` 会被判越权丢掉，队列永远清不空，effect 又会反复重新消费、
+ * 反复入队，表现就是「一直卡在翻卡，怎么也关不掉」。
+ */
+const CARD_INTERNAL_SUFFIXES = ['.cardQueue', '.taskData'];
+
+function isCardInternalKey(key: string): boolean {
+  return CARD_INTERNAL_SUFFIXES.some(suffix => key.endsWith(suffix));
+}
+
+/**
  * 是否已经真正开始对局。
  * 只认显式的 started / phase 标记；都没有时视为**未开局**——
  * 早期版本用「出现 turn 以外的键就算开局」兜底，会把组件挂载时写的初值
@@ -79,7 +94,8 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       // 只要写的人不是当前回合方，房主直接丢弃，绝不让两端各走各的。
       const turnPrefix = turnBoundPrefixOf(action.key);
       let startConfirmTurn: number | null = null;
-      if (turnPrefix) {
+      // 抽卡内部键不参与回合裁决，见 isCardInternalKey 的说明
+      if (turnPrefix && !isCardInternalKey(action.key)) {
         const started = isGameStarted(state, turnPrefix);
         const owner = viewTurnOf(state, turnPrefix);
         // 首次写入某个键 = 房主写初值，一律放行；否则对局中连房主自己的初始化

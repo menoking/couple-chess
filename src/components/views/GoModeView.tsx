@@ -1,5 +1,5 @@
 import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, CircleDot, Flag, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
@@ -50,9 +50,15 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
   const activePlayer = players[turn] ?? players[0];
   const score = useMemo(() => scoreGoBoard(board), [board]);
 
+  // 同一队列长度只消费一次：消费成功后长度会减少，才会再次进入。
+  // 万一那条 patch 没落地，也不会把同一张卡反复入队（那样卡片永远翻不完）。
+  const consumedLen = useRef(-1);
+
   // 依次弹出队列里的抽卡
   useEffect(() => {
     if (taskData || cardQueue.length === 0) return;
+    if (consumedLen.current === cardQueue.length) return;
+    consumedLen.current = cardQueue.length;
     const [next, ...rest] = cardQueue;
     const entry = pickRandom(pool);
     setCardQueue(rest);
