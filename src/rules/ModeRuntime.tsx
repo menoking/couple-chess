@@ -66,15 +66,25 @@ const noopVersion = () => 0;
  * 但访客在收到之前不能拿自己的随机值当真，所以先渲染「准备中」。
  * 同屏没有共享层，恒为就绪。
  */
-export function useSharedValueReady(key: string): boolean {
+export function useSharedValueReady(key: string, timeoutMs = 2500): boolean {
   const runtime = useModeRuntime();
+  const [expired, setExpired] = useState(false);
   useSyncExternalStore(
     runtime ? runtime.subscribe : noopSubscribe,
     runtime ? runtime.getVersion : noopVersion,
     noopVersion
   );
+
+  const ready = !runtime || runtime.get(key) !== undefined;
+  useEffect(() => {
+    if (!runtime || ready) return;
+    // 等不到房主下发也不能永远停在「同步中」，超时后按本地内容继续
+    const timer = window.setTimeout(() => setExpired(true), timeoutMs);
+    return () => window.clearTimeout(timer);
+  }, [runtime, ready, timeoutMs, key]);
+
   if (!runtime) return true;
-  return runtime.get(key) !== undefined;
+  return ready || expired;
 }
 
 /** 结构化克隆下 Set/Map 会丢，统一用标记对象序列化。 */
@@ -143,12 +153,21 @@ export function useModeState<T>(
   const scopedKey = scope === 'seat' && runtime ? seatScopedKey(key, runtime.seat) : key;
 
   useEffect(() => {
-    // 只有权威端负责写初值。访客也写的话，晚到的初始 patch 会把已经翻过的回合
-    // 或已经抽掉的卡覆盖回开局状态（表现为「一直男方回合」）。
-    if (!runtime || !runtime.authority) return;
-    if (runtime.get(scopedKey) === undefined) {
+    if (!runtime) return;
+    if (runtime.get(scopedKey) !== undefined) return;
+    // 通常只有权威端写初值，避免访客晚到的初始 patch 覆盖已经进行到一半的状态
+    if (runtime.authority) {
       runtime.patch(scopedKey, getInitial());
+      return;
     }
+    // 兜底：两端都没判成房主时（座位/主机仲裁异常），没人写初值，
+    // 界面就会永远停在「同步中」。3 秒后访客也补一份，至少让游戏能继续。
+    const timer = window.setTimeout(() => {
+      if (runtime.get(scopedKey) === undefined) {
+        runtime.patch(scopedKey, getInitial());
+      }
+    }, 3000);
+    return () => window.clearTimeout(timer);
     // 只在挂载时补一次初值；后续由房间快照驱动
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scopedKey]);
