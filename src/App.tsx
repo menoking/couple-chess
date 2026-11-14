@@ -833,6 +833,7 @@ function App() {
         <AuctionModeView
           players={state.players}
           themes={state.themes}
+          pendingCards={taskData ? 1 : 0}
           onBack={handleBackFromGame}
         />
       )}

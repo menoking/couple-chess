@@ -1,13 +1,15 @@
 import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
-import { ArrowLeft, Coins, Gavel, RefreshCw, User, UserRound } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ArrowLeft, Coins, Gavel, Lock, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, shuffle, themeIntensity } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
-import { DiceRollOff } from '../DiceRollOff';
 
 interface AuctionModeViewProps {
   players: Player[];
   themes: Theme[];
+  /** 队列里还有没确认的卡：有卡时不能进入下一拍 */
+  pendingCards?: number;
   onBack: () => void;
 }
 
@@ -15,94 +17,146 @@ const TOTAL_ROUNDS = 10;
 const STARTING_COINS = 100;
 const BID_STEP = 5;
 
-type Phase = 'roll' | 'intro' | 'bid-first' | 'bid-second' | 'reveal' | 'task' | 'over';
+interface AuctionReveal {
+  bids: [number, number];
+  winner: number | null;
+}
 
-function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: Theme[]; onExit: () => void }) {
+function AuctionGame({
+  players,
+  themes,
+  pendingCards,
+  onExit
+}: {
+  players: Player[];
+  themes: Theme[];
+  pendingCards: number;
+  onExit: () => void;
+}) {
+  const runtime = useModeRuntime();
+  const mySeat = runtime?.seat ?? null;
+  const authority = runtime?.authority ?? true;
+  const online = runtime !== null;
+
   const [queue] = useModeState<ThemeTaskEntry[]>('AuctionModeView.queue', () =>
     shuffle(buildTaskPool(players, themes) ?? []).slice(0, TOTAL_ROUNDS)
   );
   const [round, setRound] = useModeState('AuctionModeView.round', 0);
-  const [phase, setPhase] = useModeState<Phase>('AuctionModeView.phase', 'roll');
-  const [firstBidder, setFirstBidder] = useModeState('AuctionModeView.firstBidder', 0);
-  const [coins, setCoins] = useModeState<Record<number, number>>('AuctionModeView.coins', { 0: STARTING_COINS, 1: STARTING_COINS });
+  const [coins, setCoins] = useModeState<Record<number, number>>('AuctionModeView.coins', {
+    0: STARTING_COINS,
+    1: STARTING_COINS
+  });
   const [points, setPoints] = useModeState<Record<number, number>>('AuctionModeView.points', { 0: 0, 1: 0 });
   const [wonCount, setWonCount] = useModeState<Record<number, number>>('AuctionModeView.wonCount', { 0: 0, 1: 0 });
-  const [bids, setBids] = useModeState<Record<number, number>>('AuctionModeView.bids', { 0: 0, 1: 0 });
-  const [winnerId, setWinnerId] = useModeState<number | null>('AuctionModeView.winnerId', null);
+  // 出价本身按座位隔离：viewFor 只把它下发给本人，对方读不到
+  const [myBid, setMyBid] = useModeState<number>('AuctionModeView.myBid', 0, 'seat');
+  // 只公开「谁已经确认」，不公开价格
+  const [confirmed, setConfirmed] = useModeState<[boolean, boolean]>('AuctionModeView.confirmed', [false, false]);
+  const [revealed, setRevealed] = useModeState<AuctionReveal | null>('AuctionModeView.revealed', null);
   const [taskData, setTaskData] = useModeState<TaskEventData | null>('AuctionModeView.taskData', null);
   const [notice, setNotice] = useModeState<string | null>('AuctionModeView.notice', null);
+  // 同屏：两个人轮流在同一台设备出价，用本地状态暂存已提交的价格
+  const [localSealed, setLocalSealed] = useState<[number | null, number | null]>([null, null]);
+  const [activeSeat, setActiveSeat] = useState(0);
 
+  const bidderSeat = online ? mySeat ?? 0 : activeSeat;
+  const bidder = players[bidderSeat];
+  const peerSeat = bidderSeat === 0 ? 1 : 0;
+  const coinLeft = coins[bidderSeat] ?? 0;
   const current = queue[round];
-  const bidderId = phase === 'bid-first'
-    ? firstBidder
-    : phase === 'bid-second'
-      ? (firstBidder === 0 ? 1 : 0)
-      : 0;
-  const bidder = players[bidderId];
-  const runtime = useModeRuntime();
-  const mySeat = runtime?.seat ?? null;
-  const canBid = mySeat === null || mySeat === bidderId;
-  const canStart = mySeat === null || mySeat === firstBidder;
+  const phase: 'bid' | 'reveal' | 'over' = revealed
+    ? 'reveal'
+    : round >= queue.length
+      ? 'over'
+      : 'bid';
+  const iConfirmed = online ? confirmed[bidderSeat] === true : localSealed[activeSeat] !== null;
+  const peerConfirmed = online ? confirmed[peerSeat] === true : localSealed[peerSeat] !== null;
 
-  const startBidding = () => {
-    if (!canBid) return;
-    setBids({ 0: 0, 1: 0 });
-    setWinnerId(null);
-    setNotice(null);
-    setPhase('bid-first');
-  };
+  const issuedRef = useRef(-1);
+  const scoredRef = useRef(-1);
 
   const adjustBid = (delta: number) => {
-    if (!canBid) return;
-    setBids(prev => {
-      const next = Math.max(0, Math.min(coins[bidderId] ?? 0, (prev[bidderId] ?? 0) + delta));
-      return { ...prev, [bidderId]: next };
-    });
+    if (iConfirmed || revealed) return;
+    setMyBid(value => Math.max(0, Math.min(coinLeft, value + delta)));
   };
 
-  const reveal = () => {
-    const a = bids[0] ?? 0;
-    const b = bids[1] ?? 0;
-    if (a === b) {
-      setPoints(prev => ({ ...prev, 0: (prev[0] ?? 0) + 1, 1: (prev[1] ?? 0) + 1 }));
-      setNotice('出价相同，本轮流拍，双方各得 1 安慰分');
-      setPhase('reveal');
+  const applyReveal = (a: number, b: number) => {
+    const winner = a === b ? null : a > b ? 0 : 1;
+    setRevealed({ bids: [a, b], winner });
+    if (winner !== null) {
+      const paid = winner === 0 ? a : b;
+      setCoins(prev => ({ ...prev, [winner]: Math.max(0, (prev[winner] ?? 0) - paid) }));
+    }
+  };
+
+  const confirmBid = () => {
+    if (iConfirmed || revealed) return;
+    if (online) {
+      // 价格只交给房主，对方拿不到；双方都提交后房主一次性公开
+      runtime.dispatch({ type: 'sealBid', seat: mySeat ?? 0, amount: myBid });
       return;
     }
-    const winner = a > b ? 0 : 1;
-    const winningBid = winner === 0 ? a : b;
-    setCoins(prev => ({ ...prev, [winner]: (prev[winner] ?? 0) - winningBid }));
-    setWinnerId(winner);
-    if (current) {
-      setTaskData(createViewTaskEvent({ entry: current, title: '拍得 · 对方执行', executorPlayerId: winner === 0 ? 1 : 0, initiatorPlayerId: winner }));
+    const next: [number | null, number | null] = [localSealed[0], localSealed[1]];
+    next[activeSeat] = myBid;
+    setLocalSealed(next);
+    if (next[0] !== null && next[1] !== null) {
+      applyReveal(next[0], next[1]);
+      return;
     }
-    setPhase('task');
+    // 同屏：藏好这笔价，把手机交给对方
+    setActiveSeat(peerSeat);
+    setMyBid(0);
+  };
+
+  // 揭晓后由权威端把拍品作为任务卡发出（联机走公共 CardGate，同屏弹本地弹窗）
+  useEffect(() => {
+    if (!authority || !revealed || revealed.winner === null) return;
+    if (issuedRef.current === round) return;
+    const entry = queue[round];
+    if (!entry) return;
+    issuedRef.current = round;
+    setTaskData(
+      createViewTaskEvent({
+        entry,
+        title: '拍得 · 对方执行',
+        executorPlayerId: revealed.winner === 0 ? 1 : 0,
+        initiatorPlayerId: revealed.winner
+      })
+    );
+  }, [authority, revealed, round, queue, setTaskData]);
+
+  // 成交计分只做一次（房主）
+  useEffect(() => {
+    if (!authority || !revealed || revealed.winner === null) return;
+    if (scoredRef.current === round) return;
+    scoredRef.current = round;
+    const winner = revealed.winner;
+    const theme = themes.find(t => t.id === current?.themeId);
+    const level = themeIntensity(theme);
+    const bonus = Math.floor((revealed.bids[winner] ?? 0) / 10);
+    const gain = level + bonus;
+    setPoints(prev => ({ ...prev, [winner]: (prev[winner] ?? 0) + gain }));
+    setWonCount(prev => ({ ...prev, [winner]: (prev[winner] ?? 0) + 1 }));
+    setNotice(`成交！+${gain} 分（难度 ${level} + 出价加成 ${bonus}）`);
+  }, [authority, revealed, round, current, themes, setPoints, setWonCount, setNotice]);
+
+  const advance = () => {
+    setRevealed(null);
+    setConfirmed([false, false]);
+    setMyBid(0);
+    setLocalSealed([null, null]);
+    setActiveSeat(0);
+    setNotice(null);
+    setTaskData(null);
+    issuedRef.current = -1;
+    scoredRef.current = -1;
+    setRound(value => value + 1);
   };
 
   const resolveTask = (accepted: boolean) => {
-    if (winnerId === null || !current) return;
-    const theme = themes.find(t => t.id === current.themeId);
-    const level = themeIntensity(theme);
-    if (accepted) {
-      const gain = level + Math.floor((bids[winnerId] ?? 0) / 10);
-      setPoints(prev => ({ ...prev, [winnerId]: (prev[winnerId] ?? 0) + gain }));
-      setWonCount(prev => ({ ...prev, [winnerId]: (prev[winnerId] ?? 0) + 1 }));
-      setNotice(`成交！任务完成，+${gain} 分（难度 ${level} + 出价加成 ${Math.floor((bids[winnerId] ?? 0) / 10)}）`);
-    } else {
-      setNotice('拍得任务却跳过，金币不退，没有积分');
-    }
+    if (!accepted) setNotice('拍得任务却跳过，金币不退');
     setTaskData(null);
     advance();
-  };
-
-  const advance = () => {
-    const bothBroke = (coins[0] ?? 0) <= 0 && (coins[1] ?? 0) <= 0;
-    if (round + 1 >= queue.length || bothBroke) {
-      setPhase('over');
-      return;
-    }
-    setRound(value => value + 1);
-    setPhase('intro');
   };
 
   if (phase === 'over') {
@@ -145,6 +199,9 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
 
   const currentTheme = current ? themes.find(t => t.id === current.themeId) : undefined;
   const currentLevel = themeIntensity(currentTheme);
+  const winnerPlayer = revealed?.winner !== null && revealed?.winner !== undefined
+    ? players.find(player => player.id === revealed.winner)
+    : null;
 
   return (
     <div className="space-y-4">
@@ -176,124 +233,124 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
         </div>
       </div>
 
-      {phase === 'roll' && (
-        <DiceRollOff
-          stateKey="Auction"
-          players={players}
-          title="掷骰定出价顺序"
-          hint="点数大的一方先出价，可以先手压价"
-          confirmLabel="确认，我先出价"
-          onComplete={winnerId => {
-            setFirstBidder(winnerId === 1 ? 1 : 0);
-            setPhase('intro');
-          }}
-        />
-      )}
-
-      {phase === 'intro' && (
-        <>
-          {notice && (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-center text-sm font-bold text-white">
-              {notice}
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={startBidding}
-            disabled={!canStart}
-            className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg disabled:opacity-50"
-          >
-            {canStart ? '开始竞价' : `等 ${players[firstBidder]?.name ?? '对方'} 开始`}
-          </button>
-        </>
-      )}
-
-      {(phase === 'bid-first' || phase === 'bid-second') && (
+      {phase === 'bid' && (
         <div className="rounded-3xl border border-[#FF9F0A]/25 bg-[#FF9F0A]/10 p-5">
           <div className="flex items-center justify-center gap-2 text-sm font-bold text-white">
-            {bidderId === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-            请 {bidder?.name || '当前玩家'} 秘密出价（对方请回避）
+            {bidderSeat === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
+            {online ? '你的出价（对方看不到）' : `请 ${bidder?.name ?? '当前玩家'} 出价，另一个人回避`}
           </div>
           <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-gray-400">
-            <Coins size={12} className="text-[#FFD60A]" />可用金币 {coins[bidderId] ?? 0}
+            <Coins size={12} className="text-[#FFD60A]" />可用金币 {coinLeft}
           </div>
+
           <div className="mt-4 flex items-center justify-center gap-4">
             <button
               type="button"
               onClick={() => adjustBid(-BID_STEP)}
-              className="ios-btn h-12 w-16 rounded-full bg-white/10 text-lg font-bold text-white"
+              disabled={iConfirmed}
+              className="ios-btn h-12 w-16 rounded-full bg-white/10 text-lg font-bold text-white disabled:opacity-40"
             >
               -{BID_STEP}
             </button>
-            <div className="w-24 text-center text-4xl font-bold tabular-nums text-white">{bids[bidderId] ?? 0}</div>
+            <div className="w-24 text-center text-4xl font-bold tabular-nums text-white">{myBid}</div>
             <button
               type="button"
               onClick={() => adjustBid(BID_STEP)}
-              className="ios-btn h-12 w-16 rounded-full bg-white/10 text-lg font-bold text-white"
+              disabled={iConfirmed}
+              className="ios-btn h-12 w-16 rounded-full bg-white/10 text-lg font-bold text-white disabled:opacity-40"
             >
               +{BID_STEP}
             </button>
           </div>
+
           <div className="mt-4 flex gap-3">
             <button
               type="button"
-              onClick={() => { if (!canBid) return; setBids(prev => ({ ...prev, [bidderId]: coins[bidderId] ?? 0 })); }}
-              disabled={!canBid}
+              onClick={() => setMyBid(coinLeft)}
+              disabled={iConfirmed}
               className="ios-btn h-11 flex-1 rounded-full bg-white/10 text-sm font-bold text-[#FFD60A] disabled:opacity-40"
             >
               全押
             </button>
             <button
               type="button"
-              onClick={() => {
-                if (!canBid) return;
-                if (phase === 'bid-first') setPhase('bid-second');
-                else reveal();
-              }}
-              disabled={!canBid}
-              className="ios-btn h-11 flex-[2] rounded-full bg-white text-sm font-bold text-black"
+              onClick={confirmBid}
+              disabled={iConfirmed}
+              className="ios-btn h-11 flex-[2] rounded-full bg-white text-sm font-bold text-black disabled:opacity-50"
             >
-              {phase === 'bid-first' ? '藏好出价，换对方' : '双方揭晓'}
+              {iConfirmed ? '已确认出价' : online ? '确认出价（对方看不到）' : '藏好出价，交给对方'}
             </button>
           </div>
-        </div>
-      )}
 
-      {phase === 'reveal' && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            {players.map(player => (
-              <div key={player.id} className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 text-center">
-                <div className="text-xs font-bold" style={{ color: player.color }}>{player.name}</div>
-                <div className="mt-1 text-2xl font-bold tabular-nums text-white">{bids[player.id] ?? 0}</div>
-                <div className="text-[10px] text-gray-500">金币</div>
-              </div>
-            ))}
-          </div>
-          {notice && (
-            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-center text-sm font-bold text-white">
-              {notice}
+          {online && (
+            <div className="mt-3 flex items-center justify-center gap-3 text-[10px] font-bold">
+              <span className={iConfirmed ? 'text-[#30D158]' : 'text-gray-500'}>
+                我 · {iConfirmed ? '已确认' : '未确认'}
+              </span>
+              <span className="text-gray-600">|</span>
+              <span className={peerConfirmed ? 'text-[#30D158]' : 'text-gray-500'}>
+                对方 · {peerConfirmed ? '已确认' : '出价中'}
+              </span>
             </div>
           )}
-          <button
-            type="button"
-            onClick={advance}
-            className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
-          >
-            进入下一拍
-          </button>
+          {!online && peerConfirmed && (
+            <div className="mt-3 text-center text-[10px] font-bold text-[#30D158]">
+              对方已出价，等待你出价
+            </div>
+          )}
+          <div className="mt-3 flex items-center justify-center gap-1 text-[10px] text-gray-600">
+            <Lock size={10} />双方都确认后才会同时公开价格
+          </div>
         </div>
       )}
 
-      {phase === 'task' && winnerId !== null && current && (
-        <div className="rounded-2xl border border-[#30D158]/25 bg-[#30D158]/10 p-4 text-center text-sm font-bold text-white">
-          {players.find(p => p.id === winnerId)?.name} 以 {bids[winnerId] ?? 0} 金币拍得此任务
+      {phase === 'reveal' && revealed && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            {players.map(player => {
+              const isWinner = revealed.winner === player.id;
+              return (
+                <div
+                  key={player.id}
+                  className={`rounded-3xl border p-4 text-center ${
+                    isWinner ? 'border-[#30D158]/50 bg-[#30D158]/10' : 'border-white/10 bg-white/[0.04]'
+                  }`}
+                >
+                  <div className="text-xs font-bold" style={{ color: player.color }}>{player.name}</div>
+                  <div className="mt-1 text-2xl font-bold tabular-nums text-white">{revealed.bids[player.id] ?? 0}</div>
+                  <div className="text-[10px] text-gray-500">
+                    {isWinner ? '拍得 · 抽卡' : revealed.winner === null ? '平局' : '未拍得'}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-center text-sm font-bold text-white">
+            {revealed.winner === null
+              ? '出价相同，本轮流拍'
+              : notice ?? `${winnerPlayer?.name ?? '胜者'} 以 ${revealed.bids[revealed.winner] ?? 0} 金币拍得此任务`}
+          </div>
+
+          {pendingCards > 0 ? (
+            <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-400">
+              先完成上面这张任务卡，再进入下一拍
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={advance}
+              className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
+            >
+              进入下一拍
+            </button>
+          )}
         </div>
       )}
 
       <TaskCardModal
         players={players}
-        isOpen={phase === 'task' && !!taskData}
+        isOpen={!!taskData}
         taskData={taskData}
         onAccept={() => resolveTask(true)}
         onReject={() => resolveTask(false)}
@@ -303,7 +360,7 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
   );
 }
 
-export function AuctionModeView({ players, themes, onBack }: AuctionModeViewProps) {
+export function AuctionModeView({ players, themes, pendingCards = 0, onBack }: AuctionModeViewProps) {
   const [runId, setRunId] = useModeState('AuctionModeView.runId', 0);
 
   return (
@@ -321,7 +378,7 @@ export function AuctionModeView({ players, themes, onBack }: AuctionModeViewProp
           </button>
           <div className="flex-1 text-center">
             <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#FFD60A]">Auction</div>
-            <div className="mt-1 text-sm font-bold text-white">拍卖竞价 · 秘密出价</div>
+            <div className="mt-1 text-sm font-bold text-white">拍卖竞价 · 密封出价</div>
           </div>
           <div className="flex h-10 w-10 items-center justify-center text-gray-500">
             <Gavel size={22} />
@@ -329,7 +386,7 @@ export function AuctionModeView({ players, themes, onBack }: AuctionModeViewProp
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 no-scrollbar">
-          <AuctionGame key={runId} players={players} themes={themes} onExit={onBack} />
+          <AuctionGame key={runId} players={players} themes={themes} pendingCards={pendingCards} onExit={onBack} />
 
           <button
             type="button"

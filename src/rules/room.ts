@@ -2,7 +2,7 @@ import type { GameMode } from '../types';
 import type { RoomAction, RoomSnapshot, Role, Seat } from './types';
 import { enqueueCard, extractCard, projectCards, reduceCard } from './cards';
 import { bothLocked, mergePools } from './lobby';
-import { isAuthorityOnlyState, isRestartState, privateKeyOf, turnBoundPrefixOf } from './registry';
+import { isAuthorityOnlyState, isRestartState, privateKeyOf, seatScopedKey, turnBoundPrefixOf } from './registry';
 
 const emptyPick = () => ({ themeIds: [], locked: false });
 
@@ -51,6 +51,50 @@ function isStartConfirmAction(key: string, prefix: string, value: unknown): bool
   if (key === `${prefix}started`) return value === true;
   if (key === `${prefix}phase`) return value === 'play';
   return false;
+}
+
+const SEALED_BID_KEY = 'AuctionModeView.sealedBid';
+const AUCTION_REVEAL_KEY = 'AuctionModeView.revealed';
+const AUCTION_CONFIRMED_KEY = 'AuctionModeView.confirmed';
+
+/**
+ * 拍卖密封出价：价格写进按座位隔离的槽位，viewFor 只会把它下发给本人，
+ * 对方（包括观战视角）拿不到。双方都提交后，房主一次性算出结果写进公共字段。
+ */
+function sealBid(state: RoomSnapshot, seat: Seat, amount: number): RoomSnapshot {
+  // 本轮已经揭晓就不再接受新的密封出价，避免重复结算
+  if (state.data[AUCTION_REVEAL_KEY]) return state;
+  const value = Math.max(0, Math.floor(amount));
+  const confirmedRaw = state.data[AUCTION_CONFIRMED_KEY];
+  const confirmed: [boolean, boolean] = Array.isArray(confirmedRaw)
+    ? [confirmedRaw[0] === true, confirmedRaw[1] === true]
+    : [false, false];
+  confirmed[seat] = true;
+
+  const data: Record<string, unknown> = {
+    ...state.data,
+    [seatScopedKey(SEALED_BID_KEY, seat)]: value,
+    [AUCTION_CONFIRMED_KEY]: confirmed
+  };
+
+  if (confirmed[0] && confirmed[1]) {
+    const a = data[seatScopedKey(SEALED_BID_KEY, 0)];
+    const b = data[seatScopedKey(SEALED_BID_KEY, 1)];
+    if (typeof a === 'number' && typeof b === 'number') {
+      const winner = a === b ? null : a > b ? 0 : 1;
+      data[AUCTION_REVEAL_KEY] = { bids: [a, b], winner };
+      if (winner !== null) {
+        const coinsRaw = data['AuctionModeView.coins'];
+        const coins: Record<number, number> = coinsRaw && typeof coinsRaw === 'object'
+          ? { ...(coinsRaw as Record<number, number>) }
+          : { 0: 100, 1: 100 };
+        const paid = winner === 0 ? a : b;
+        coins[winner] = Math.max(0, (coins[winner] ?? 0) - paid);
+        data['AuctionModeView.coins'] = coins;
+      }
+    }
+  }
+  return { ...state, data };
 }
 
 export function createRoom(
@@ -152,6 +196,11 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
         });
       }
       return next;
+    }
+
+    case 'sealBid': {
+      const next = sealBid(state, action.seat, action.amount);
+      return next === state ? state : bump(next);
     }
 
     case 'endTurn':

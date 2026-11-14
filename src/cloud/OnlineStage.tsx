@@ -821,7 +821,7 @@ export function OnlineStage(props: OnlineStageProps) {
       case 'territory':
         return <TerritoryModeView {...common} />;
       case 'auction':
-        return <AuctionModeView {...withThemes} />;
+        return <AuctionModeView {...withThemes} pendingCards={pendingCount} />;
       case 'gridchess':
         return <GridChessModeView {...withThemes} />;
       case 'trutndare':

@@ -1,5 +1,5 @@
 import { useModeState } from '../../rules/ModeRuntime';
-import { useEffect, useMemo } from 'react';
+import { useEffect } from 'react';
 import { ArrowLeft, Check, RefreshCw, Timer, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, shuffle } from '../../utils/modeKit';
@@ -27,7 +27,10 @@ function formatTime(seconds: number): string {
 }
 
 function TimedGame({ players, themes, onExit }: { players: Player[]; themes: Theme[]; onExit: () => void }) {
-  const queue = useMemo<ThemeTaskEntry[]>(() => shuffle(buildTaskPool(players, themes) ?? []), [players, themes]);
+  // 题库进共享状态，避免两端各自洗牌导致同一题号看到不同任务
+  const [queue] = useModeState<ThemeTaskEntry[]>('TimedModeView.queue', () =>
+    shuffle(buildTaskPool(players, themes) ?? [])
+  );
   const [timeLeft, setTimeLeft] = useModeState('TimedModeView.timeLeft', TOTAL_SECONDS);
   const [index, setIndex] = useModeState('TimedModeView.index', 0);
   const [score, setScore] = useModeState('TimedModeView.score', 0);

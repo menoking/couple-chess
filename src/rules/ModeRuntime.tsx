@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type SetStateAction
 } from 'react';
-import type { Seat } from './types';
+import type { RoomAction, Seat } from './types';
 import { seatScopedKey } from './registry';
 
 export interface ModeRuntimeValue {
@@ -23,6 +23,8 @@ export interface ModeRuntimeValue {
   getVersion: () => number;
   /** 玩法视图读取共享的 turn / players / themes 用 */
   snapshot: () => unknown;
+  /** 发一个带业务语义的房间动作（拍卖密封出价等） */
+  dispatch: (action: RoomAction) => void;
 }
 
 const ModeRuntimeContext = createContext<ModeRuntimeValue | null>(null);
@@ -102,6 +104,15 @@ export function useModeState<T>(
   // initial 常是内联对象或箭头函数，放进 ref 才能让 setter 保持和 useState 一样的稳定引用
   const initialRef = useRef(initial);
   initialRef.current = initial;
+  // 初值只算一次。像 `() => shuffle(pool)` 这种随机初值，如果每次渲染都重新执行，
+  // 在拿到共享快照之前每帧都会换一批内容——拍卖的拍品「一直变」就是这个原因。
+  const resolvedInitial = useRef<{ value: T } | null>(null);
+  const getInitial = () => {
+    if (resolvedInitial.current === null) {
+      resolvedInitial.current = { value: resolveInitial(initialRef.current) };
+    }
+    return resolvedInitial.current.value;
+  };
 
   // hooks 数量必须恒定，同屏时也调用，只是订阅空实现
   useSyncExternalStore(
@@ -117,7 +128,7 @@ export function useModeState<T>(
     // 或已经抽掉的卡覆盖回开局状态（表现为「一直男方回合」）。
     if (!runtime || !runtime.authority) return;
     if (runtime.get(scopedKey) === undefined) {
-      runtime.patch(scopedKey, resolveInitial(initialRef.current));
+      runtime.patch(scopedKey, getInitial());
     }
     // 只在挂载时补一次初值；后续由房间快照驱动
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -130,7 +141,7 @@ export function useModeState<T>(
         return;
       }
       const raw = runtime.get(scopedKey);
-      const current = (raw === undefined ? resolveInitial(initialRef.current) : raw) as T;
+      const current = (raw === undefined ? getInitial() : raw) as T;
       const value = typeof next === 'function' ? (next as (prev: T) => T)(current) : next;
       runtime.patch(scopedKey, value);
     },
@@ -140,6 +151,6 @@ export function useModeState<T>(
   if (!runtime) return [local, setLocal];
 
   const raw = runtime.get(scopedKey);
-  const value = (raw === undefined ? resolveInitial(initialRef.current) : raw) as T;
+  const value = (raw === undefined ? getInitial() : raw) as T;
   return [value, setValue];
 }
