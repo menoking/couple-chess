@@ -215,12 +215,14 @@ function SudokuGame({
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
+      <div className={`flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-bold ${canAct ? 'bg-white/5 text-white' : 'bg-white/[0.02] text-gray-500'}`}>
         {activePlayer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-        {activePlayer?.name || '当前玩家'} 的回合：填对 → 你抽卡，对方执行
+        {canAct
+          ? `${activePlayer?.name || '当前玩家'} 的回合：填对 → 你抽卡，对方执行`
+          : `等 ${activePlayer?.name || '对方'} 填数…（你这边暂不可操作）`}
       </div>
 
-      <div className="grid grid-cols-9 overflow-hidden rounded-2xl border-2 border-white/20">
+      <div className={`grid grid-cols-9 overflow-hidden rounded-2xl border-2 border-white/20 transition-opacity ${canAct ? '' : 'pointer-events-none opacity-60'}`}>
         {cells.map((value, index) => {
           const row = Math.floor(index / 9);
           const col = index % 9;

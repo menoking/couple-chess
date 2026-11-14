@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Dices, Eye, RefreshCw, ShieldQuestion, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -75,6 +75,8 @@ function BluffDiceGame({
   const [round, setRound] = useModeState('BluffDiceModeView.round', 1);
   const [starterId, setStarterId] = useModeState('BluffDiceModeView.starterId', currentTurn === 1 ? 1 : 0);
   const [turn, setTurn] = useModeState('BluffDiceModeView.turn', currentTurn === 1 ? 1 : 0);
+  // 联机：只有当前回合方能推进阶段 / 叫骰 / 开牌，同屏恒可操作
+  const canAct = useMyTurn(turn);
   const [dice, setDice] = useModeState<Record<number, number[]>>('BluffDiceModeView.dice', { 0: rollDice(), 1: rollDice() }, 'seat');
   const [bid, setBid] = useModeState<Bid | null>('BluffDiceModeView.bid', null);
   const [draftQty, setDraftQty] = useModeState('BluffDiceModeView.draftQty', 2);
@@ -105,6 +107,7 @@ function BluffDiceGame({
   }, [bid]);
 
   const startRound = (nextStarter: number) => {
+    if (!canAct) return;
     setDice({ 0: rollDice(), 1: rollDice() });
     setBid(null);
     setReveal(null);
@@ -116,12 +119,14 @@ function BluffDiceGame({
   };
 
   const submitBid = () => {
+    if (!canAct) return;
     if (!isLegalBid) return;
     setBid({ qty: draftQty, face: draftFace, by: turn });
     setTurn(turn === 0 ? 1 : 0);
   };
 
   const challenge = () => {
+    if (!canAct) return;
     if (!bid) return;
     const all = [...dice[0], ...dice[1]];
     const count = all.filter(value => value === bid.face).length;
@@ -157,7 +162,8 @@ function BluffDiceGame({
         </div>
         <button
           type="button"
-          onClick={() => setPhase(phase === 'handoff1' ? 'view1' : 'view2')}
+          onClick={() => { if (canAct) setPhase(phase === 'handoff1' ? 'view1' : 'view2'); }}
+          disabled={!canAct}
           className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
         >
           我是 {target?.name}，看我的骰子
@@ -188,7 +194,8 @@ function BluffDiceGame({
 
         <button
           type="button"
-          onClick={() => setPhase(phase === 'view1' ? 'handoff2' : 'bid')}
+          onClick={() => { if (canAct) setPhase(phase === 'view1' ? 'handoff2' : 'bid'); }}
+          disabled={!canAct}
           className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
         >
           {phase === 'view1' ? '记住了，交给对方' : '双方都记住了，开始叫点'}
@@ -245,6 +252,7 @@ function BluffDiceGame({
         <button
           type="button"
           onClick={() => startRound(starterId === 0 ? 1 : 0)}
+          disabled={!canAct}
           className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
         >
           下一轮
@@ -278,9 +286,9 @@ function BluffDiceGame({
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
+      <div className={`flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-bold ${canAct ? 'bg-white/5 text-white' : 'bg-white/[0.02] text-gray-500'}`}>
         {currentPlayer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-        {currentPlayer?.name} 的回合
+        {canAct ? `${currentPlayer?.name} 的回合` : `等 ${currentPlayer?.name} 操作…（你这边暂不可操作）`}
       </div>
 
       <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-5 text-center">
@@ -311,6 +319,7 @@ function BluffDiceGame({
               <button
                 type="button"
                 onClick={() => setDraftQty(value => Math.max(1, value - 1))}
+                disabled={!canAct}
                 className="ios-btn h-7 w-7 rounded-lg text-base font-bold text-white"
               >
                 −
@@ -319,6 +328,7 @@ function BluffDiceGame({
               <button
                 type="button"
                 onClick={() => setDraftQty(value => Math.min(TOTAL_DICE, value + 1))}
+                disabled={!canAct}
                 className="ios-btn h-7 w-7 rounded-lg text-base font-bold text-white"
               >
                 +
@@ -331,6 +341,7 @@ function BluffDiceGame({
               <button
                 type="button"
                 onClick={() => setDraftFace(value => Math.max(1, value - 1))}
+                disabled={!canAct}
                 className="ios-btn h-7 w-7 rounded-lg text-base font-bold text-white"
               >
                 −
@@ -339,6 +350,7 @@ function BluffDiceGame({
               <button
                 type="button"
                 onClick={() => setDraftFace(value => Math.min(6, value + 1))}
+                disabled={!canAct}
                 className="ios-btn h-7 w-7 rounded-lg text-base font-bold text-white"
               >
                 +

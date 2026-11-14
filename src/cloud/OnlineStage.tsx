@@ -45,7 +45,7 @@ import type { RoomAction, RoomSnapshot, Role, Seat } from '../rules/types';
 import { cardFor, extractCard } from '../rules/cards';
 import { buildMergedTheme, buildOnlinePlayers, MERGED_THEME_ID, PLAYER_NAME } from '../rules/identity';
 import { picksToPool } from '../rules/lobby';
-import { ALL_THEME_MODES, MODE_LABEL, MODE_REGISTRY } from '../rules/registry';
+import { ALL_THEME_MODES, MODE_LABEL, MODE_REGISTRY, turnKeyOfMode } from '../rules/registry';
 import { createRoom } from '../rules/room';
 import { ModeRuntimeProvider } from '../rules/ModeRuntime';
 import {
@@ -398,11 +398,13 @@ export function OnlineStage(props: OnlineStageProps) {
   // 回合以玩法视图自己的 turn 为准：围棋/斗兽棋/数独等都在视图内部翻回合，
   // 房间的 turn 只在这些玩法没有内部 turn 时才用。
   const currentTurn = useMemo(() => {
-    const entry = Object.entries(snap?.data ?? {}).find(([key]) => key.endsWith('.turn'));
-    const value = entry?.[1];
-    if (typeof value === 'number') return value;
-    return snap?.turn ?? 0;
-  }, [snap?.data, snap?.turn]);
+    // 按当前玩法固定映射取内部 turn：data 里可能残留上一个玩法的 turn，
+    // 用 find('.turn') 会被旧值带偏，表现为「一直是同一方回合」。
+    const key = turnKeyOfMode(mode);
+    const value = key ? snap?.data[key] : undefined;
+    if (typeof value === 'number') return value === 1 ? 1 : 0;
+    return snap?.turn === 1 ? 1 : 0;
+  }, [snap?.data, snap?.turn, mode]);
 
   const myPool = useMemo(() => picksToPool(themes, selected), [themes, selected]);
   const myLocked = Boolean(snap?.picks[mySeat]?.locked);

@@ -166,9 +166,15 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         diagLog('room:rejected', {
           type: action.type,
           seat: 'seat' in action ? action.seat : '-',
+          key: action.type === 'patch' ? action.key : undefined,
+          turn: current.turn,
           phase: current.cards[0]?.phase ?? null,
           cards: current.cards.length
         });
+        // 关键：写入方本地做过乐观更新，被拒后必须用权威快照把它冲掉。
+        // 否则那台设备会一直显示「自己已经操作成功」，两端回合彻底分叉——
+        // 表现就是双方都能操作、谁也等不到对方。
+        publish(current);
         return;
       }
       authoritativeRef.current = next;
@@ -240,6 +246,28 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         if (cancelled) return;
         setPresence(seats);
         setDiagnosticContext({ presence: seats });
+        // 两台设备抢到同一座位时，两端都能操作同一方，表现就是「操作权混淆」。
+        // Presence 现在按设备号上报，能直接发现；设备号大的一方主动重进让位。
+        if (metas && metas.length > 1) {
+          const bySeat = new Map<Seat, string[]>();
+          metas.forEach(item => {
+            if (!item.deviceId) return;
+            bySeat.set(item.seat, [...(bySeat.get(item.seat) ?? []), item.deviceId]);
+          });
+          const mine = getDeviceId();
+          const clash = [...bySeat.entries()].find(
+            ([, ids]) => new Set(ids).size > 1
+          );
+          if (clash) {
+            const [, ids] = clash;
+            const sorted = [...ids].sort();
+            if (ids.includes(mine) && sorted[sorted.length - 1] === mine) {
+              diagLog('room:seat-conflict', { seat: clash[0], devices: sorted.map(id => id.slice(0, 8)) });
+              onConflictRef.current?.();
+              return;
+            }
+          }
+        }
         const key = [...seats].sort().join(',');
         if (isHost && key !== lastPresence.current && authoritativeRef.current) {
           lastPresence.current = key;

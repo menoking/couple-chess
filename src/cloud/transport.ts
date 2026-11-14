@@ -1,11 +1,14 @@
 import { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './client';
+import { getDeviceId } from './device';
 import { Seat } from './types';
 
 export type TransportKind = 'supabase' | 'local';
 
 export interface PresenceMeta {
   seat: Seat;
+  /** 上报的设备号：Presence key 用它，才能发现「两台设备抢同一座位」 */
+  deviceId?: string;
   lobbyLocked?: boolean;
   themeIds?: string[];
 }
@@ -125,8 +128,11 @@ class SupabaseRoomTransport implements RoomTransport {
     if (!supabase) throw new Error('云服务未配置');
 
     const topic = `cfc-room-${this.roomId}`;
+    // Presence key 必须用设备号，不能用座位号：
+    // 两台设备撞同一座位时会落在同一个 key 下，后写覆盖先写，
+    // 冲突永远检测不到，UI 也只会亮一个头像。
     const channel = supabase.channel(topic, {
-      config: { presence: { key: `s${this.mySeat}` } }
+      config: { presence: { key: getDeviceId() } }
     });
 
     channel.on('broadcast', { event: 'msg' }, payload => {
@@ -139,13 +145,15 @@ class SupabaseRoomTransport implements RoomTransport {
       const state = channel.presenceState() as Record<string, Array<Record<string, unknown>>>;
       const seats: Seat[] = [];
       const metas: PresenceMeta[] = [];
-      Object.entries(state).forEach(([key, entries]) => {
-        const seat = Number(key.replace('s', ''));
-        if (seat !== 0 && seat !== 1) return;
-        seats.push(seat);
+      Object.entries(state).forEach(([deviceId, entries]) => {
         const meta = entries?.[0] ?? {};
+        const rawSeat = meta.seat;
+        const seat: Seat | null = rawSeat === 0 || rawSeat === 1 ? rawSeat : null;
+        if (seat === null) return;
+        if (!seats.includes(seat)) seats.push(seat);
         metas.push({
           seat,
+          deviceId,
           lobbyLocked: meta.lobbyLocked === true,
           themeIds: Array.isArray(meta.themeIds)
             ? meta.themeIds.filter((item): item is string => typeof item === 'string')

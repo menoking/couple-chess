@@ -190,9 +190,11 @@ function DotsAndBoxesGame({
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
+      <div className={`flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-bold ${canAct ? 'bg-white/5 text-white' : 'bg-white/[0.02] text-gray-500'}`}>
         {activePlayer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-        {activePlayer?.name || '当前玩家'} 的回合：连接两个相邻的点
+        {canAct
+          ? `${activePlayer?.name || '当前玩家'} 的回合：连接两个相邻的点`
+          : `等 ${activePlayer?.name || '对方'} 落子…（你这边暂不可操作）`}
       </div>
 
       <DotsBoard
@@ -202,6 +204,7 @@ function DotsAndBoxesGame({
         boxes={boxes}
         players={players}
         onDrawLine={drawLine}
+        disabled={!canAct}
       />
 
       <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-[11px] leading-relaxed text-gray-500">
@@ -226,7 +229,8 @@ function DotsBoard({
   vertical,
   boxes,
   players,
-  onDrawLine
+  onDrawLine,
+  disabled = false
 }: {
   dots: number;
   horizontal: LineOwner[];
@@ -234,6 +238,8 @@ function DotsBoard({
   boxes: number[];
   players: Player[];
   onDrawLine: (kind: 'h' | 'v', index: number) => void;
+  /** 非我方回合：整块棋盘不接收点击，杜绝「替对方走棋」 */
+  disabled?: boolean;
 }) {
   const cells = dots - 1;
   const dotSize = 12;
@@ -280,6 +286,7 @@ function DotsBoard({
           <button
             key={`h-${index}`}
             type="button"
+            disabled={disabled}
             onClick={() => onDrawLine('h', index)}
             aria-label={owner ? `${owner.name}已连接` : '连接横线'}
             className="absolute rounded-full transition-all"
@@ -308,6 +315,7 @@ function DotsBoard({
           <button
             key={`v-${index}`}
             type="button"
+            disabled={disabled}
             onClick={() => onDrawLine('v', index)}
             aria-label={owner ? `${owner.name}已连接` : '连接竖线'}
             className="absolute rounded-full transition-all"

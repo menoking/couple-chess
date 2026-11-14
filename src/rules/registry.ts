@@ -57,6 +57,42 @@ export const ALL_THEME_MODES: ThemeMode[] = [
   'board', 'card', 'mineTruth', 'mineDare', 'mineTheme', 'diceAction', 'diceBody'
 ];
 
+/**
+ * 严格轮流玩法：视图内部自带 turn，只有当前回合方能写自己的状态。
+ * 前端守卫可能因座位 / Presence 竞态失效，房主这一层是最终裁决。
+ */
+export const TURN_BOUND_PREFIXES = [
+  'GridChessModeView.',
+  'GoModeView.',
+  'JungleModeView.',
+  'SudokuModeView.',
+  'BluffDiceModeView.',
+  'PenaltyLadderModeView.'
+];
+
+/** 该状态键属于哪个严格轮流玩法；不属于返回 null。 */
+export function turnBoundPrefixOf(key: string): string | null {
+  return TURN_BOUND_PREFIXES.find(prefix => key.startsWith(prefix)) ?? null;
+}
+
+/**
+ * 玩法 → 视图内部回合键。切换玩法时 data 里可能残留上一个玩法的 turn，
+ * 按固定映射取才不会被旧值带偏（表现为「一直男方回合」「操作权错位」）。
+ */
+export const MODE_TURN_KEY: Partial<Record<GameMode, string>> = {
+  gridchess: 'GridChessModeView.turn',
+  go: 'GoModeView.turn',
+  jungle: 'JungleModeView.turn',
+  sudoku: 'SudokuModeView.turn',
+  bluff: 'BluffDiceModeView.turn',
+  penaltygrid: 'PenaltyLadderModeView.turn'
+};
+
+/** 当前玩法该读哪一个 turn 键；没有内部回合的玩法返回 null。 */
+export function turnKeyOfMode(mode: GameMode): string | null {
+  return MODE_TURN_KEY[mode] ?? null;
+}
+
 /** 需要权威端独占跑表的状态变量，避免两台设备各自发 patch 打架。 */
 const TIMER_STATE_SUFFIXES = ['.timeLeft', '.secondsLeft', '.tick'];
 

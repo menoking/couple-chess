@@ -221,7 +221,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
         {passes === 1 && <span className="text-[10px] text-[#FF9F0A]">·对方已停一手</span>}
       </div>
 
-      <div className="go-board grid grid-cols-9 overflow-hidden rounded-2xl border">
+      <div className={`go-board grid grid-cols-9 overflow-hidden rounded-2xl border transition-opacity ${canAct ? '' : 'pointer-events-none opacity-60'}`}>
         {board.map((value, index) => {
           const owner = value !== null ? players.find(player => player.id === value) : undefined;
           const isLast = lastMove === index;

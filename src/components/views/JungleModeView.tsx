@@ -205,7 +205,7 @@ function JungleGame({
         {activePlayer?.name} 走棋
       </div>
 
-      <div className="grid grid-cols-7 overflow-hidden rounded-2xl border border-white/10">
+      <div className={`grid grid-cols-7 overflow-hidden rounded-2xl border border-white/10 transition-opacity ${canAct ? '' : 'pointer-events-none opacity-60'}`}>
         {board.map((piece, cellIndex) => {
           const meta = cellMeta(cellIndex);
           const isSelected = selected === cellIndex;

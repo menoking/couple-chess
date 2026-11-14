@@ -2,9 +2,31 @@ import type { GameMode } from '../types';
 import type { RoomAction, RoomSnapshot, Role, Seat } from './types';
 import { enqueueCard, extractCard, projectCards, reduceCard } from './cards';
 import { bothLocked, mergePools } from './lobby';
-import { isAuthorityOnlyState, isRestartState, privateKeyOf } from './registry';
+import { isAuthorityOnlyState, isRestartState, privateKeyOf, turnBoundPrefixOf } from './registry';
 
 const emptyPick = () => ({ themeIds: [], locked: false });
+
+/** 严格轮流玩法当前的回合方；没有内部 turn 时回落到房间回合。 */
+function viewTurnOf(state: RoomSnapshot, prefix: string): number {
+  const value = state.data[`${prefix}turn`];
+  if (typeof value === 'number') return value === 1 ? 1 : 0;
+  return state.turn === 1 ? 1 : 0;
+}
+
+/**
+ * 是否已经真正开始对局。开局阶段（掷骰定先手）任何一方都能写 turn，
+ * 对局中只有当前回合方能翻 turn——否则对方可以改 turn 抢回合。
+ */
+function isGameStarted(state: RoomSnapshot, prefix: string): boolean {
+  const started = state.data[`${prefix}started`];
+  if (typeof started === 'boolean') return started;
+  const phase = state.data[`${prefix}phase`];
+  if (typeof phase === 'string') return phase === 'play' || phase === 'over';
+  // 没有显式阶段标记：出现 turn 以外的玩法状态就算已开局
+  return Object.keys(state.data).some(
+    key => key.startsWith(prefix) && key !== `${prefix}turn`
+  );
+}
 
 export function createRoom(
   mode: GameMode,
@@ -42,6 +64,23 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
     case 'patch': {
       // 计时状态只允许权威端推进，否则两台设备的秒数会互相覆盖
       if (isAuthorityOnlyState(action.key) && action.seat !== state.hostSeat) return state;
+      // 严格轮流玩法：非当前回合方不能写玩法状态。
+      // 前端守卫（useMyTurn）会因为座位 / Presence 竞态失效，这里是最终裁决——
+      // 只要写的人不是当前回合方，房主直接丢弃，绝不让两端各走各的。
+      const turnPrefix = turnBoundPrefixOf(action.key);
+      if (turnPrefix) {
+        const isTurnKey = action.key === `${turnPrefix}turn`;
+        if (isTurnKey) {
+          // 开局定先手：赢家写 turn，此时还没有对局状态，放行。
+          // 对局中翻 turn 必须由当前回合方发起，堵住「对方改 turn 抢回合」。
+          if (isGameStarted(state, turnPrefix) && action.seat !== viewTurnOf(state, turnPrefix)) {
+            return state;
+          }
+        } else if (action.value !== null && action.seat !== viewTurnOf(state, turnPrefix)) {
+          // 其它玩法状态只有当前回合方能写；null 是清理操作，放行避免卡死
+          return state;
+        }
+      }
       // 统一抽卡入口：任何玩法视图想弹自己的任务卡，都改写成公共四阶段卡片
       const found = extractCard(action.value);
       if (found) {

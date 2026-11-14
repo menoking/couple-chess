@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useMemo } from 'react';
 import { ArrowLeft, Check, RefreshCw, Skull, TrendingUp, User, UserRound, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -22,6 +22,8 @@ function PenaltyLadderGame({ players, themes }: { players: Player[]; themes: The
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
   const [turn, setTurn] = useModeState('PenaltyLadderModeView.turn', 0);
+  // 联机：只有当前回合方能判成功/失败，同屏恒可操作
+  const canAct = useMyTurn(turn);
   const [steps, setSteps] = useModeState<Record<number, number>>('PenaltyLadderModeView.steps', { 0: 0, 1: 0 });
   const [phase, setPhase] = useModeState<Phase>('PenaltyLadderModeView.phase', 'play');
   const [currentTask, setCurrentTask] = useModeState('PenaltyLadderModeView.currentTask', () => pickRandom(pool));
@@ -35,12 +37,14 @@ function PenaltyLadderGame({ players, themes }: { players: Player[]; themes: The
   const nextTask = () => setCurrentTask(pickRandom(pool));
 
   const handleSuccess = () => {
+    if (!canAct) return;
     setTurn(turn === 0 ? 1 : 0);
     setRound(value => value + 1);
     nextTask();
   };
 
   const handleFail = () => {
+    if (!canAct) return;
     const level = Math.min((steps[activePlayer.id] ?? 0) + 1, PENALTY_LADDER.length);
     setSteps(prev => ({ ...prev, [activePlayer.id]: level }));
     setPenaltyResult({ playerId: activePlayer.id, level });
@@ -48,6 +52,7 @@ function PenaltyLadderGame({ players, themes }: { players: Player[]; themes: The
   };
 
   const confirmPenalty = () => {
+    if (!canAct) return;
     if (!penaltyResult) return;
     if (penaltyResult.level >= PENALTY_LADDER.length) {
       setLoserId(penaltyResult.playerId);
@@ -94,7 +99,8 @@ function PenaltyLadderGame({ players, themes }: { players: Player[]; themes: The
         <button
           type="button"
           onClick={confirmPenalty}
-          className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
+          disabled={!canAct}
+          className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg disabled:opacity-50"
         >
           {penaltyResult.level >= PENALTY_LADDER.length ? '完成，结束本轮' : '已完成，换对方'}
         </button>
@@ -158,7 +164,8 @@ function PenaltyLadderGame({ players, themes }: { players: Player[]; themes: The
         <button
           type="button"
           onClick={handleFail}
-          className="ios-btn h-14 flex-1 rounded-full bg-[#3A3A3C] text-sm font-bold text-[#FF453A]"
+          disabled={!canAct}
+          className="ios-btn h-14 flex-1 rounded-full bg-[#3A3A3C] text-sm font-bold text-[#FF453A] disabled:opacity-50"
         >
           <span className="flex items-center justify-center gap-1.5">
             <X size={15} />做不到，升一级
@@ -167,7 +174,8 @@ function PenaltyLadderGame({ players, themes }: { players: Player[]; themes: The
         <button
           type="button"
           onClick={handleSuccess}
-          className="ios-btn h-14 flex-[2] rounded-full bg-white text-sm font-bold text-black shadow-lg"
+          disabled={!canAct}
+          className="ios-btn h-14 flex-[2] rounded-full bg-white text-sm font-bold text-black shadow-lg disabled:opacity-50"
         >
           <span className="flex items-center justify-center gap-1.5">
             <Check size={15} />完成了，换 {opponent?.name}
