@@ -39,7 +39,11 @@ function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }
   const [queue] = useModeState<QuizQuestion[]>('QuizModeView.queue', () => shuffle(QUIZ_QUESTIONS).slice(0, ROUNDS));
   const [round, setRound] = useModeState('QuizModeView.round', 0);
   // 自己的答案按座位隔离：对方拿不到，联机时同一台设备也替不了对方答
-  const [myPick, setMyPick] = useModeState<number | null>('QuizModeView.myPick', null, 'seat');
+  const [myPick, setMyPick] = useModeState<{ round: number; value: number } | null>(
+    'QuizModeView.myPick',
+    null,
+    'seat'
+  );
   const [revealed, setRevealed] = useModeState<QuizReveal | null>('QuizModeView.revealed', null);
   const [matches, setMatches] = useModeState('QuizModeView.matches', 0);
   // 同屏：两个人轮流在同一台设备作答，暂存已提交的答案
@@ -51,7 +55,9 @@ function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }
   const roundReveal = revealed && revealed.round === round ? revealed : null;
   const answerSeat = online ? mySeat : activeSeat;
   const activePlayer = players[answerSeat];
-  const iSubmitted = online ? myPick !== null : localSealed[activeSeat] !== null;
+  // 只有「本轮」的提交才算已提交：上一题的残留不能带过来。
+  // 「下一题」只有点击那台会清自己的答案，对方那台必然残留旧值。
+  const iSubmitted = online ? myPick?.round === round : localSealed[activeSeat] !== null;
   const peerSubmitted = online ? false : localSealed[answerSeat === 0 ? 1 : 0] !== null;
 
   const scoredRef = useRef(-1);
@@ -61,7 +67,7 @@ function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }
   const pick = (optionIndex: number) => {
     if (roundReveal || iSubmitted) return;
     if (online) {
-      setMyPick(optionIndex);
+      setMyPick({ round, value: optionIndex });
       // 答案只交给房主，对方看不到；双方都提交后 reducer 一次性公开
       runtime.dispatch({ type: 'sealSubmit', scope: 'QuizModeView', seat: mySeat, round, value: optionIndex });
       return;
@@ -92,7 +98,8 @@ function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }
     setLocalSealed([null, null]);
     setActiveSeat(0);
     scoredRef.current = -1;
-    setRound(value => value + 1);
+    // 两端都可能点「下一题」，用条件递增保证只推进一步，不会跳题
+    setRound(value => (value === round ? value + 1 : value));
   };
 
   if (!queueReady) {

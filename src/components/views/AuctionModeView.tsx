@@ -74,6 +74,12 @@ function AuctionGame({
 
   const issuedRef = useRef(-1);
   const scoredRef = useRef(-1);
+
+  // 进入新一拍时清掉自己的出价。只有点「进入下一拍」的那台会执行 advance，
+  // 另一端不在这里清的话，上一拍的出价会残留到下一拍。
+  useEffect(() => {
+    setMyBid(0);
+  }, [round, setMyBid]);
   // 拍品列表由房主生成后下发，没收到之前不能拿本地随机的那份
   const queueReady = useSharedValueReady('AuctionModeView.queue');
 
@@ -152,7 +158,8 @@ function AuctionGame({
     setTaskData(null);
     issuedRef.current = -1;
     scoredRef.current = -1;
-    setRound(value => value + 1);
+    // 两端都可能点「进入下一拍」，条件递增保证只前进一步
+    setRound(value => (value === round ? value + 1 : value));
   };
 
   const resolveTask = (accepted: boolean) => {
