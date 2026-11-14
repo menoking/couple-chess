@@ -1,4 +1,5 @@
 import { ArrowLeft, ImageIcon, User, UserRound } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { useModeRuntime } from '../../rules/ModeRuntime';
 import { Player } from '../../types';
 import { POSE_IMAGES } from '../../data/poseImages';
@@ -20,10 +21,17 @@ export function PoseModeView({
 }: PoseModeViewProps) {
   const runtime = useModeRuntime();
   const mySeat = runtime?.seat ?? null;
+  const [submitting, setSubmitting] = useState(false);
   const activePlayer = players[currentTurn];
 
+  // 回合切换后解除提交锁
+  useEffect(() => {
+    setSubmitting(false);
+  }, [currentTurn]);
+
   const handleDrawPose = () => {
-    // 联机时只有当前回合方能抽卡
+    // 联机时只有当前回合方能抽卡，且一次回合只能抽一次
+    if (submitting) return;
     if (mySeat !== null && currentTurn !== mySeat) return;
     if (POSE_IMAGES.length === 0) {
       alert('public/img 目录下还没有可抽取的图片');
@@ -31,6 +39,7 @@ export function PoseModeView({
     }
 
     const imageSrc = POSE_IMAGES[Math.floor(Math.random() * POSE_IMAGES.length)];
+    setSubmitting(true);
     onPoseTrigger(imageSrc);
     // 抽完一张姿势卡交给对方
     onEndTurn();
@@ -110,14 +119,15 @@ export function PoseModeView({
         <button
           type="button"
           onClick={handleDrawPose}
-          className="mx-4 mb-2 h-[clamp(176px,30dvh,244px)] ios-glass rounded-[clamp(20px,4dvh,32px)] flex flex-col items-center justify-center px-6 border border-white/10 shadow-2xl shrink-0 ios-btn"
+          disabled={submitting}
+          className="mx-4 mb-2 h-[clamp(176px,30dvh,244px)] ios-glass rounded-[clamp(20px,4dvh,32px)] flex flex-col items-center justify-center px-6 border border-white/10 shadow-2xl shrink-0 ios-btn disabled:opacity-60"
         >
           <div
             className={`text-sm font-medium text-center animate-pulse mb-3 ${
               currentTurn === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]'
             }`}
           >
-            {activePlayer.name}回合：点击卡牌抽取姿势
+            {submitting ? '正在抽卡…' : `${activePlayer.name}回合：点击卡牌抽取姿势`}
           </div>
           <div className="w-16 h-16 rounded-[20px] bg-white/5 flex items-center justify-center mb-3">
             <ImageIcon

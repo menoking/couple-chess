@@ -243,9 +243,9 @@ function FlipGambleGame({
         players={players}
         isOpen={!!taskData}
         taskData={taskData}
-        onAccept={() => setTaskData(null)}
-        onReject={() => setTaskData(null)}
-        onClose={() => setTaskData(null)}
+        onAccept={() => { setTaskData(null); onEndTurn(); }}
+        onReject={() => { setTaskData(null); onEndTurn(); }}
+        onClose={() => { setTaskData(null); onEndTurn(); }}
       />
     </div>
   );

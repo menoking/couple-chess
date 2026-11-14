@@ -84,7 +84,14 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
     case 'revealCard':
     case 'ackCard': {
       const next = reduceCard(state, action);
-      return next === state ? state : bump(next);
+      if (next === state) return state;
+      const cleared = bump(next);
+      // 扫雷：任务卡/炸弹卡确认完就是一次回合，由房主统一交回合，
+      // 避免 blank / task / bomb 三条分支各写一次 endTurn 还容易漏
+      if (cleared.cards.length === 0 && state.mode === 'mine') {
+        return { ...cleared, turn: cleared.turn === 0 ? 1 : 0 };
+      }
+      return cleared;
     }
 
     case 'pickThemes': {

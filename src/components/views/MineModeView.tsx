@@ -1,3 +1,5 @@
+import { useRef } from 'react';
+import { useModeRuntime } from '../../rules/ModeRuntime';
 import {
   ArrowLeft,
   Bomb,
@@ -62,12 +64,20 @@ export function MineModeView({
   onEndTurn,
   onBack
 }: MineModeViewProps) {
+  const runtime = useModeRuntime();
+  const mySeat = runtime?.seat ?? null;
+  const revealLock = useRef(false);
   const activePlayer = players[currentTurn];
   const activeTheme = themes.find(t => t.id === activePlayer.themeId);
   const revealedCount = mineBoard.filter(tile => tile.revealed).length;
   const remainingCount = mineBoard.length - revealedCount;
 
   const handleReveal = (index: number) => {
+    // 非当前回合方不能翻；翻完到回合广播回来之间也锁住，避免连点翻多格
+    if (mySeat !== null && currentTurn !== mySeat) return;
+    if (revealLock.current) return;
+    revealLock.current = true;
+    window.setTimeout(() => { revealLock.current = false; }, 800);
     const result = onRevealTile(index);
     if (!result) return;
 
@@ -81,6 +91,7 @@ export function MineModeView({
     }
 
     if (result.type === 'task') {
+      // 卡片确认出队时由房主统一交回合（见 reduceRoom 的 ackCard）
       onTaskTrigger(result.task);
       return;
     }

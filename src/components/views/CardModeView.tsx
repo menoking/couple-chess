@@ -1,5 +1,5 @@
 import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Layers3, User, UserRound, X } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 
@@ -27,12 +27,19 @@ export function CardModeView({
   const activePlayer = players[currentTurn];
   const activeTheme = themes.find(t => t.id === activePlayer.themeId);
   const [drawnKeys, setDrawnKeys] = useModeState<Set<string>>('CardModeView.drawnKeys', () => new Set());
+  // 抽卡提交锁：翻卡等待期间不能重复触发，否则会连续抽多张
+  const [submitting, setSubmitting] = useState(false);
   const maleThemeId = players[0]?.themeId;
   const femaleThemeId = players[1]?.themeId;
 
   useEffect(() => {
     setDrawnKeys(new Set());
   }, [maleThemeId, femaleThemeId]);
+
+  // 回合切换后解除提交锁
+  useEffect(() => {
+    setSubmitting(false);
+  }, [currentTurn]);
 
   const themeDecks = useMemo(
     () => players.map(player => ({ player, theme: themes.find(theme => theme.id === player.themeId) })),
@@ -42,16 +49,19 @@ export function CardModeView({
   const remainingCards = Math.max(0, totalCards - drawnKeys.size);
 
   const handleDrawTask = () => {
-    // 联机时只有当前回合方能抽卡
+    // 联机时只有当前回合方能抽卡，且一次回合只能抽一次
+    if (submitting) return;
     if (mySeat !== null && currentTurn !== mySeat) return;
     const task = onDrawTask();
     if (!task) {
       alert('当前玩家还没有可抽取的任务');
       return;
     }
+    setSubmitting(true);
     setDrawnKeys(previous => {
       const next = new Set(previous);
-      next.add(`${task.taskSourceId}:${task.task}:${task.moveDelta}`);
+      // 用任务文本 + 步数做 key：联机的 taskSourceId 固定是 online，带它会导致灰卡匹配不上
+      next.add(`${task.task}:${task.moveDelta}`);
       return next;
     });
     onTaskTrigger(task);
@@ -174,7 +184,7 @@ export function CardModeView({
             <div className="grid grid-cols-4 gap-2">
               {themeDecks.flatMap(({ player, theme }) =>
                 (theme?.tasks || []).map((task, index) => {
-                  const key = `${theme?.id}:${task.text}:${task.moveDelta}`;
+                  const key = `${task.text}:${task.moveDelta}`;
                   const isDrawn = drawnKeys.has(key);
                   return (
                     <div
@@ -215,14 +225,15 @@ export function CardModeView({
         <button
           type="button"
           onClick={handleDrawTask}
-          className="mx-4 mb-2 h-[clamp(176px,30dvh,244px)] ios-glass rounded-[clamp(20px,4dvh,32px)] flex flex-col items-center justify-center px-6 border border-white/10 shadow-2xl shrink-0 ios-btn"
+          disabled={submitting}
+          className="mx-4 mb-2 h-[clamp(176px,30dvh,244px)] ios-glass rounded-[clamp(20px,4dvh,32px)] flex flex-col items-center justify-center px-6 border border-white/10 shadow-2xl shrink-0 ios-btn disabled:opacity-60"
         >
           <div
             className={`text-sm font-medium text-center animate-pulse mb-3 ${
               currentTurn === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]'
             }`}
           >
-            {activePlayer.name}回合：点击卡牌抽取任务
+            {submitting ? '正在抽卡…' : `${activePlayer.name}回合：点击卡牌抽取任务`}
           </div>
           <div className="w-16 h-16 rounded-[20px] bg-white/5 flex items-center justify-center mb-3">
             <Layers3

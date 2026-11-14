@@ -133,7 +133,10 @@ function MemoryGame({
     const nextFound = board.filter(tile => tile.matchedBy !== null).length / 2;
     if (nextFound >= totalPairs) {
       setFinished(true);
+      return;
     }
+    // 配对完成就是一次回合，交给对方
+    onEndTurn();
   };
 
   if (finished) {
