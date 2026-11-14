@@ -71,6 +71,8 @@ export type RoomAction =
   | { type: 'ackCard'; seat: Seat }
   /** 拍卖密封出价：价格只下发给本人，双方都提交后房主一次性公开 */
   | { type: 'sealBid'; seat: Seat; amount: number }
+  /** 通用密封提交（默契问答等）：各自的选择只下发给本人，双方都提交后一次性公开 */
+  | { type: 'sealSubmit'; scope: string; seat: Seat; round: number; value: string | number | null }
   /** 长按卡片 3 秒的逃生通道：对方退出/卡死时放掉这张卡 */
   | { type: 'forceCloseCard'; seat: Seat }
   | { type: 'pickThemes'; seat: Seat; themeIds: string[]; pool: OnlineCard[] }

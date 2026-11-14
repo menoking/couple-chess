@@ -97,6 +97,35 @@ function sealBid(state: RoomSnapshot, seat: Seat, amount: number): RoomSnapshot 
   return { ...state, data };
 }
 
+/**
+ * 通用密封提交：答案写进按座位隔离的槽位，viewFor 只下发本人那份。
+ * 两个人同一轮都提交后，才把两份答案一起写进公共的 `${scope}.revealed`。
+ */
+function sealSubmit(
+  state: RoomSnapshot,
+  scope: string,
+  seat: Seat,
+  round: number,
+  value: string | number | null
+): RoomSnapshot {
+  const revealedKey = `${scope}.revealed`;
+  const sealedKey = (target: Seat) => seatScopedKey(`${scope}.sealed`, target);
+  const current = state.data[revealedKey] as { round?: number } | undefined;
+  // 同一轮已经揭晓就不再接受新的提交，避免重复结算
+  if (current && typeof current.round === 'number' && current.round >= round) return state;
+
+  const data: Record<string, unknown> = {
+    ...state.data,
+    [sealedKey(seat)]: { round, value }
+  };
+  const a = data[sealedKey(0)] as { round: number; value: unknown } | undefined;
+  const b = data[sealedKey(1)] as { round: number; value: unknown } | undefined;
+  if (a?.round === round && b?.round === round) {
+    data[revealedKey] = { round, values: [a.value, b.value] };
+  }
+  return { ...state, data };
+}
+
 export function createRoom(
   mode: GameMode,
   roles: [Role, Role],
@@ -196,6 +225,11 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
         });
       }
       return next;
+    }
+
+    case 'sealSubmit': {
+      const next = sealSubmit(state, action.scope, action.seat, action.round, action.value);
+      return next === state ? state : bump(next);
     }
 
     case 'sealBid': {
