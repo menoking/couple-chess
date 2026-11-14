@@ -22,6 +22,8 @@ interface MineModeViewProps {
   onTaskTrigger: (data: TaskEventData) => void;
   onBombTrigger: () => void;
   onEndTurn: () => void;
+  /** 队列里还有没确认的卡：棋盘也不能再翻 */
+  pendingCards: number;
   onBack: () => void;
 }
 
@@ -62,6 +64,7 @@ export function MineModeView({
   onTaskTrigger,
   onBombTrigger,
   onEndTurn,
+  pendingCards,
   onBack
 }: MineModeViewProps) {
   const runtime = useModeRuntime();
@@ -75,6 +78,7 @@ export function MineModeView({
   const handleReveal = (index: number) => {
     // 非当前回合方不能翻；翻完到回合广播回来之间也锁住，避免连点翻多格
     if (mySeat !== null && currentTurn !== mySeat) return;
+    if (pendingCards > 0) return;
     if (revealLock.current) return;
     revealLock.current = true;
     window.setTimeout(() => { revealLock.current = false; }, 800);

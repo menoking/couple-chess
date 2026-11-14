@@ -10,6 +10,8 @@ interface CardModeViewProps {
   onDrawTask: () => TaskEventData | null;
   onTaskTrigger: (data: TaskEventData) => void;
   onEndTurn: () => void;
+  /** 队列里还有没确认的卡：双方抽卡按钮都要锁住 */
+  pendingCards: number;
   onBack: () => void;
 }
 
@@ -20,6 +22,7 @@ export function CardModeView({
   onDrawTask,
   onTaskTrigger,
   onEndTurn,
+  pendingCards,
   onBack
 }: CardModeViewProps) {
   const runtime = useModeRuntime();
@@ -51,6 +54,7 @@ export function CardModeView({
   const handleDrawTask = () => {
     // 联机时只有当前回合方能抽卡，且一次回合只能抽一次
     if (submitting) return;
+    if (pendingCards > 0) return;
     if (mySeat !== null && currentTurn !== mySeat) return;
     const task = onDrawTask();
     if (!task) {
@@ -225,7 +229,7 @@ export function CardModeView({
         <button
           type="button"
           onClick={handleDrawTask}
-          disabled={submitting}
+          disabled={submitting || pendingCards > 0}
           className="mx-4 mb-2 h-[clamp(176px,30dvh,244px)] ios-glass rounded-[clamp(20px,4dvh,32px)] flex flex-col items-center justify-center px-6 border border-white/10 shadow-2xl shrink-0 ios-btn disabled:opacity-60"
         >
           <div
@@ -233,7 +237,11 @@ export function CardModeView({
               currentTurn === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]'
             }`}
           >
-            {submitting ? '正在抽卡…' : `${activePlayer.name}回合：点击卡牌抽取任务`}
+            {pendingCards > 0
+              ? '等待任务确认…'
+              : submitting
+                ? '正在抽卡…'
+                : `${activePlayer.name}回合：点击卡牌抽取任务`}
           </div>
           <div className="w-16 h-16 rounded-[20px] bg-white/5 flex items-center justify-center mb-3">
             <Layers3

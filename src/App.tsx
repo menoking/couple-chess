@@ -720,6 +720,7 @@ function App() {
           onDrawTask={drawCardTask}
           onTaskTrigger={handleTaskTrigger}
           onEndTurn={endTurn}
+          pendingCards={taskData ? 1 : 0}
           onBack={handleBackFromGame}
         />
       )}
@@ -734,6 +735,7 @@ function App() {
           onTaskTrigger={handleTaskTrigger}
           onBombTrigger={handleMineBombTrigger}
           onEndTurn={endTurn}
+          pendingCards={taskData ? 1 : 0}
           onBack={handleBackFromGame}
         />
       )}
@@ -744,6 +746,7 @@ function App() {
           currentTurn={state.turn}
           onPoseTrigger={setPoseImageSrc}
           onEndTurn={endTurn}
+          pendingCards={taskData ? 1 : 0}
           onBack={handleBackFromGame}
         />
       )}

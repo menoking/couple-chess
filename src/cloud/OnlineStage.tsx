@@ -719,13 +719,13 @@ export function OnlineStage(props: OnlineStageProps) {
         );
       }
       case 'card':
-        return <CardModeView {...common} onDrawTask={onDrawTask} onTaskTrigger={onTaskTrigger} />;
+        return <CardModeView {...common} onDrawTask={onDrawTask} onTaskTrigger={onTaskTrigger} pendingCards={snap.cards.length} />;
       case 'mine': {
         if (mineBoard.length === 0) return <StagePreparing />;
-        return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} />;
+        return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} pendingCards={snap.cards.length} />;
       }
       case 'pose':
-        return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onEndTurn={endTurn} onBack={onBack} />;
+        return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onEndTurn={endTurn} pendingCards={snap.cards.length} onBack={onBack} />;
       case 'roulette':
         return <RouletteModeView {...common} />;
       case 'bingo':
