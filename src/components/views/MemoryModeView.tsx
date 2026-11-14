@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Brain, Check, Crown, Flame, Gift, Heart, RefreshCw, Star, Sun, User, UserRound, Zap } from 'lucide-react';
 import { Player, TaskCard, TaskEventData, Theme } from '../../types';
@@ -77,9 +77,11 @@ function MemoryGame({
 
   const totalPairs = tiles.length / 2;
   const foundPairs = board.filter(tile => tile.matchedBy !== null).length / 2;
+  const canAct = useMyTurn(currentTurn);
   const activePlayer = players[currentTurn] || players[0];
 
   const flipTile = (index: number) => {
+    if (!canAct) return;
     if (locked || finished) return;
     const tile = board[index];
     if (!tile || tile.flipped || tile.matchedBy !== null) return;

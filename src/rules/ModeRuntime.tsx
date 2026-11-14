@@ -37,6 +37,13 @@ export function ModeRuntimeProvider({
   return <ModeRuntimeContext.Provider value={value}>{children}</ModeRuntimeContext.Provider>;
 }
 
+/** 联机时判断「现在是不是我的回合」；同屏（无 runtime）永远为 true。 */
+export function useMyTurn(currentTurn: number): boolean {
+  const runtime = useModeRuntime();
+  if (!runtime) return true;
+  return runtime.seat === currentTurn;
+}
+
 export function useModeRuntime(): ModeRuntimeValue | null {
   return useContext(ModeRuntimeContext);
 }

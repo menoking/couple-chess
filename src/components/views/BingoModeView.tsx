@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useMemo } from 'react';
 import { ArrowLeft, Check, Grid3x3, PackageOpen, Sparkles, Trophy, User, UserRound } from 'lucide-react';
 import { BingoBoard, BingoCellResult, Player, TaskCard, TaskEventData, Theme } from '../../types';
@@ -29,6 +29,7 @@ export function BingoModeView({
   onEndTurn,
   onBack
 }: BingoModeViewProps) {
+  const canAct = useMyTurn(currentTurn);
   const activePlayer = players[currentTurn] || players[0];
   const [pendingIndex, setPendingIndex] = useModeState<number | null>('BingoModeView.pendingIndex', null);
   const [reward, setReward] = useModeState<{ lines: number; task: TaskCard; themeName: string } | null>('BingoModeView.reward', null);
@@ -196,7 +197,7 @@ export function BingoModeView({
                   key={index}
                   type="button"
                   disabled={blocked}
-                  onClick={() => setPendingIndex(index)}
+                  onClick={() => { if (canAct) setPendingIndex(index); }}
                   aria-label={isDone ? `第 ${index + 1} 格已完成` : `第 ${index + 1} 格，${theme?.name || '任务'}`}
                   className={`relative flex aspect-square flex-col items-center justify-center gap-1 rounded-2xl border p-1.5 transition-all ios-btn disabled:opacity-40 ${
                     isDone

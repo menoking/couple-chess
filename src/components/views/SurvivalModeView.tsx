@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Heart, HeartPulse, RefreshCw, Timer, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
@@ -27,6 +27,7 @@ function SurvivalGame({
   onEndTurn: () => void;
   onExit: () => void;
 }) {
+  const canAct = useMyTurn(currentTurn);
   const activePlayer = players[currentTurn] || players[0];
   const [eventDeck, setEventDeck] = useModeState<SurvivalEvent[]>('SurvivalModeView.eventDeck', () => shuffle(SURVIVAL_EVENTS));
   const [round, setRound] = useModeState('SurvivalModeView.round', 1);
@@ -79,6 +80,7 @@ function SurvivalGame({
   }, [taskData, timeLeft, activeEvent]);
 
   const drawEvent = () => {
+    if (!canAct) return;
     const [event, ...rest] = eventDeck;
     if (!event) {
       setActiveEvent(SURVIVAL_EVENTS[0]);

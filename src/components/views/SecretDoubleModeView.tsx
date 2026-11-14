@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Bomb, FlipHorizontal, HandCoins, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -32,6 +32,7 @@ function FlipGambleGame({
   currentTurn: number;
   onEndTurn: () => void;
 }) {
+  const canAct = useMyTurn(currentTurn);
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
   const [flipperId, setFlipperId] = useModeState('SecretDoubleModeView.flipperId', currentTurn === 1 ? 1 : 0);
@@ -74,6 +75,7 @@ function FlipGambleGame({
   }, [cardQueue, taskData, bombed, flipperId]);
 
   const flip = () => {
+    if (!canAct) return;
     if (phase !== 'flipping') return;
     const card = deck[cursor];
     setCursor(value => value + 1);

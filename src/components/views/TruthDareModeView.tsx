@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useMemo } from 'react';
 import { ArrowLeft, Flame, RefreshCw, Skull, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -41,6 +41,7 @@ function TruthDareGame({
   currentTurn: number;
   onEndTurn: () => void;
 }) {
+  const canAct = useMyTurn(currentTurn);
   const activePlayer = players[currentTurn] || players[0];
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
   const [card, setCard] = useModeState<ActiveCard | null>('TruthDareModeView.card', null);
@@ -57,6 +58,7 @@ function TruthDareGame({
   };
 
   const drawCard = () => {
+    if (!canAct) return;
     const event = drawEvent();
     const kindRoll = Math.random();
     let kind: Kind;

@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, CheckCircle2, Disc3, RotateCw, ShieldAlert, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, TaskCard, Theme } from '../../types';
@@ -98,6 +98,9 @@ function WheelCard({
   highlightLabel?: string;
 }) {
   const flatItems = useMemo(() => flatten(groups), [groups]);
+  void groups;
+  void highlightLabel;
+  void highlightLabel;
   const [rotation, setRotation] = useModeState('RouletteModeView.rotation', 0);
 
   useEffect(() => {
@@ -130,21 +133,7 @@ function WheelCard({
           </div>
         </div>
       </div>
-      <div className="w-full max-w-[150px] space-y-1">
-        {groups.map((group, groupIndex) => (
-          <div key={group.label ?? groupIndex} className="text-center">
-            {group.label && (
-              <div
-                className="text-[9px] font-bold"
-                style={{ color: group.label === highlightLabel ? '#FF375F' : color }}
-              >
-                {group.label}
-              </div>
-            )}
-            <div className="text-[10px] leading-tight text-gray-500">{group.items.join(' · ')}</div>
-          </div>
-        ))}
-      </div>
+      {/* 具体包含项不再展示，只保留转盘与结果 */}
     </div>
   );
 }
@@ -156,6 +145,8 @@ export function RouletteModeView({
   onEndTurn,
   onBack
 }: RouletteModeViewProps) {
+  const runtime = useModeRuntime();
+  const mySeat = runtime?.seat ?? null;
   const activePlayer = players[currentTurn] || players[0];
   const [isSpinning, setIsSpinning] = useModeState('RouletteModeView.isSpinning', false);
   const [result, setResult] = useModeState('RouletteModeView.result', { executor: '', action: '', target: '', duration: '' });
@@ -191,6 +182,8 @@ export function RouletteModeView({
   }, [hasResult, result]);
 
   const spin = () => {
+    // 联机时只有当前回合方能转，转盘进行中双方都锁住
+    if (mySeat !== null && currentTurn !== mySeat) return;
     if (isSpinning) return;
     const next = {
       executor: pick(flatten(executors), result.executor || null),

@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useMemo } from 'react';
 import { ArrowLeft, Flag, RefreshCw, Swords, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
@@ -31,6 +31,7 @@ function TerritoryGame({
   onEndTurn: () => void;
   onExit: () => void;
 }) {
+  const canAct = useMyTurn(currentTurn);
   const activePlayer = players[currentTurn] || players[0];
   const opponent = players.find(p => p.id !== activePlayer?.id) || players[1];
   const [owners, setOwners] = useModeState<Array<number | null>>('TerritoryModeView.owners', () => new Array(TOTAL_CELLS).fill(null));
@@ -79,6 +80,7 @@ function TerritoryGame({
     }
 
     setNotice(null);
+    if (!canAct) return;
     setPendingIndex(index);
     setTaskData(createViewTaskEvent({ entry, title: kind === 'claim' ? '占领任务 · 自己执行' : '攻城任务 · 自己执行', executorPlayerId: activePlayer?.id ?? 0, initiatorPlayerId: activePlayer?.id ?? 0 }));
   };
