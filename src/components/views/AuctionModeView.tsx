@@ -1,8 +1,8 @@
-import { useModeRuntime, useModeState, useSharedValueReady } from '../../rules/ModeRuntime';
+import { useDeckSeed, useModeRuntime, useModeState } from '../../rules/ModeRuntime';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Coins, Gavel, Lock, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
-import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, shuffle, themeIntensity } from '../../utils/modeKit';
+import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, seededShuffle, themeIntensity } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface AuctionModeViewProps {
@@ -38,8 +38,10 @@ function AuctionGame({
   const authority = runtime?.authority ?? true;
   const online = runtime !== null;
 
+  // 同一房间 = 同一份拍品顺序，两端算出来一致，不用等同步
+  const deckSeed = useDeckSeed();
   const [queue] = useModeState<ThemeTaskEntry[]>('AuctionModeView.queue', () =>
-    shuffle(buildTaskPool(players, themes) ?? []).slice(0, TOTAL_ROUNDS)
+    seededShuffle(buildTaskPool(players, themes) ?? [], `${deckSeed}:auction`).slice(0, TOTAL_ROUNDS)
   );
   const [round, setRound] = useModeState('AuctionModeView.round', 0);
   const [coins, setCoins] = useModeState<Record<number, number>>('AuctionModeView.coins', {
@@ -80,8 +82,6 @@ function AuctionGame({
   useEffect(() => {
     setMyBid(0);
   }, [round, setMyBid]);
-  // 拍品列表由房主生成后下发，没收到之前不能拿本地随机的那份
-  const queueReady = useSharedValueReady('AuctionModeView.queue');
 
   const adjustBid = (delta: number) => {
     if (iConfirmed || revealed) return;
@@ -167,14 +167,6 @@ function AuctionGame({
     setTaskData(null);
     advance();
   };
-
-  if (!queueReady) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
-        正在同步…
-      </div>
-    );
-  }
 
   if (phase === 'over') {
     const [first, second] = players;

@@ -1,9 +1,9 @@
-import { useModeState, useMyTurn, useSharedValueReady } from '../../rules/ModeRuntime';
+import { useDeckSeed, useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Heart, HeartPulse, RefreshCw, Timer, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 import { SURVIVAL_EVENTS, SURVIVAL_MAX_HEARTS, SURVIVAL_TOTAL_ROUNDS, SurvivalEvent } from '../../data/survivalEvents';
-import { ThemeTaskEntry, collectThemeTasks, createViewTaskEvent, pickRandom, shuffle } from '../../utils/modeKit';
+import { ThemeTaskEntry, collectThemeTasks, createViewTaskEvent, pickRandom, seededShuffle } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface SurvivalModeViewProps {
@@ -29,9 +29,11 @@ function SurvivalGame({
 }) {
   const canAct = useMyTurn(currentTurn);
   const activePlayer = players[currentTurn] || players[0];
-  const [eventDeck, setEventDeck] = useModeState<SurvivalEvent[]>('SurvivalModeView.eventDeck', () => shuffle(SURVIVAL_EVENTS));
-  // 事件牌堆由房主生成后下发，两端各自洗牌会抽到不同事件
-  const deckReady = useSharedValueReady('SurvivalModeView.eventDeck');
+  // 同一房间 = 同一事件顺序
+  const deckSeed = useDeckSeed();
+  const [eventDeck, setEventDeck] = useModeState<SurvivalEvent[]>('SurvivalModeView.eventDeck', () =>
+    seededShuffle(SURVIVAL_EVENTS, `${deckSeed}:survival`)
+  );
   const [round, setRound] = useModeState('SurvivalModeView.round', 1);
   const [hearts, setHearts] = useModeState('SurvivalModeView.hearts', SURVIVAL_MAX_HEARTS);
   const [points, setPoints] = useModeState('SurvivalModeView.points', 0);
@@ -57,9 +59,12 @@ function SurvivalGame({
 
   useEffect(() => () => clearTimer(), []);
 
-  // 限时事件：倒计时归零按跳过处理
+  // 限时事件：倒计时归零按跳过处理。
+  // 依赖用布尔值而不是 taskData 对象：快照每 1.5 秒刷新会重建对象，
+  // 依赖对象会让 interval 反复重建，倒计时看起来像被拖慢。
+  const hasTask = taskData !== null;
   useEffect(() => {
-    if (!taskData || timeLeft <= 0) return;
+    if (!hasTask || timeLeft <= 0) return;
     timerRef.current = window.setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) {
@@ -71,7 +76,7 @@ function SurvivalGame({
     }, 1000);
     return () => clearTimer();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskData]);
+  }, [hasTask]);
 
   useEffect(() => {
     if (taskData && timeLeft === 0 && activeEvent && activeEvent.timeLimit > 0 && !resolvedRef.current) {
@@ -140,14 +145,6 @@ function SurvivalGame({
     setRound(value => value + 1);
     onEndTurn();
   };
-
-  if (!deckReady) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
-        正在同步…
-      </div>
-    );
-  }
 
   if (over) {
     return (

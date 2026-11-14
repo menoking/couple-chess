@@ -1,8 +1,8 @@
-import { useModeState, useMyTurn, useSharedValueReady } from '../../rules/ModeRuntime';
+import { useDeckSeed, useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Brain, Check, Crown, Flame, Gift, Heart, RefreshCw, Star, Sun, User, UserRound, Zap } from 'lucide-react';
 import { Player, TaskCard, TaskEventData, Theme } from '../../types';
-import { ThemeTaskEntry, buildTaskPool, shuffle } from '../../utils/modeKit';
+import { ThemeTaskEntry, buildTaskPool, seededShuffle } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface MemoryModeViewProps {
@@ -45,6 +45,8 @@ function MemoryGame({
   onExit: () => void;
 }) {
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
+  // 同一房间 = 同一副牌面布局，两端翻到的牌必然一致
+  const deckSeed = useDeckSeed();
   const tiles = useMemo<Tile[]>(() => {
     const seen = new Set<string>();
     const unique: ThemeTaskEntry[] = [];
@@ -54,15 +56,15 @@ function MemoryGame({
       seen.add(key);
       unique.push(entry);
     }
-    const pairs = shuffle(unique).slice(0, MAX_PAIRS);
+    const pairs = seededShuffle(unique, `${deckSeed}:memory-pairs`).slice(0, MAX_PAIRS);
     const deck: Tile[] = [];
     pairs.forEach((entry, pairId) => {
       const iconIndex = pairId % PAIR_ICONS.length;
       deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, iconIndex, flipped: false, matchedBy: null });
       deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, iconIndex, flipped: false, matchedBy: null });
     });
-    return shuffle(deck);
-  }, [pool]);
+    return seededShuffle(deck, `${deckSeed}:memory-board`);
+  }, [pool, deckSeed]);
 
   const [board, setBoard] = useModeState<Tile[]>('MemoryModeView.board', tiles);
   const [flips, setFlips] = useModeState<number[]>('MemoryModeView.flips', []);
@@ -71,8 +73,6 @@ function MemoryGame({
   const [pairCounts, setPairCounts] = useModeState<Record<number, number>>('MemoryModeView.pairCounts', { 0: 0, 1: 0 });
   const [finished, setFinished] = useModeState('MemoryModeView.finished', false);
   const timerRef = useRef<number | null>(null);
-  // 牌面布局由房主生成后下发，两端各自洗牌会导致翻到的牌对不上
-  const boardReady = useSharedValueReady('MemoryModeView.board');
 
   useEffect(() => () => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
@@ -143,14 +143,6 @@ function MemoryGame({
     // 配对完成就是一次回合，交给对方
     onEndTurn();
   };
-
-  if (!boardReady) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
-        正在同步…
-      </div>
-    );
-  }
 
   if (finished) {
     return (

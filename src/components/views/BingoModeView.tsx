@@ -1,8 +1,8 @@
-import { useModeState, useMyTurn, useSharedValueReady } from '../../rules/ModeRuntime';
+import { useDeckSeed, useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Check, Grid3x3, PackageOpen, Sparkles, Trophy, User, UserRound } from 'lucide-react';
 import { BingoBoard, BingoCellResult, Player, TaskCard, TaskEventData, Theme } from '../../types';
-import { ThemeTaskEntry, buildTaskPool, shuffle } from '../../utils/modeKit';
+import { ThemeTaskEntry, buildTaskPool, seededShuffle } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface BingoModeViewProps {
@@ -40,14 +40,13 @@ export function BingoModeView({
   // 有限卡包：只有赢下回合（连成一线）才能从里面抽一张。
   // 必须进共享状态：用 useMemo 的话，每次快照更新（players 重建）都会重新洗牌，
   // 两端的卡包还会各不相同。
+  const deckSeed = useDeckSeed();
   const [cardPack] = useModeState<ThemeTaskEntry[]>('BingoModeView.cardPack', () => {
     const pool = buildTaskPool(players, themes) ?? [];
-    return shuffle(pool).slice(0, CARD_PACK_SIZE);
+    return seededShuffle(pool, `${deckSeed}:bingo`).slice(0, CARD_PACK_SIZE);
   });
   const [drawnCount, setDrawnCount] = useModeState('BingoModeView.drawnCount', 0);
   const packLeft = cardPack.length - drawnCount;
-  // 卡包由房主生成后下发，两端各自洗牌会抽到不同的牌
-  const cardPackReady = useSharedValueReady('BingoModeView.cardPack');
 
   const totalCells = bingoBoard.cells.length;
   const completedCount = bingoBoard.cells.filter(cell => cell.completedBy !== null).length;
@@ -145,14 +144,6 @@ export function BingoModeView({
     setDrawnCount(0);
     onRestart();
   };
-
-  if (!cardPackReady) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
-        正在同步…
-      </div>
-    );
-  }
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

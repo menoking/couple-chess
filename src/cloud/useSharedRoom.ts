@@ -476,8 +476,8 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
   }, []);
 
   const runtime = useMemo<ModeRuntimeValue>(
-    () => ({ seat: mySeat, authority: isHost, get, patch, subscribe, getVersion, snapshot: readSnapshot, dispatch }),
-    [mySeat, isHost, get, patch, subscribe, getVersion, readSnapshot, dispatch]
+    () => ({ seat: mySeat, roomId: roomId ?? '', authority: isHost, get, patch, subscribe, getVersion, snapshot: readSnapshot, dispatch }),
+    [mySeat, roomId, isHost, get, patch, subscribe, getVersion, readSnapshot, dispatch]
   );
 
   const requestView = useCallback(() => {

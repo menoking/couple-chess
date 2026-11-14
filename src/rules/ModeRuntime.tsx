@@ -15,6 +15,8 @@ import { seatScopedKey } from './registry';
 
 export interface ModeRuntimeValue {
   seat: Seat;
+  /** 房间号：两端一致，用来生成确定性的题库 / 卡包 */
+  roomId: string;
   /** 只有权威端可以跑计时器 */
   authority: boolean;
   get: (key: string) => unknown;
@@ -59,32 +61,17 @@ const noopSubscribe = () => () => undefined;
 const noopVersion = () => 0;
 
 /**
- * 联机时判断某个共享状态是否已经由房主生成。
+ * 洗牌种子。
  *
- * 题库、卡包这类初值是 `shuffle(...)`，如果两端各算一次会得到不同内容
- * （默契问答两个人看到不同题目、Bingo 抽到不同的牌）。房主写完会下发，
- * 但访客在收到之前不能拿自己的随机值当真，所以先渲染「准备中」。
- * 同屏没有共享层，恒为就绪。
+ * 联机：直接用房间号——两个设备得到的种子天然相同，各自 `seededShuffle` 出来的
+ * 题库 / 卡包 / 牌面布局也就完全一致，**不需要等房主下发**，
+ * 从机制上消除了「开局卡在同步」这一类问题。
+ * 同屏：每次进游戏随机一次，保证每局内容不一样。
  */
-export function useSharedValueReady(key: string, timeoutMs = 2500): boolean {
+export function useDeckSeed(): string {
   const runtime = useModeRuntime();
-  const [expired, setExpired] = useState(false);
-  useSyncExternalStore(
-    runtime ? runtime.subscribe : noopSubscribe,
-    runtime ? runtime.getVersion : noopVersion,
-    noopVersion
-  );
-
-  const ready = !runtime || runtime.get(key) !== undefined;
-  useEffect(() => {
-    if (!runtime || ready) return;
-    // 等不到房主下发也不能永远停在「同步中」，超时后按本地内容继续
-    const timer = window.setTimeout(() => setExpired(true), timeoutMs);
-    return () => window.clearTimeout(timer);
-  }, [runtime, ready, timeoutMs, key]);
-
-  if (!runtime) return true;
-  return ready || expired;
+  const localSeed = useRef(Math.random().toString(36).slice(2, 10)).current;
+  return runtime ? `room:${runtime.roomId}` : `local:${localSeed}`;
 }
 
 /** 结构化克隆下 Set/Map 会丢，统一用标记对象序列化。 */

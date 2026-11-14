@@ -1,8 +1,8 @@
-import { useModeState, useSharedValueReady } from '../../rules/ModeRuntime';
+import { useDeckSeed, useModeState } from '../../rules/ModeRuntime';
 import { useEffect } from 'react';
 import { ArrowLeft, Check, RefreshCw, Timer, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
-import { ThemeTaskEntry, buildTaskPool, shuffle } from '../../utils/modeKit';
+import { ThemeTaskEntry, buildTaskPool, seededShuffle } from '../../utils/modeKit';
 import { themeIntensity } from '../../utils/modeKit';
 
 interface TimedModeViewProps {
@@ -28,8 +28,10 @@ function formatTime(seconds: number): string {
 
 function TimedGame({ players, themes, onExit }: { players: Player[]; themes: Theme[]; onExit: () => void }) {
   // 题库进共享状态，避免两端各自洗牌导致同一题号看到不同任务
+  // 同一房间 = 同一题库顺序
+  const deckSeed = useDeckSeed();
   const [queue] = useModeState<ThemeTaskEntry[]>('TimedModeView.queue', () =>
-    shuffle(buildTaskPool(players, themes) ?? [])
+    seededShuffle(buildTaskPool(players, themes) ?? [], `${deckSeed}:timed`)
   );
   const [timeLeft, setTimeLeft] = useModeState('TimedModeView.timeLeft', TOTAL_SECONDS);
   const [index, setIndex] = useModeState('TimedModeView.index', 0);
@@ -54,8 +56,6 @@ function TimedGame({ players, themes, onExit }: { players: Player[]; themes: The
   }, [over]);
 
   const current = queue[index];
-  // 题库由房主生成后下发，两端各自洗牌会看到不同的任务
-  const queueReady = useSharedValueReady('TimedModeView.queue');
   const exhausted = index >= queue.length;
 
   // 任务全部完成时也视为结束，停止倒计时
@@ -75,14 +75,6 @@ function TimedGame({ players, themes, onExit }: { players: Player[]; themes: The
     setSkipped(prev => prev + 1);
     setIndex(prev => prev + 1);
   };
-
-  if (!queueReady) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
-        正在同步…
-      </div>
-    );
-  }
 
   if (over || exhausted) {
     const tier = getScoreTier(score);

@@ -1,5 +1,5 @@
 import { useModeRuntime, useModeState, useMyTurn } from '../../rules/ModeRuntime';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Dices, Eye, RefreshCw, ShieldQuestion, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
@@ -100,8 +100,16 @@ function BluffDiceGame({
 
   const isLegalBid = !bid || draftQty > bid.qty || (draftQty === bid.qty && draftFace > bid.face);
 
-  // 每次叫点变化后，把输入框预置成「刚好能加注」的最小值
+  // 每次「别人叫了新点」后，把输入框预置成刚好能加注的最小值。
+  // 注意不能直接依赖 bid 对象：快照每 1.5 秒刷新一次会重建对象，
+  // 那样用户刚点 + / − 就会被重置回去，表现为「加减没反应」。
+  const bidSig = bid ? `${bid.by}:${bid.qty}:${bid.face}` : 'none';
+  const bidRef = useRef(bid);
+  bidRef.current = bid;
+  const appliedBidSig = useRef('init');
   useEffect(() => {
+    if (appliedBidSig.current === bidSig) return;
+    appliedBidSig.current = bidSig;
     if (!bid) {
       setDraftQty(2);
       setDraftFace(1);
@@ -114,7 +122,8 @@ function BluffDiceGame({
       setDraftQty(Math.min(bid.qty + 1, TOTAL_DICE));
       setDraftFace(1);
     }
-  }, [bid]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bidSig]);
 
   const startRound = (nextStarter: number) => {
     if (!canAct) return;
@@ -397,7 +406,7 @@ function BluffDiceGame({
         <button
           type="button"
           onClick={challenge}
-          disabled={!bid}
+          disabled={!bid || !canAct}
           className="ios-btn h-14 flex-1 rounded-full bg-[#FF453A] text-base font-bold text-white disabled:opacity-30"
         >
           <span className="flex items-center justify-center gap-1.5">
@@ -407,7 +416,7 @@ function BluffDiceGame({
         <button
           type="button"
           onClick={submitBid}
-          disabled={!isLegalBid}
+          disabled={!isLegalBid || !canAct}
           className="ios-btn h-14 flex-[2] rounded-full bg-white text-base font-bold text-black shadow-lg disabled:opacity-30"
         >
           叫 {draftQty} 个 {draftFace}

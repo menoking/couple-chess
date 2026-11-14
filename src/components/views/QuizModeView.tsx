@@ -1,10 +1,10 @@
-import { useModeRuntime, useModeState, useSharedValueReady } from '../../rules/ModeRuntime';
+import { useDeckSeed, useModeRuntime, useModeState } from '../../rules/ModeRuntime';
 
 import { ArrowLeft, Check, MessageCircleQuestion, RefreshCw, User, UserRound, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Player, Theme } from '../../types';
 import { QUIZ_QUESTIONS, QuizQuestion } from '../../data/quizQuestions';
-import { shuffle } from '../../utils/modeKit';
+import { seededShuffle } from '../../utils/modeKit';
 
 interface QuizModeViewProps {
   players: Player[];
@@ -36,7 +36,11 @@ function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }
   const male = players[0];
   const female = players[1];
 
-  const [queue] = useModeState<QuizQuestion[]>('QuizModeView.queue', () => shuffle(QUIZ_QUESTIONS).slice(0, ROUNDS));
+  // 两端用同一个房间种子洗牌，得到完全相同的题目顺序（不需要等房主下发）
+  const deckSeed = useDeckSeed();
+  const [queue] = useModeState<QuizQuestion[]>('QuizModeView.queue', () =>
+    seededShuffle(QUIZ_QUESTIONS, `${deckSeed}:quiz`).slice(0, ROUNDS)
+  );
   const [round, setRound] = useModeState('QuizModeView.round', 0);
   // 自己的答案按座位隔离：对方拿不到，联机时同一台设备也替不了对方答
   const [myPick, setMyPick] = useModeState<{ round: number; value: number } | null>(
@@ -61,8 +65,6 @@ function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }
   const peerSubmitted = online ? false : localSealed[answerSeat === 0 ? 1 : 0] !== null;
 
   const scoredRef = useRef(-1);
-  // 题目由房主生成后下发；没收到之前不能拿本地随机的那份渲染，否则两人题目不同
-  const queueReady = useSharedValueReady('QuizModeView.queue');
 
   const pick = (optionIndex: number) => {
     if (roundReveal || iSubmitted) return;
@@ -101,14 +103,6 @@ function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }
     // 两端都可能点「下一题」，用条件递增保证只推进一步，不会跳题
     setRound(value => (value === round ? value + 1 : value));
   };
-
-  if (!queueReady) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
-        正在同步题目…
-      </div>
-    );
-  }
 
   if (done) {
     const rate = matches / ROUNDS;

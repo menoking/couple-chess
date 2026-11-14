@@ -1,9 +1,9 @@
-import { useModeState, useSharedValueReady } from '../../rules/ModeRuntime';
+import { useDeckSeed, useModeState } from '../../rules/ModeRuntime';
 
 import { ArrowLeft, BookOpen, RefreshCw, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { STORY_FRAGMENTS, STORY_KIND_LABELS, STORY_SEQUENCE, StoryFragment, StoryFragmentKind } from '../../data/storyFragments';
-import { shuffle } from '../../utils/modeKit';
+import { seededShuffle } from '../../utils/modeKit';
 
 interface StoryModeViewProps {
   players: Player[];
@@ -14,6 +14,8 @@ interface StoryModeViewProps {
 const STORY_ACTING_BONUS = '把刚才的故事即兴演给对方看，可以加戏，但不许笑场';
 
 function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void }) {
+  // 同一房间 = 同一批故事碎片顺序
+  const deckSeed = useDeckSeed();
   const [decks] = useModeState<Record<StoryFragmentKind, StoryFragment[]>>('StoryModeView.decks', () => {
     const byKind: Record<StoryFragmentKind, StoryFragment[]> = {
       opening: [],
@@ -24,18 +26,16 @@ function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void 
     };
     for (const fragment of STORY_FRAGMENTS) byKind[fragment.kind].push(fragment);
     return {
-      opening: shuffle(byKind.opening),
-      development: shuffle(byKind.development),
-      twist: shuffle(byKind.twist),
-      climax: shuffle(byKind.climax),
-      ending: shuffle(byKind.ending)
+      opening: seededShuffle(byKind.opening, `${deckSeed}:story-opening`),
+      development: seededShuffle(byKind.development, `${deckSeed}:story-development`),
+      twist: seededShuffle(byKind.twist, `${deckSeed}:story-twist`),
+      climax: seededShuffle(byKind.climax, `${deckSeed}:story-climax`),
+      ending: seededShuffle(byKind.ending, `${deckSeed}:story-ending`)
     };
   });
   const [step, setStep] = useModeState('StoryModeView.step', 0);
   const [story, setStory] = useModeState<Array<{ playerId: number; fragment: StoryFragment }>>('StoryModeView.story', []);
   const [finished, setFinished] = useModeState('StoryModeView.finished', false);
-  // 故事碎片由房主生成后下发，两端各自洗牌会拿到不同的牌堆
-  const decksReady = useSharedValueReady('StoryModeView.decks');
 
   const drawer = players[step % players.length];
   const kind = STORY_SEQUENCE[step];
@@ -51,14 +51,6 @@ function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void 
     }
     setStep(step + 1);
   };
-
-  if (!decksReady) {
-    return (
-      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
-        正在同步…
-      </div>
-    );
-  }
 
   if (finished) {
     return (
