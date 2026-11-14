@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo } from 'react';
 import { ArrowLeft, PawPrint, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -43,6 +43,7 @@ function JungleGame({
   const [phase, setPhase] = useModeState<Phase>('JungleModeView.phase', 'roll');
   const [board, setBoard] = useModeState<JungleBoard>('JungleModeView.board', () => createJungleBoard());
   const [turn, setTurn] = useModeState('JungleModeView.turn', currentTurn === 1 ? 1 : 0);
+  const canAct = useMyTurn(turn);
   const [selected, setSelected] = useModeState<number | null>('JungleModeView.selected', null);
   const [lastMove, setLastMove] = useModeState<{ from: number; to: number } | null>('JungleModeView.lastMove', null);
   const [captured, setCaptured] = useModeState<Record<number, number>>('JungleModeView.captured', { 0: 0, 1: 0 });
@@ -91,6 +92,7 @@ function JungleGame({
   };
 
   const handleCellClick = (cellIndex: number) => {
+    if (!canAct) return;
     if (phase !== 'play' || taskData) return;
     const piece = board[cellIndex];
 

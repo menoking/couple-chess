@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo } from 'react';
 import { ArrowLeft, CircleDot, Flag, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -35,6 +35,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
 
   const [board, setBoard] = useModeState<GoBoard>('GoModeView.board', () => createGoBoard());
   const [turn, setTurn] = useModeState('GoModeView.turn', currentTurn === 1 ? 1 : 0);
+  const canAct = useMyTurn(turn);
   const [koKey, setKoKey] = useModeState<string | null>('GoModeView.koKey', null);
   const [lastMove, setLastMove] = useModeState<number | null>('GoModeView.lastMove', null);
   const [captures, setCaptures] = useModeState<Record<number, number>>('GoModeView.captures', { 0: 0, 1: 0 });
@@ -74,6 +75,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
   };
 
   const handlePlace = (index: number) => {
+    if (!canAct) return;
     if (phase !== 'play' || taskData) return;
 
     const result = playMove(board, index, turn, koKey);
@@ -121,6 +123,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
   };
 
   const handlePass = () => {
+    if (!canAct) return;
     if (phase !== 'play' || taskData) return;
     const nextPasses = passes + 1;
     setPasses(nextPasses);

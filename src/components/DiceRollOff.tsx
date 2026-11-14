@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useModeState } from '../rules/ModeRuntime';
+import { useModeRuntime, useModeState } from '../rules/ModeRuntime';
 import { Dices, User, UserRound } from 'lucide-react';
 import { Player } from '../types';
 import { Dice } from './Dice';
@@ -31,6 +31,9 @@ export function DiceRollOff({
   onComplete
 }: DiceRollOffProps) {
   const duo = players.slice(0, 2);
+  const runtime = useModeRuntime();
+  // 联机时只能掷自己的骰子、只有赢家能确认；同屏（null）不限制
+  const mySeat = runtime?.seat ?? null;
   const emptyRolls = () => Object.fromEntries(duo.map(player => [player.id, null])) as Record<number, number | null>;
   // 掷骰结果必须进共享状态，否则对方要点自己那边的骰子才能看到
   const [rolls, setRolls] = useModeState<Record<number, number | null>>(`${stateKey}.diceRolls`, emptyRolls);
@@ -50,6 +53,7 @@ export function DiceRollOff({
     : null;
 
   const roll = (id: number) => {
+    if (mySeat !== null && mySeat !== id) return;
     if (rollingId !== null) return;
     setRollingId(id);
     timerRef.current = window.setTimeout(() => {
@@ -82,7 +86,7 @@ export function DiceRollOff({
           const value = rolls[player.id];
           const hasRolled = value !== null;
           const isWinner = winner?.id === player.id;
-          const canRoll = rollingId === null && !hasRolled;
+          const canRoll = rollingId === null && !hasRolled && (mySeat === null || mySeat === player.id);
 
           return (
             <div
@@ -154,9 +158,10 @@ export function DiceRollOff({
           <button
             type="button"
             onClick={() => onComplete(winner.id)}
-            className="ios-btn w-full rounded-full bg-white py-3.5 text-base font-bold text-black shadow-lg"
+            disabled={mySeat !== null && mySeat !== winner.id}
+            className="ios-btn w-full rounded-full bg-white py-3.5 text-base font-bold text-black shadow-lg disabled:opacity-50"
           >
-            {confirmLabel}
+            {mySeat !== null && mySeat !== winner.id ? `等 ${winner.name} 确认` : confirmLabel}
           </button>
         </div>
       )}

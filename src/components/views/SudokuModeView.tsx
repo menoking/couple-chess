@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useMemo } from 'react';
 import { ArrowLeft, Check, Grid2x2, RefreshCw, Sparkles, User, UserRound, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -43,6 +43,7 @@ function SudokuGame({
 
   const [cells, setCells] = useModeState<number[]>('SudokuModeView.cells', []);
   const [turn, setTurn] = useModeState('SudokuModeView.turn', currentTurn === 1 ? 1 : 0);
+  const canAct = useMyTurn(turn);
   const [selected, setSelected] = useModeState<number | null>('SudokuModeView.selected', null);
   const [errorCell, setErrorCell] = useModeState<number | null>('SudokuModeView.errorCell', null);
   const [cardCounts, setCardCounts] = useModeState<Record<number, number>>('SudokuModeView.cardCounts', { 0: 0, 1: 0 });
@@ -77,6 +78,7 @@ function SudokuGame({
   };
 
   const pickNumber = (value: number) => {
+    if (!canAct) return;
     if (!puzzle || selected === null || taskData || finished) return;
 
     const byId = activePlayer.id;

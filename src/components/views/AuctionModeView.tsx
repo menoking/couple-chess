@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
 import { ArrowLeft, Coins, Gavel, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, shuffle, themeIntensity } from '../../utils/modeKit';
@@ -39,8 +39,13 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
       ? (firstBidder === 0 ? 1 : 0)
       : 0;
   const bidder = players[bidderId];
+  const runtime = useModeRuntime();
+  const mySeat = runtime?.seat ?? null;
+  const canBid = mySeat === null || mySeat === bidderId;
+  const canStart = mySeat === null || mySeat === firstBidder;
 
   const startBidding = () => {
+    if (!canBid) return;
     setBids({ 0: 0, 1: 0 });
     setWinnerId(null);
     setNotice(null);
@@ -48,6 +53,7 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
   };
 
   const adjustBid = (delta: number) => {
+    if (!canBid) return;
     setBids(prev => {
       const next = Math.max(0, Math.min(coins[bidderId] ?? 0, (prev[bidderId] ?? 0) + delta));
       return { ...prev, [bidderId]: next };
@@ -194,9 +200,10 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
           <button
             type="button"
             onClick={startBidding}
-            className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
+            disabled={!canStart}
+            className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg disabled:opacity-50"
           >
-            开始竞价
+            {canStart ? '开始竞价' : `等 ${players[firstBidder]?.name ?? '对方'} 开始`}
           </button>
         </>
       )}
@@ -230,14 +237,20 @@ function AuctionGame({ players, themes, onExit }: { players: Player[]; themes: T
           <div className="mt-4 flex gap-3">
             <button
               type="button"
-              onClick={() => setBids(prev => ({ ...prev, [bidderId]: coins[bidderId] ?? 0 }))}
-              className="ios-btn h-11 flex-1 rounded-full bg-white/10 text-sm font-bold text-[#FFD60A]"
+              onClick={() => { if (!canBid) return; setBids(prev => ({ ...prev, [bidderId]: coins[bidderId] ?? 0 })); }}
+              disabled={!canBid}
+              className="ios-btn h-11 flex-1 rounded-full bg-white/10 text-sm font-bold text-[#FFD60A] disabled:opacity-40"
             >
               全押
             </button>
             <button
               type="button"
-              onClick={() => (phase === 'bid-first' ? setPhase('bid-second') : reveal())}
+              onClick={() => {
+                if (!canBid) return;
+                if (phase === 'bid-first') setPhase('bid-second');
+                else reveal();
+              }}
+              disabled={!canBid}
               className="ios-btn h-11 flex-[2] rounded-full bg-white text-sm font-bold text-black"
             >
               {phase === 'bid-first' ? '藏好出价，换对方' : '双方揭晓'}

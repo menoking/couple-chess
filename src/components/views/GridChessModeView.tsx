@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 
 import { ArrowLeft, CircleDot, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
@@ -36,6 +36,7 @@ function DotsAndBoxesGame({
   onExit: () => void;
 }) {
   const [turn, setTurn] = useModeState('GridChessModeView.turn', 0);
+  const canAct = useMyTurn(turn);
   const [horizontal, setHorizontal] = useModeState<LineOwner[]>('GridChessModeView.horizontal', () => new Array(H_LINES).fill(null).map(() => ({ ownerId: null })));
   const [vertical, setVertical] = useModeState<LineOwner[]>('GridChessModeView.vertical', () => new Array(V_LINES).fill(null).map(() => ({ ownerId: null })));
   const [boxes, setBoxes] = useModeState<number[]>('GridChessModeView.boxes', () => new Array(TOTAL_BOXES).fill(-1));
@@ -81,6 +82,7 @@ function DotsAndBoxesGame({
   };
 
   const drawLine = (kind: 'h' | 'v', lineIndex: number) => {
+    if (!canAct) return;
     if (finished || taskData) return;
     const isH = kind === 'h';
     const currentLines = isH ? horizontal : vertical;
