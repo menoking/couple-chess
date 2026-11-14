@@ -1,4 +1,4 @@
-import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn, useSharedValueReady } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Heart, HeartPulse, RefreshCw, Timer, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
@@ -30,6 +30,8 @@ function SurvivalGame({
   const canAct = useMyTurn(currentTurn);
   const activePlayer = players[currentTurn] || players[0];
   const [eventDeck, setEventDeck] = useModeState<SurvivalEvent[]>('SurvivalModeView.eventDeck', () => shuffle(SURVIVAL_EVENTS));
+  // 事件牌堆由房主生成后下发，两端各自洗牌会抽到不同事件
+  const deckReady = useSharedValueReady('SurvivalModeView.eventDeck');
   const [round, setRound] = useModeState('SurvivalModeView.round', 1);
   const [hearts, setHearts] = useModeState('SurvivalModeView.hearts', SURVIVAL_MAX_HEARTS);
   const [points, setPoints] = useModeState('SurvivalModeView.points', 0);
@@ -138,6 +140,14 @@ function SurvivalGame({
     setRound(value => value + 1);
     onEndTurn();
   };
+
+  if (!deckReady) {
+    return (
+      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
+        正在同步…
+      </div>
+    );
+  }
 
   if (over) {
     return (

@@ -58,6 +58,25 @@ export function useModeAuthority(): boolean {
 const noopSubscribe = () => () => undefined;
 const noopVersion = () => 0;
 
+/**
+ * 联机时判断某个共享状态是否已经由房主生成。
+ *
+ * 题库、卡包这类初值是 `shuffle(...)`，如果两端各算一次会得到不同内容
+ * （默契问答两个人看到不同题目、Bingo 抽到不同的牌）。房主写完会下发，
+ * 但访客在收到之前不能拿自己的随机值当真，所以先渲染「准备中」。
+ * 同屏没有共享层，恒为就绪。
+ */
+export function useSharedValueReady(key: string): boolean {
+  const runtime = useModeRuntime();
+  useSyncExternalStore(
+    runtime ? runtime.subscribe : noopSubscribe,
+    runtime ? runtime.getVersion : noopVersion,
+    noopVersion
+  );
+  if (!runtime) return true;
+  return runtime.get(key) !== undefined;
+}
+
 /** 结构化克隆下 Set/Map 会丢，统一用标记对象序列化。 */
 export function serializeValue(value: unknown): unknown {
   if (value instanceof Set) return { __cfc: 'set', values: Array.from(value) };

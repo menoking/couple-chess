@@ -1,4 +1,4 @@
-import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn, useSharedValueReady } from '../../rules/ModeRuntime';
 import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Check, Grid3x3, PackageOpen, Sparkles, Trophy, User, UserRound } from 'lucide-react';
 import { BingoBoard, BingoCellResult, Player, TaskCard, TaskEventData, Theme } from '../../types';
@@ -46,6 +46,8 @@ export function BingoModeView({
   });
   const [drawnCount, setDrawnCount] = useModeState('BingoModeView.drawnCount', 0);
   const packLeft = cardPack.length - drawnCount;
+  // 卡包由房主生成后下发，两端各自洗牌会抽到不同的牌
+  const cardPackReady = useSharedValueReady('BingoModeView.cardPack');
 
   const totalCells = bingoBoard.cells.length;
   const completedCount = bingoBoard.cells.filter(cell => cell.completedBy !== null).length;
@@ -143,6 +145,14 @@ export function BingoModeView({
     setDrawnCount(0);
     onRestart();
   };
+
+  if (!cardPackReady) {
+    return (
+      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
+        正在同步…
+      </div>
+    );
+  }
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">

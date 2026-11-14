@@ -1,4 +1,4 @@
-import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
+import { useModeRuntime, useModeState, useSharedValueReady } from '../../rules/ModeRuntime';
 
 import { ArrowLeft, Check, MessageCircleQuestion, RefreshCw, User, UserRound, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -55,6 +55,8 @@ function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }
   const peerSubmitted = online ? false : localSealed[answerSeat === 0 ? 1 : 0] !== null;
 
   const scoredRef = useRef(-1);
+  // 题目由房主生成后下发；没收到之前不能拿本地随机的那份渲染，否则两人题目不同
+  const queueReady = useSharedValueReady('QuizModeView.queue');
 
   const pick = (optionIndex: number) => {
     if (roundReveal || iSubmitted) return;
@@ -92,6 +94,14 @@ function QuizGame({ players, onExit }: { players: Player[]; onExit: () => void }
     scoredRef.current = -1;
     setRound(value => value + 1);
   };
+
+  if (!queueReady) {
+    return (
+      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
+        正在同步题目…
+      </div>
+    );
+  }
 
   if (done) {
     const rate = matches / ROUNDS;

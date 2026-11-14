@@ -1,4 +1,4 @@
-import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
+import { useModeRuntime, useModeState, useSharedValueReady } from '../../rules/ModeRuntime';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Coins, Gavel, Lock, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
@@ -74,6 +74,8 @@ function AuctionGame({
 
   const issuedRef = useRef(-1);
   const scoredRef = useRef(-1);
+  // 拍品列表由房主生成后下发，没收到之前不能拿本地随机的那份
+  const queueReady = useSharedValueReady('AuctionModeView.queue');
 
   const adjustBid = (delta: number) => {
     if (iConfirmed || revealed) return;
@@ -158,6 +160,14 @@ function AuctionGame({
     setTaskData(null);
     advance();
   };
+
+  if (!queueReady) {
+    return (
+      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
+        正在同步…
+      </div>
+    );
+  }
 
   if (phase === 'over') {
     const [first, second] = players;

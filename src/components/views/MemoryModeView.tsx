@@ -1,4 +1,4 @@
-import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn, useSharedValueReady } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Brain, Check, Crown, Flame, Gift, Heart, RefreshCw, Star, Sun, User, UserRound, Zap } from 'lucide-react';
 import { Player, TaskCard, TaskEventData, Theme } from '../../types';
@@ -71,6 +71,8 @@ function MemoryGame({
   const [pairCounts, setPairCounts] = useModeState<Record<number, number>>('MemoryModeView.pairCounts', { 0: 0, 1: 0 });
   const [finished, setFinished] = useModeState('MemoryModeView.finished', false);
   const timerRef = useRef<number | null>(null);
+  // 牌面布局由房主生成后下发，两端各自洗牌会导致翻到的牌对不上
+  const boardReady = useSharedValueReady('MemoryModeView.board');
 
   useEffect(() => () => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
@@ -141,6 +143,14 @@ function MemoryGame({
     // 配对完成就是一次回合，交给对方
     onEndTurn();
   };
+
+  if (!boardReady) {
+    return (
+      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
+        正在同步…
+      </div>
+    );
+  }
 
   if (finished) {
     return (

@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useSharedValueReady } from '../../rules/ModeRuntime';
 
 import { ArrowLeft, BookOpen, RefreshCw, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -34,6 +34,8 @@ function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void 
   const [step, setStep] = useModeState('StoryModeView.step', 0);
   const [story, setStory] = useModeState<Array<{ playerId: number; fragment: StoryFragment }>>('StoryModeView.story', []);
   const [finished, setFinished] = useModeState('StoryModeView.finished', false);
+  // 故事碎片由房主生成后下发，两端各自洗牌会拿到不同的牌堆
+  const decksReady = useSharedValueReady('StoryModeView.decks');
 
   const drawer = players[step % players.length];
   const kind = STORY_SEQUENCE[step];
@@ -49,6 +51,14 @@ function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void 
     }
     setStep(step + 1);
   };
+
+  if (!decksReady) {
+    return (
+      <div className="flex min-h-[240px] items-center justify-center text-xs text-gray-500">
+        正在同步…
+      </div>
+    );
+  }
 
   if (finished) {
     return (
