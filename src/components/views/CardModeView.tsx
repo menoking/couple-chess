@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
 import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Layers3, User, UserRound, X } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
@@ -22,6 +22,8 @@ export function CardModeView({
   onEndTurn,
   onBack
 }: CardModeViewProps) {
+  const runtime = useModeRuntime();
+  const mySeat = runtime?.seat ?? null;
   const activePlayer = players[currentTurn];
   const activeTheme = themes.find(t => t.id === activePlayer.themeId);
   const [drawnKeys, setDrawnKeys] = useModeState<Set<string>>('CardModeView.drawnKeys', () => new Set());
@@ -40,6 +42,8 @@ export function CardModeView({
   const remainingCards = Math.max(0, totalCards - drawnKeys.size);
 
   const handleDrawTask = () => {
+    // 联机时只有当前回合方能抽卡
+    if (mySeat !== null && currentTurn !== mySeat) return;
     const task = onDrawTask();
     if (!task) {
       alert('当前玩家还没有可抽取的任务');

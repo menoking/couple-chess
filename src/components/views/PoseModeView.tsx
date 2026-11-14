@@ -1,4 +1,5 @@
 import { ArrowLeft, ImageIcon, User, UserRound } from 'lucide-react';
+import { useModeRuntime } from '../../rules/ModeRuntime';
 import { Player } from '../../types';
 import { POSE_IMAGES } from '../../data/poseImages';
 
@@ -17,9 +18,13 @@ export function PoseModeView({
   onEndTurn,
   onBack
 }: PoseModeViewProps) {
+  const runtime = useModeRuntime();
+  const mySeat = runtime?.seat ?? null;
   const activePlayer = players[currentTurn];
 
   const handleDrawPose = () => {
+    // 联机时只有当前回合方能抽卡
+    if (mySeat !== null && currentTurn !== mySeat) return;
     if (POSE_IMAGES.length === 0) {
       alert('public/img 目录下还没有可抽取的图片');
       return;

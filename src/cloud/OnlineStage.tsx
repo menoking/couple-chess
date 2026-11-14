@@ -210,17 +210,8 @@ function CardGateBody({
     </div>
   );
 
-  if (card.phase === 'drawn' && !isDrawer) {
-    return (
-      <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-6 backdrop-blur-md">
-        <div className="text-center">
-          <Sparkles size={30} className="mx-auto mb-3 animate-pulse text-[#FFD60A]" />
-          <div className="text-sm font-bold text-white">{drawerName} 抽到一张卡</div>
-          <div className="mt-1 text-[11px] text-gray-500">等对方翻卡后，你这边会自动弹出卡面</div>
-        </div>
-      </div>
-    );
-  }
+  // 抽卡方还没翻卡时，对方保持游戏界面，不显示任何遮罩
+  if (card.phase === 'drawn' && !isDrawer) return null;
 
   return (
     <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-5 backdrop-blur-md">
