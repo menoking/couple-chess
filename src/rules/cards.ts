@@ -78,7 +78,12 @@ export function enqueueCard(state: RoomSnapshot, spec: {
 }
 
 export function isCardAction(action: RoomAction): boolean {
-  return action.type === 'drawCard' || action.type === 'revealCard' || action.type === 'ackCard';
+  return (
+    action.type === 'drawCard' ||
+    action.type === 'revealCard' ||
+    action.type === 'ackCard' ||
+    action.type === 'forceCloseCard'
+  );
 }
 
 /** 抽卡状态机：每个动作都校验座位与阶段，非法操作返回原 state。 */
@@ -119,6 +124,13 @@ export function reduceCard(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       }
     }
     return { ...state, cards: state.cards.slice(1), data };
+  }
+
+  if (action.type === 'forceCloseCard') {
+    if (state.cards.length === 0) return state;
+    // 逃生通道：对方退出房间或卡在翻卡时，长按 3 秒把这卡直接放掉，游戏继续。
+    // 不结算 moveDelta —— 强制关闭不该白拿步数。
+    return { ...state, cards: state.cards.slice(1) };
   }
 
   return state;

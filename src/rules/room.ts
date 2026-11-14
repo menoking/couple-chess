@@ -140,7 +140,8 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
 
     case 'drawCard':
     case 'revealCard':
-    case 'ackCard': {
+    case 'ackCard':
+    case 'forceCloseCard': {
       const next = reduceCard(state, action);
       if (next === state) return state;
       const cleared = bump(next);

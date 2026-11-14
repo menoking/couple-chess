@@ -67,6 +67,8 @@ export type RoomAction =
   | { type: 'drawCard'; seat: Seat }
   | { type: 'revealCard'; seat: Seat }
   | { type: 'ackCard'; seat: Seat }
+  /** 长按卡片 3 秒的逃生通道：对方退出/卡死时放掉这张卡 */
+  | { type: 'forceCloseCard'; seat: Seat }
   | { type: 'pickThemes'; seat: Seat; themeIds: string[]; pool: OnlineCard[] }
   | { type: 'lockLobby'; seat: Seat; themeIds: string[]; pool: OnlineCard[] }
   | { type: 'unlockLobby'; seat: Seat }
