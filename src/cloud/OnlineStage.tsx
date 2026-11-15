@@ -33,8 +33,6 @@ import { GridChessModeView } from '../components/views/GridChessModeView';
 import { TruthDareModeView } from '../components/views/TruthDareModeView';
 import { GambleModeView } from '../components/views/GambleModeView';
 import { EdgeModeView } from '../components/views/EdgeModeView';
-import { PenaltyLadderModeView } from '../components/views/PenaltyLadderModeView';
-import { SecretDoubleModeView } from '../components/views/SecretDoubleModeView';
 import { RoleplayModeView } from '../components/views/RoleplayModeView';
 import { SudokuModeView } from '../components/views/SudokuModeView';
 import { GoModeView } from '../components/views/GoModeView';
@@ -857,10 +855,6 @@ export function OnlineStage(props: OnlineStageProps) {
         return <GambleModeView {...withThemes} />;
       case 'edge':
         return <EdgeModeView {...withThemes} />;
-      case 'penaltygrid':
-        return <PenaltyLadderModeView {...withThemes} />;
-      case 'secretdouble':
-        return <SecretDoubleModeView {...common} />;
       case 'roleplay':
         return <RoleplayModeView players={players} onBack={onBack} />;
       case 'sudoku':

@@ -20,8 +20,6 @@ import { GridChessModeView } from './components/views/GridChessModeView';
 import { TruthDareModeView } from './components/views/TruthDareModeView';
 import { GambleModeView } from './components/views/GambleModeView';
 import { EdgeModeView } from './components/views/EdgeModeView';
-import { PenaltyLadderModeView } from './components/views/PenaltyLadderModeView';
-import { SecretDoubleModeView } from './components/views/SecretDoubleModeView';
 import { RoleplayModeView } from './components/views/RoleplayModeView';
 import { SudokuModeView } from './components/views/SudokuModeView';
 import { GoModeView } from './components/views/GoModeView';
@@ -74,8 +72,6 @@ const CARD_THEME_MODES = new Set<GameMode>([
   'auction',
   'gridchess',
   'trutndare',
-  'penaltygrid',
-  'secretdouble',
   'sudoku',
   'go',
   'bluff',
@@ -94,8 +90,6 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
   auction: 'card',
   gridchess: 'card',
   trutndare: 'card',
-  penaltygrid: 'card',
-  secretdouble: 'card',
   sudoku: 'card',
   go: 'card',
   bluff: 'card',
@@ -868,24 +862,6 @@ function App() {
         <EdgeModeView
           players={state.players}
           themes={state.themes}
-          onBack={handleBackFromGame}
-        />
-      )}
-
-      {state.view === 'penaltygrid' && (
-        <PenaltyLadderModeView
-          players={state.players}
-          themes={state.themes}
-          onBack={handleBackFromGame}
-        />
-      )}
-
-      {state.view === 'secretdouble' && (
-        <SecretDoubleModeView
-          players={state.players}
-          themes={state.themes}
-          currentTurn={state.turn}
-          onEndTurn={endTurn}
           onBack={handleBackFromGame}
         />
       )}

@@ -60,8 +60,6 @@ export const MODE_REGISTRY: ModeDef[] = [
   { key: 'trutndare', label: '真心话大冒险', category: 'public', cardRule: '从真心话 / 大冒险 / 主题卡池抽 1 张，本人执行' },
   { key: 'gamble', label: '赌局轮盘', category: 'timed', cardRule: '转盘停在哪档就执行哪档，不额外抽卡' },
   { key: 'edge', label: '高潮边缘', category: 'timed', cardRule: '按关卡推进的限时挑战，不额外抽卡' },
-  { key: 'penaltygrid', label: '惩罚阶梯', category: 'public', cardRule: '失败升阶并按阶梯执行对应等级，不额外抽卡' },
-  { key: 'secretdouble', label: '翻牌赌命', category: 'hidden', cardRule: '收手结算抽 1 张，对方执行；翻到黑牌反噬' },
   { key: 'roleplay', label: '角色扮演', category: 'public', cardRule: '抽取剧本并按剧情推进，不额外抽卡' }
 ];
 
@@ -91,7 +89,6 @@ export const TURN_BOUND_PREFIXES = [
   'JungleModeView.',
   'SudokuModeView.',
   'BluffDiceModeView.',
-  'PenaltyLadderModeView.'
 ];
 
 /** 该状态键属于哪个严格轮流玩法；不属于返回 null。 */
@@ -109,7 +106,6 @@ export const MODE_TURN_KEY: Partial<Record<GameMode, string>> = {
   jungle: 'JungleModeView.turn',
   sudoku: 'SudokuModeView.turn',
   bluff: 'BluffDiceModeView.turn',
-  penaltygrid: 'PenaltyLadderModeView.turn'
 };
 
 /** 当前玩法该读哪一个 turn 键；没有内部回合的玩法返回 null。 */

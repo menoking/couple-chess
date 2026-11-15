@@ -1,5 +1,5 @@
-import { useModeState } from '../../rules/ModeRuntime';
-import { useEffect, useRef } from 'react';
+import { useModeAuthority, useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Check, Flame, RefreshCw, Timer, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, pickRandom } from '../../utils/modeKit';
@@ -17,37 +17,47 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
   const [attackerId, setAttackerId] = useModeState('EdgeModeView.attackerId', 0);
   const [levelIndex, setLevelIndex] = useModeState('EdgeModeView.levelIndex', 0);
   const [phase, setPhase] = useModeState<Phase>('EdgeModeView.phase', 'ready');
-  const [secondsLeft, setSecondsLeft] = useModeState('EdgeModeView.secondsLeft', 0);
+  // 存截止时间而不是每秒写共享状态：两端各自算剩余秒数，不会被对方的旧快照覆盖
+  const [deadline, setDeadline] = useModeState('EdgeModeView.deadline', 0);
   const [breakerId, setBreakerId] = useModeState<number | null>('EdgeModeView.breakerId', null);
   const [forcedLoss, setForcedLoss] = useModeState('EdgeModeView.forcedLoss', false);
-  const timerRef = useRef<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  const authority = useModeAuthority();
 
   const attacker = players.find(player => player.id === attackerId) ?? players[0];
   const defender = players.find(player => player.id !== attackerId) ?? players[1];
   const level = EDGE_LADDER[levelIndex];
   const pool = buildTaskPool(players, themes) ?? [];
 
-  useEffect(() => () => {
-    if (timerRef.current !== null) window.clearInterval(timerRef.current);
-  }, []);
+  // 推进方负责「开始计时」，承受方负责「认输 / 继续」
+  const attackerCanAct = useMyTurn(attackerId);
+  const defenderCanAct = useMyTurn(defender?.id ?? -1);
+
+  const remaining = deadline > 0 ? Math.max(0, Math.ceil((deadline - now) / 1000)) : 0;
+
+  // 本机秒表：只驱动重渲染
+  useEffect(() => {
+    if (phase !== 'running' || deadline <= 0) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 200);
+    return () => window.clearInterval(timer);
+  }, [phase, deadline]);
+
+  // 到点由权威端统一推进阶段，避免两端各写一次
+  useEffect(() => {
+    if (!authority || phase !== 'running' || deadline <= 0) return;
+    if (remaining > 0) return;
+    setPhase('decide');
+  }, [authority, phase, deadline, remaining, setPhase]);
 
   const startLevel = () => {
-    setSecondsLeft(level.seconds);
+    if (!attackerCanAct) return;
+    setDeadline(Date.now() + level.seconds * 1000);
+    setNow(Date.now());
     setPhase('running');
-    if (timerRef.current !== null) window.clearInterval(timerRef.current);
-    timerRef.current = window.setInterval(() => {
-      setSecondsLeft(prev => {
-        if (prev <= 1) {
-          if (timerRef.current !== null) window.clearInterval(timerRef.current);
-          setPhase('decide');
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
   };
 
   const holdOn = () => {
+    if (!defenderCanAct) return;
     // 撑住 → 进入下一级；撑满五级则推进方失败
     if (levelIndex + 1 >= EDGE_LADDER.length) {
       setBreakerId(attackerId);
@@ -60,6 +70,7 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
   };
 
   const giveUp = () => {
+    if (!defenderCanAct) return;
     setBreakerId(defender.id);
     setForcedLoss(false);
     setPhase('result');
@@ -68,7 +79,7 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
   const switchRoles = () => {
     setAttackerId(prev => (prev === 0 ? 1 : 0));
     setLevelIndex(0);
-    setSecondsLeft(0);
+    setDeadline(0);
     setBreakerId(null);
     setForcedLoss(false);
     setPhase('ready');
@@ -147,22 +158,24 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
         <button
           type="button"
           onClick={startLevel}
-          className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
+          disabled={!attackerCanAct}
+          className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg disabled:opacity-50"
         >
-          开始计时
+          {attackerCanAct ? '开始计时' : `等 ${attacker?.name || '对方'} 开始计时`}
         </button>
       )}
 
       {phase === 'running' && (
         <div className="space-y-3">
           <div className="rounded-3xl border border-white/10 bg-white/[0.04] py-6 text-center">
-            <div className="text-5xl font-bold tabular-nums text-white">{secondsLeft}</div>
+            <div className="text-5xl font-bold tabular-nums text-white">{remaining}</div>
             <div className="mt-1 text-xs text-gray-500">秒 · 坚持住</div>
           </div>
           <button
             type="button"
             onClick={giveUp}
-            className="ios-btn h-12 w-full rounded-full bg-[#3A3A3C] text-sm font-bold text-[#FF453A]"
+            disabled={!defenderCanAct}
+            className="ios-btn h-12 w-full rounded-full bg-[#3A3A3C] text-sm font-bold text-[#FF453A] disabled:opacity-50"
           >
             {defender?.name} 撑不住，认输
           </button>
@@ -178,14 +191,16 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
             <button
               type="button"
               onClick={giveUp}
-              className="ios-btn h-14 flex-1 rounded-full bg-[#3A3A3C] text-sm font-bold text-[#FF453A]"
+              disabled={!defenderCanAct}
+              className="ios-btn h-14 flex-1 rounded-full bg-[#3A3A3C] text-sm font-bold text-[#FF453A] disabled:opacity-50"
             >
               认输，到此为止
             </button>
             <button
               type="button"
               onClick={holdOn}
-              className="ios-btn h-14 flex-[2] rounded-full bg-white text-sm font-bold text-black shadow-lg"
+              disabled={!defenderCanAct}
+              className="ios-btn h-14 flex-[2] rounded-full bg-white text-sm font-bold text-black shadow-lg disabled:opacity-50"
             >
               <span className="flex items-center justify-center gap-1.5">
                 <Check size={15} />

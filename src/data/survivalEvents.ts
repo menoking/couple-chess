@@ -12,7 +12,7 @@ export interface SurvivalEvent {
   timeLimit: number;
 }
 
-/** 合作生存事件库：每轮抽一张，修正本轮任务的得失。 */
+/** 合作生存事件库：20 个事件，每局抽 10 个，重玩不会总是同一批。 */
 export const SURVIVAL_EVENTS: SurvivalEvent[] = [
   {
     id: 'sv_gentle',
@@ -102,6 +102,87 @@ export const SURVIVAL_EVENTS: SurvivalEvent[] = [
     skipPenalty: 0,
     successHeal: 0,
     bonusPoints: 2,
+    timeLimit: 0
+  },
+  {
+    id: 'sv_rain',
+    name: '雨夜堵车',
+    desc: '只剩 40 秒，跳过扣 1 点心血',
+    skipPenalty: 1,
+    successHeal: 0,
+    bonusPoints: 0,
+    timeLimit: 40
+  },
+  {
+    id: 'sv_cook',
+    name: '一起下厨',
+    desc: '完成任务回复 1 点心血并 +1 分',
+    skipPenalty: 0,
+    successHeal: 1,
+    bonusPoints: 1,
+    timeLimit: 0
+  },
+  {
+    id: 'sv_deadline',
+    name: '临时加班',
+    desc: '时间很紧，30 秒内完成才算数，跳过扣 2 点心血',
+    skipPenalty: 2,
+    successHeal: 0,
+    bonusPoints: 1,
+    timeLimit: 30
+  },
+  {
+    id: 'sv_homesick',
+    name: '想家了',
+    desc: '情绪低落，跳过扣 1 点心血；完成则 +2 分',
+    skipPenalty: 1,
+    successHeal: 0,
+    bonusPoints: 2,
+    timeLimit: 0
+  },
+  {
+    id: 'sv_surprise',
+    name: '意外惊喜',
+    desc: '完成任务额外 +3 分',
+    skipPenalty: 0,
+    successHeal: 0,
+    bonusPoints: 3,
+    timeLimit: 0
+  },
+  {
+    id: 'sv_insomnia',
+    name: '失眠夜',
+    desc: '状态不佳，50 秒内决定，跳过扣 1 点心血',
+    skipPenalty: 1,
+    successHeal: 0,
+    bonusPoints: 0,
+    timeLimit: 50
+  },
+  {
+    id: 'sv_heal',
+    name: '互相疗愈',
+    desc: '完成回复 2 点心血',
+    skipPenalty: 0,
+    successHeal: 2,
+    bonusPoints: 0,
+    timeLimit: 0
+  },
+  {
+    id: 'sv_misread',
+    name: '沟通失误',
+    desc: '话说重了，跳过扣 2 点心血',
+    skipPenalty: 2,
+    successHeal: 0,
+    bonusPoints: 0,
+    timeLimit: 0
+  },
+  {
+    id: 'sv_anniv_trip',
+    name: '纪念日旅行',
+    desc: '完成任务回复 1 点心血并 +3 分',
+    skipPenalty: 0,
+    successHeal: 1,
+    bonusPoints: 3,
     timeLimit: 0
   }
 ];

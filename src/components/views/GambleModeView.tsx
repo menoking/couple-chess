@@ -1,4 +1,4 @@
-import { useModeState } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useRef } from 'react';
 import { ArrowLeft, Coins, Flame, RefreshCw, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -34,6 +34,9 @@ function GambleGame({ players }: { players: Player[] }) {
   const [scores, setScores] = useModeState<Record<number, number>>('GambleModeView.scores', { 0: 0, 1: 0 });
   const [rounds, setRounds] = useModeState('GambleModeView.rounds', 0);
   const timerRef = useRef<number | null>(null);
+  // 只有坐庄的人能选注码 / 开转 / 进入下一轮，否则两端都会各自开一把
+  const canAct = useMyTurn(spinnerId);
+  const spinLock = useRef(0);
 
   useEffect(() => () => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
@@ -43,6 +46,10 @@ function GambleGame({ players }: { players: Player[] }) {
   const nextSpinner = players.find(player => player.id !== spinnerId) ?? players[1];
 
   const startSpin = (tier: GambleTier) => {
+    if (!canAct) return;
+    // 连点保护：同一轮只允许开一次
+    if (spinLock.current === roundKey + 1) return;
+    spinLock.current = roundKey + 1;
     const entryIndex = Math.floor(Math.random() * tier.entries.length);
     const entry = tier.entries[entryIndex];
     // 赌局自己决定谁做任务：一半概率砸回坐庄的人
@@ -67,6 +74,7 @@ function GambleGame({ players }: { players: Player[] }) {
   };
 
   const nextRound = () => {
+    if (!canAct) return;
     setResult(null);
     setPendingTier(null);
     setPhase('bet');
@@ -99,7 +107,7 @@ function GambleGame({ players }: { players: Player[] }) {
 
       <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
         {spinner?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-        {spinner?.name || '当前玩家'} 坐庄：选注码后开转
+        {canAct ? `${spinner?.name || '当前玩家'} 坐庄：选注码后开转` : `等 ${spinner?.name || '对方'} 选注码…`}
       </div>
 
       {/* 轮盘视窗 */}
@@ -137,9 +145,11 @@ function GambleGame({ players }: { players: Player[] }) {
         <div className="space-y-3">
           <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-5 text-center">
             <Coins size={30} className="mx-auto text-[#FFD60A]" />
-            <div className="mt-2 text-lg font-bold text-white">选择注码</div>
+            <div className="mt-2 text-lg font-bold text-white">
+              {canAct ? '选择注码' : `等 ${spinner?.name || '对方'} 选注码`}
+            </div>
             <div className="mt-1 text-xs text-gray-500">
-              注码决定任务强度；转出的任务由<strong className="text-white">输的一方执行</strong>，结果有一半概率砸回你自己
+              只有坐庄的一方选注码；任务由<strong className="text-white">输的一方执行</strong>，结果有一半概率砸回你自己
             </div>
           </div>
 
@@ -148,7 +158,8 @@ function GambleGame({ players }: { players: Player[] }) {
               key={tier.key}
               type="button"
               onClick={() => startSpin(tier)}
-              className="ios-btn flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-left active:bg-white/10"
+              disabled={!canAct}
+              className="ios-btn flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] px-5 py-4 text-left active:bg-white/10 disabled:opacity-40"
             >
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/10">
@@ -197,9 +208,10 @@ function GambleGame({ players }: { players: Player[] }) {
           <button
             type="button"
             onClick={nextRound}
-            className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
+            disabled={!canAct}
+            className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg disabled:opacity-50"
           >
-            下一轮（换 {nextSpinner?.name} 坐庄）
+            {canAct ? `下一轮（换 ${nextSpinner?.name} 坐庄）` : `等 ${spinner?.name || '对方'} 开下一轮`}
           </button>
         </div>
       )}

@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { GameMode, Player, PlayerRole, Theme } from '../../types';
 import { THEME_FREE_MODES } from '../../rules/registry';
-import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Disc3, Flag, Flame, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, PawPrint, FlipHorizontal, ShieldQuestion, Theater, TrendingUp, Timer, User, UserRound } from 'lucide-react';
+import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Disc3, Flag, Flame, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, PawPrint, ShieldQuestion, Theater, Timer, User, UserRound } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -82,8 +82,6 @@ const CATEGORIES: ModeCategory[] = [
       { id: 'trutndare', title: '真心话大冒险', desc: '狂暴版：禁区、当众、三连事件', icon: Flame },
       { id: 'gamble', title: '赌局轮盘', desc: '赌上今晚主权，输家听差遣', icon: Crown },
       { id: 'edge', title: '高潮边缘', desc: '推对方到临界点，先崩者输', icon: Heart },
-      { id: 'penaltygrid', title: '惩罚阶梯', desc: '失败升一级，五级登顶者受终极惩罚', icon: TrendingUp },
-      { id: 'secretdouble', title: '翻牌赌命', desc: '一张张翻牌，翻到黑牌全作废', icon: FlipHorizontal },
       { id: 'roleplay', title: '角色扮演', desc: '抽剧本即兴演，权力反转台词', icon: Theater }
     ]
   }
@@ -106,8 +104,6 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   trutndare: '开始狂暴版',
   gamble: '开始赌局',
   edge: '开始对决',
-  penaltygrid: '开始升阶',
-  secretdouble: '开始翻牌',
   roleplay: '开始演戏',
   bluff: '开始吹牛',
   jungle: '开始斗兽',
@@ -126,8 +122,6 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   auction: '选择游戏模式和双方抽卡题库',
   gridchess: '选择游戏模式和双方抽卡题库',
   trutndare: '选择游戏模式和双方抽卡题库',
-  penaltygrid: '选择游戏模式和双方抽卡题库',
-  secretdouble: '选择游戏模式和双方抽卡题库',
   bluff: '选择游戏模式和双方抽卡题库',
   jungle: '选择游戏模式和双方抽卡题库',
   sudoku: '选择游戏模式和双方抽卡题库',

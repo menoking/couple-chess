@@ -1,10 +1,9 @@
-import { useDeckSeed, useModeState, useMyTurn } from '../../rules/ModeRuntime';
-import { useEffect, useMemo, useRef } from 'react';
-import { ArrowLeft, Heart, HeartPulse, RefreshCw, Timer, User, UserRound } from 'lucide-react';
-import { Player, TaskEventData, Theme } from '../../types';
+import { useDeckSeed, useModeAuthority, useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Check, Heart, HeartPulse, RefreshCw, Timer, User, UserRound, X } from 'lucide-react';
+import { Player, Theme } from '../../types';
 import { SURVIVAL_EVENTS, SURVIVAL_MAX_HEARTS, SURVIVAL_TOTAL_ROUNDS, SurvivalEvent } from '../../data/survivalEvents';
-import { ThemeTaskEntry, collectThemeTasks, createViewTaskEvent, pickRandom, seededShuffle } from '../../utils/modeKit';
-import { TaskCardModal } from '../modals/TaskCardModal';
+import { ThemeTaskEntry, collectThemeTasks, pickRandom, seededShuffle } from '../../utils/modeKit';
 
 interface SurvivalModeViewProps {
   players: Player[];
@@ -12,6 +11,12 @@ interface SurvivalModeViewProps {
   currentTurn: number;
   onEndTurn: () => void;
   onBack: () => void;
+}
+
+/** 本轮任务：只存纯文本，**不要**用 TaskEventData 形状（会被当成抽卡对象拦掉）。 */
+interface SurvivalTask {
+  text: string;
+  themeName: string;
 }
 
 function SurvivalGame({
@@ -28,6 +33,7 @@ function SurvivalGame({
   onExit: () => void;
 }) {
   const canAct = useMyTurn(currentTurn);
+  const authority = useModeAuthority();
   const activePlayer = players[currentTurn] || players[0];
   // 同一房间 = 同一事件顺序
   const deckSeed = useDeckSeed();
@@ -38,99 +44,50 @@ function SurvivalGame({
   const [hearts, setHearts] = useModeState('SurvivalModeView.hearts', SURVIVAL_MAX_HEARTS);
   const [points, setPoints] = useModeState('SurvivalModeView.points', 0);
   const [activeEvent, setActiveEvent] = useModeState<SurvivalEvent | null>('SurvivalModeView.activeEvent', null);
-  const [taskData, setTaskData] = useModeState<TaskEventData | null>('SurvivalModeView.taskData', null);
+  const [currentTask, setCurrentTask] = useModeState<SurvivalTask | null>('SurvivalModeView.currentTask', null);
   const [notice, setNotice] = useModeState<string | null>('SurvivalModeView.notice', null);
-  const [timeLeft, setTimeLeft] = useModeState('SurvivalModeView.timeLeft', 0);
+  // 用截止时间而不是每秒写一次共享状态：两端各自算剩余秒数，不会互相覆盖
+  const [deadline, setDeadline] = useModeState('SurvivalModeView.deadline', 0);
   const [over, setOver] = useModeState<{ win: boolean; rounds: number } | null>('SurvivalModeView.over', null);
-  const resolvedRef = useRef(false);
-  const timerRef = useRef<number | null>(null);
+  const [now, setNow] = useState(() => Date.now());
+  // 超时与手点可能同时触发，同一个任务只能结算一次
+  const resolvingRef = useRef(false);
 
   const pool = useMemo<ThemeTaskEntry[]>(
     () => collectThemeTasks(players.filter(p => p.id === activePlayer?.id), themes),
     [players, themes, activePlayer?.id]
   );
 
-  const clearTimer = () => {
-    if (timerRef.current !== null) {
-      window.clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-  };
-
-  useEffect(() => () => clearTimer(), []);
-
-  // 限时事件：倒计时归零按跳过处理。
-  // 依赖用布尔值而不是 taskData 对象：快照每 1.5 秒刷新会重建对象，
-  // 依赖对象会让 interval 反复重建，倒计时看起来像被拖慢。
-  const hasTask = taskData !== null;
+  // 本地秒表：只驱动本机重渲染，不写共享状态
   useEffect(() => {
-    if (!hasTask || timeLeft <= 0) return;
-    timerRef.current = window.setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev <= 1) {
-          clearTimer();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearTimer();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hasTask]);
+    if (deadline <= 0 || currentTask === null) return;
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [deadline, currentTask]);
 
-  useEffect(() => {
-    if (taskData && timeLeft === 0 && activeEvent && activeEvent.timeLimit > 0 && !resolvedRef.current) {
-      resolvedRef.current = true;
-      resolveTask(false);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [taskData, timeLeft, activeEvent]);
-
-  const drawEvent = () => {
-    if (!canAct) return;
-    const [event, ...rest] = eventDeck;
-    if (!event) {
-      setActiveEvent(SURVIVAL_EVENTS[0]);
-      return;
-    }
-    setEventDeck(rest);
-    setActiveEvent(event);
-  };
-
-  const openTask = () => {
-    const entry = pickRandom(pool);
-    if (!entry) {
-      setNotice('当前玩家没有可用任务，按跳过处理');
-      resolveTask(false);
-      return;
-    }
-    resolvedRef.current = false;
-    setTaskData(createViewTaskEvent({ entry, title: '生存任务 · 自己执行', executorPlayerId: activePlayer?.id ?? 0, initiatorPlayerId: activePlayer?.id ?? 0 }));
-    setTimeLeft(activeEvent && activeEvent.timeLimit > 0 ? activeEvent.timeLimit : 0);
-  };
+  const remaining = deadline > 0 && currentTask ? Math.max(0, Math.ceil((deadline - now) / 1000)) : 0;
 
   const resolveTask = (accepted: boolean) => {
-    clearTimer();
+    if (resolvingRef.current) return;
     if (!activeEvent) return;
-    let nextHearts = hearts;
+    resolvingRef.current = true;
+    const event = activeEvent;
     let gained = 0;
-
-    if (accepted) {
-      nextHearts = Math.min(SURVIVAL_MAX_HEARTS, hearts + activeEvent.successHeal);
-      gained = 1 + activeEvent.bonusPoints;
-    } else {
-      nextHearts = Math.max(0, hearts - activeEvent.skipPenalty);
-    }
+    const nextHearts = accepted
+      ? Math.min(SURVIVAL_MAX_HEARTS, hearts + event.successHeal)
+      : Math.max(0, hearts - event.skipPenalty);
+    if (accepted) gained = 1 + event.bonusPoints;
 
     setHearts(nextHearts);
-    setPoints(prev => prev + gained);
-    setTaskData(null);
+    if (gained > 0) setPoints(prev => prev + gained);
+    setCurrentTask(null);
     setActiveEvent(null);
+    setDeadline(0);
     setNotice(
       accepted
-        ? `任务完成：${activeEvent.successHeal > 0 ? `回血 ${activeEvent.successHeal} · ` : ''}+${gained} 分`
-        : activeEvent.skipPenalty > 0
-          ? `任务跳过：-${activeEvent.skipPenalty} 心血`
+        ? `任务完成：${event.successHeal > 0 ? `回血 ${event.successHeal} · ` : ''}+${gained} 分`
+        : event.skipPenalty > 0
+          ? `任务跳过：-${event.skipPenalty} 心血`
           : '任务跳过：本轮安全，未扣心血'
     );
 
@@ -144,6 +101,43 @@ function SurvivalGame({
     }
     setRound(value => value + 1);
     onEndTurn();
+  };
+
+  // 超时按跳过处理；只让权威端执行一次，避免两端各算一次
+  useEffect(() => {
+    if (!authority || !currentTask || deadline <= 0 || over) return;
+    if (remaining > 0) return;
+    resolveTask(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authority, currentTask, deadline, remaining, over]);
+
+  const drawEvent = () => {
+    if (!canAct) return;
+    const [event, ...rest] = eventDeck;
+    if (!event) {
+      setActiveEvent(SURVIVAL_EVENTS[0]);
+      return;
+    }
+    setEventDeck(rest);
+    setActiveEvent(event);
+    setNotice(null);
+    resolvingRef.current = false;
+  };
+
+  const openTask = () => {
+    if (!canAct) return;
+    const entry = pickRandom(pool);
+    if (!entry) {
+      setNotice('当前玩家没有可用任务，按跳过处理');
+      resolveTask(false);
+      return;
+    }
+    setNotice(null);
+    resolvingRef.current = false;
+    setCurrentTask({ text: entry.task.text, themeName: entry.themeName });
+    const limit = activeEvent && activeEvent.timeLimit > 0 ? activeEvent.timeLimit : 0;
+    setDeadline(limit > 0 ? Date.now() + limit * 1000 : 0);
+    setNow(Date.now());
   };
 
   if (over) {
@@ -202,9 +196,11 @@ function SurvivalGame({
         </div>
       </div>
 
-      <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
+      <div className={`flex items-center justify-center gap-2 rounded-2xl py-3 text-sm font-bold ${canAct ? 'bg-white/5 text-white' : 'bg-white/[0.02] text-gray-500'}`}>
         {activePlayer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-        {activePlayer?.name || '当前玩家'} 面对本轮事件 · 团队 {points} 分
+        {canAct
+          ? `${activePlayer?.name || '当前玩家'} 面对本轮事件 · 团队 ${points} 分`
+          : `等 ${activePlayer?.name || '对方'} 处理本轮 · 团队 ${points} 分`}
       </div>
 
       {activeEvent ? (
@@ -214,27 +210,83 @@ function SurvivalGame({
             <div className="mt-3 text-[11px] font-bold uppercase tracking-[0.2em] text-[#FF7A96]">本轮事件</div>
             <div className="mt-2 text-2xl font-bold text-white">{activeEvent.name}</div>
             <div className="mt-2 text-sm leading-relaxed text-gray-400">{activeEvent.desc}</div>
+            <div className="mt-4 flex items-center justify-center gap-2 text-[10px] font-bold">
+              <span className="rounded-full bg-[#30D158]/15 px-2.5 py-1 text-[#30D158]">
+                完成 +{1 + activeEvent.bonusPoints} 分{activeEvent.successHeal > 0 ? ` · 回血 ${activeEvent.successHeal}` : ''}
+              </span>
+              <span className="rounded-full bg-[#FF453A]/15 px-2.5 py-1 text-[#FF7A96]">
+                跳过{activeEvent.skipPenalty > 0 ? ` -${activeEvent.skipPenalty} 心血` : ' 无惩罚'}
+              </span>
+            </div>
             {activeEvent.timeLimit > 0 && (
               <div className="mt-3 inline-flex items-center gap-1 rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold text-[#FFD60A]">
                 <Timer size={12} />限时 {activeEvent.timeLimit} 秒
               </div>
             )}
           </div>
-          {!taskData && (
+
+          {!currentTask && (
             <button
               type="button"
               onClick={openTask}
-              className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg"
+              disabled={!canAct}
+              className="ios-btn h-14 w-full rounded-full bg-white text-base font-bold text-black shadow-lg disabled:opacity-50"
             >
-              迎接本轮任务
+              {canAct ? '迎接本轮任务' : `等 ${activePlayer?.name || '对方'} 抽任务`}
             </button>
+          )}
+
+          {currentTask && (
+            <div className="rounded-3xl border border-white/10 bg-[#1C1C1E] p-5">
+              <div className="flex items-center justify-between text-[10px] font-bold text-gray-500">
+                <span>本轮任务 · {activePlayer?.name} 执行</span>
+                <span className="truncate">来自「{currentTask.themeName}」</span>
+              </div>
+              <div className="mt-3 text-base font-bold leading-relaxed text-white">{currentTask.text}</div>
+
+              {deadline > 0 && (
+                <div className={`mt-4 rounded-2xl px-3 py-2 text-center text-sm font-bold tabular-nums ${
+                  remaining <= 5 ? 'bg-[#FF453A]/15 text-[#FF7A96]' : 'bg-[#FFD60A]/10 text-[#FFD60A]'
+                }`}>
+                  剩余 {remaining} 秒{remaining === 0 ? ' · 已超时' : ''}
+                </div>
+              )}
+
+              {canAct ? (
+                <div className="mt-4 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => resolveTask(false)}
+                    className="ios-btn h-13 flex-1 rounded-full bg-[#3A3A3C] py-3.5 text-sm font-bold text-[#FF453A]"
+                  >
+                    <span className="flex items-center justify-center gap-1.5">
+                      <X size={15} />跳过
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => resolveTask(true)}
+                    className="ios-btn h-13 flex-[2] rounded-full bg-white py-3.5 text-sm font-bold text-black shadow-lg"
+                  >
+                    <span className="flex items-center justify-center gap-1.5">
+                      <Check size={15} />完成了
+                    </span>
+                  </button>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-500">
+                  等 {activePlayer?.name || '对方'} 完成或跳过
+                </div>
+              )}
+            </div>
           )}
         </div>
       ) : (
         <button
           type="button"
           onClick={drawEvent}
-          className="ios-btn flex h-40 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-white/10 bg-white/[0.04]"
+          disabled={!canAct}
+          className="ios-btn flex h-40 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-white/10 bg-white/[0.04] disabled:opacity-50"
         >
           <HeartPulse size={34} className="text-[#FF375F]" />
           <span className="text-lg font-bold text-white">抽取第 {round} 轮事件</span>
@@ -242,26 +294,16 @@ function SurvivalGame({
         </button>
       )}
 
-      {taskData && timeLeft > 0 && (
-        <div className="rounded-2xl border border-[#FFD60A]/25 bg-[#FFD60A]/10 px-4 py-2.5 text-center text-sm font-bold tabular-nums text-[#FFD60A]">
-          剩余 {timeLeft} 秒，超时按跳过处理
-        </div>
-      )}
-
-      {notice && !taskData && (
+      {notice && !currentTask && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-4 text-center text-sm font-bold text-white">
           {notice}
         </div>
       )}
 
-      <TaskCardModal
-        players={players}
-        isOpen={!!taskData}
-        taskData={taskData}
-        onAccept={() => resolveTask(true)}
-        onReject={() => resolveTask(false)}
-        onClose={() => resolveTask(false)}
-      />
+      <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-[11px] leading-relaxed text-gray-500">
+        规则：两人共用 {SURVIVAL_MAX_HEARTS} 颗心血，轮流面对 {SURVIVAL_TOTAL_ROUNDS} 轮事件。
+        当前玩家抽到任务后，完成可回血加分，跳过按事件扣血；限时事件超时按跳过处理。心血归零即失败。
+      </div>
     </div>
   );
 }

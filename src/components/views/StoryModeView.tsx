@@ -1,4 +1,4 @@
-import { useDeckSeed, useModeState } from '../../rules/ModeRuntime';
+import { useDeckSeed, useModeState, useMyTurn } from '../../rules/ModeRuntime';
 
 import { ArrowLeft, BookOpen, RefreshCw, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -16,7 +16,7 @@ const STORY_ACTING_BONUS = '把刚才的故事即兴演给对方看，可以加�
 function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void }) {
   // 同一房间 = 同一批故事碎片顺序
   const deckSeed = useDeckSeed();
-  const [decks] = useModeState<Record<StoryFragmentKind, StoryFragment[]>>('StoryModeView.decks', () => {
+  const [decks, setDecks] = useModeState<Record<StoryFragmentKind, StoryFragment[]>>('StoryModeView.decks', () => {
     const byKind: Record<StoryFragmentKind, StoryFragment[]> = {
       opening: [],
       development: [],
@@ -39,10 +39,17 @@ function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void 
 
   const drawer = players[step % players.length];
   const kind = STORY_SEQUENCE[step];
+  // 轮到谁抽就谁抽，另一端不能替对方点
+  const canAct = useMyTurn(drawer?.id ?? -1);
 
   const draw = () => {
+    if (!canAct) return;
     if (step >= STORY_SEQUENCE.length) return;
-    const fragment = decks[kind][0];
+    // 牌堆空了的兜底（正常不会发生：每类 16 张，一局最多抽 4 次）
+    const fragment = (decks[kind] ?? [])[0] ?? STORY_FRAGMENTS.find(item => item.kind === kind);
+    if (!fragment) return;
+    // 抽走这张：同一局里再轮到同一阶段时不会又抽到同一张
+    setDecks(prev => ({ ...prev, [kind]: prev[kind].slice(1) }));
     const nextStory = [...story, { playerId: drawer?.id ?? 0, fragment }];
     setStory(nextStory);
     if (step + 1 >= STORY_SEQUENCE.length) {
@@ -105,17 +112,18 @@ function StoryGame({ players, onExit }: { players: Player[]; onExit: () => void 
 
       <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
         {drawer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-        请 {drawer?.name || '当前玩家'} 抽下一张情节卡
+        {canAct ? `请 ${drawer?.name || '当前玩家'} 抽下一张情节卡` : `等 ${drawer?.name || '对方'} 抽卡…（你这边暂不可操作）`}
       </div>
 
       <button
         type="button"
         onClick={draw}
-        className="ios-btn flex h-40 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-[#FF9F0A]/30 bg-gradient-to-br from-[#FF9F0A]/20 to-transparent"
+        disabled={!canAct}
+        className="ios-btn flex h-40 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-[#FF9F0A]/30 bg-gradient-to-br from-[#FF9F0A]/20 to-transparent disabled:opacity-50"
       >
         <BookOpen size={34} className="text-[#FF9F0A]" />
         <span className="text-lg font-bold text-white">抽一张「{STORY_KIND_LABELS[kind]}」卡</span>
-        <span className="text-xs text-gray-500">点击抽卡，推进故事</span>
+        <span className="text-xs text-gray-500">点击抽卡推进故事 · 同一局不会抽到重复情节</span>
       </button>
 
       {story.length > 0 && (
@@ -158,7 +166,7 @@ export function StoryModeView({ players, onBack }: StoryModeViewProps) {
           </button>
           <div className="flex-1 text-center">
             <div className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#FF9F0A]">Story Chain</div>
-            <div className="mt-1 text-sm font-bold text-white">故事接龙 · 8 张情节卡</div>
+            <div className="mt-1 text-sm font-bold text-white">故事接龙 · {STORY_SEQUENCE.length} 张情节卡</div>
           </div>
           <div className="flex h-10 w-10 items-center justify-center text-gray-500">
             <BookOpen size={22} />
