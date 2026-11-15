@@ -2,6 +2,30 @@ import type { GameMode, ThemeMode } from '../types';
 
 export type ModeCategory = 'public' | 'hidden' | 'timed';
 
+/**
+ * 开局不需要选卡包的玩法：本身自带内容，从主题卡包里抽不出任何东西。
+ *
+ * - pose：自带姿势图库
+ * - quiz：自带题库
+ * - story：自带故事碎片
+ * - gamble：转盘直接给档位，不抽主题卡
+ * - roleplay：自带剧本
+ *
+ * 首页不再显示选包卡片，联机大厅也不再要求双方锁定卡包，进房即可开局。
+ */
+export const THEME_FREE_MODES: ReadonlySet<GameMode> = new Set<GameMode>([
+  'pose',
+  'quiz',
+  'story',
+  'gamble',
+  'roleplay'
+]);
+
+/** 该玩法开局是否需要选卡包。 */
+export function needsThemeDecks(mode: GameMode): boolean {
+  return !THEME_FREE_MODES.has(mode);
+}
+
 export interface ModeDef {
   key: GameMode;
   label: string;

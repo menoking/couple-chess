@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { THEME_FREE_MODES } from '../rules/registry';
 import {
   BingoBoard,
   BingoCell,
@@ -165,7 +166,6 @@ const VIEW_MODE: Record<string, GameMode> = {
 };
 
 /** 自备内容、不需要选择主题的玩法。 */
-const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'gamble', 'edge', 'roleplay']);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);

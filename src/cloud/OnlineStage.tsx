@@ -45,7 +45,7 @@ import type { RoomAction, RoomSnapshot, Role, Seat } from '../rules/types';
 import { cardFor, extractCard } from '../rules/cards';
 import { buildMergedTheme, buildOnlinePlayers, MERGED_THEME_ID, PLAYER_NAME } from '../rules/identity';
 import { picksToPool } from '../rules/lobby';
-import { ALL_THEME_MODES, MODE_LABEL, MODE_REGISTRY, turnKeyOfMode } from '../rules/registry';
+import { ALL_THEME_MODES, MODE_LABEL, MODE_REGISTRY, THEME_FREE_MODES, turnKeyOfMode } from '../rules/registry';
 import { createRoom } from '../rules/room';
 import { ModeRuntimeProvider } from '../rules/ModeRuntime';
 import {
@@ -607,13 +607,40 @@ export function OnlineStage(props: OnlineStageProps) {
       </div>
       <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500">
         <span className="flex items-center gap-1"><Users size={11} /> 在场 {shared.presence.length}/2</span>
-        <span className="truncate">抽卡：{rule}</span>
+        <span className="truncate">{THEME_FREE_MODES.has(mode) ? '本玩法不需要卡包' : `抽卡：${rule}`}</span>
       </div>
       {snap.cards.length > 0 && <div className="mt-1 text-center text-[10px] font-bold text-[#FFD60A]">抽卡中 · 玩法操作已锁定</div>}
     </div>
   );
 
   if (!snap.lobbyLocked) {
+    // 自备内容的玩法（故事接龙 / 默契问答 / 剧本 / 转盘 / 姿势）不抽主题卡，
+    // 没有必要求双方选包锁定，进房直接开局。
+    if (THEME_FREE_MODES.has(mode)) {
+      return (
+        <div className="mobile-game-screen fixed inset-0 z-50 flex flex-col bg-black">
+          {header}
+          <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">
+            <SeatAvatars roles={roles} presence={shared.presence} mySeat={mySeat} />
+            <div className="text-center">
+              <div className="text-base font-bold text-white">{MODE_LABEL[mode]}不需要卡包</div>
+              <div className="mt-1.5 text-[11px] leading-relaxed text-gray-500">
+                这个玩法自带内容，不抽主题卡。对方进来后，任意一方点「开始游戏」即可。
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'forceLobby', seat: mySeat, pool: [] })}
+              className="ios-btn h-12 w-full max-w-[280px] rounded-full bg-white text-sm font-bold text-black shadow-lg"
+            >
+              开始游戏
+            </button>
+            <div className="text-[10px] text-gray-600">在场 {shared.presence.length}/2 · 房间 {roomId.slice(-8)}</div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="mobile-game-screen fixed inset-0 z-50 flex flex-col bg-black">
         {header}

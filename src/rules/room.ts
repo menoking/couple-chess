@@ -299,7 +299,10 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
         { ...state.picks[0], locked: true },
         { ...state.picks[1], locked: true }
       ];
-      return bump({ ...state, picks, cardPool: mergePools(action.pool, []), lobbyLocked: true });
+      // 免卡包玩法（故事接龙 / 问答 / 剧本 / 转盘 / 姿势）传空池，
+      // 不要塞兜底卡：这些玩法根本不读公共题库。
+      const pool = action.pool.length > 0 ? mergePools(action.pool, []) : [];
+      return bump({ ...state, picks, cardPool: pool, lobbyLocked: true });
     }
 
     case 'restart':

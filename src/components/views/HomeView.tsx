@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
 import { GameMode, Player, PlayerRole, Theme } from '../../types';
+import { THEME_FREE_MODES } from '../../rules/registry';
 import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Disc3, Flag, Flame, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, PawPrint, FlipHorizontal, ShieldQuestion, Theater, TrendingUp, Timer, User, UserRound } from 'lucide-react';
 
 interface HomeViewProps {
@@ -138,9 +139,6 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   edge: '无需题库，直接开始定力对决',
   roleplay: '无需题库，直接开始角色扮演'
 };
-
-/** 自备内容、不需要选择主题的玩法。 */
-const THEME_FREE_MODES = new Set<GameMode>(['pose', 'quiz', 'story', 'gamble', 'edge', 'roleplay']);
 
 function findCategoryOf(modeId: GameMode): string {
   for (const category of CATEGORIES) {
@@ -294,9 +292,13 @@ export function HomeView({
 
         {online && (
           <div className="rounded-2xl border border-[#30D158]/25 bg-[#30D158]/10 px-4 py-3">
-            <div className="text-xs font-bold text-white">双设备联机 · 进房后各自选卡包</div>
+            <div className="text-xs font-bold text-white">
+              {THEME_FREE_MODES.has(gameMode) ? '双设备联机 · 进房即可开始' : '双设备联机 · 进房后各自选卡包'}
+            </div>
             <div className="mt-1 text-[11px] leading-relaxed text-gray-400">
-              点开始会自动进入房间。两台设备各自勾选卡包并点「锁定我的卡包」，双方都锁定后自动合并成公共题库并开局。
+              {THEME_FREE_MODES.has(gameMode)
+                ? '这个玩法自带内容、不抽主题卡，进房后不用选卡包，任意一方点「开始游戏」即可。'
+                : '点开始会自动进入房间。两台设备各自勾选卡包并点「锁定我的卡包」，双方都锁定后自动合并成公共题库并开局。'}
             </div>
           </div>
         )}
