@@ -19,10 +19,12 @@ import { ThemeTags } from '../components/ThemeTags';
 import { OnlineBoardView } from '../components/views/OnlineBoardView';
 import { CardModeView } from '../components/views/CardModeView';
 import { MineModeView } from '../components/views/MineModeView';
+import { PoseModeView } from '../components/views/PoseModeView';
 import { RouletteModeView } from '../components/views/RouletteModeView';
 import { BingoModeView } from '../components/views/BingoModeView';
 import { QuizModeView } from '../components/views/QuizModeView';
 import { MemoryModeView } from '../components/views/MemoryModeView';
+import { TimedModeView } from '../components/views/TimedModeView';
 import { StoryModeView } from '../components/views/StoryModeView';
 import { SurvivalModeView } from '../components/views/SurvivalModeView';
 import { TerritoryModeView } from '../components/views/TerritoryModeView';
@@ -31,6 +33,7 @@ import { GridChessModeView } from '../components/views/GridChessModeView';
 import { TruthDareModeView } from '../components/views/TruthDareModeView';
 import { GambleModeView } from '../components/views/GambleModeView';
 import { EdgeModeView } from '../components/views/EdgeModeView';
+import { RoleplayModeView } from '../components/views/RoleplayModeView';
 import { SudokuModeView } from '../components/views/SudokuModeView';
 import { GoModeView } from '../components/views/GoModeView';
 import { BluffDiceModeView } from '../components/views/BluffDiceModeView';
@@ -771,6 +774,7 @@ export function OnlineStage(props: OnlineStageProps) {
     if (task) enqueue(task);
     else endTurn();
   };
+  const onPoseTrigger = (src: string) => patch('stage.poseImage', src);
   const onCheckTile = (landingStep: number): TaskEventData | 'win' | null =>
     resolveBoardTile({ landingStep, players, themes: onlineThemes, turn: currentTurn, boardMap });
   const onRevealTile = (index: number): MineRevealResult | null => {
@@ -823,6 +827,8 @@ export function OnlineStage(props: OnlineStageProps) {
         if (mineBoard.length === 0) return <StagePreparing />;
         return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} pendingCards={pendingCount} />;
       }
+      case 'pose':
+        return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onEndTurn={endTurn} pendingCards={pendingCount} onBack={onBack} />;
       case 'roulette':
         return <RouletteModeView {...common} />;
       case 'bingo':
@@ -831,6 +837,8 @@ export function OnlineStage(props: OnlineStageProps) {
         return <QuizModeView players={players} onBack={onBack} />;
       case 'memory':
         return <MemoryModeView {...common} />;
+      case 'timed':
+        return <TimedModeView {...withThemes} />;
       case 'story':
         return <StoryModeView players={players} onBack={onBack} />;
       case 'survival':
@@ -847,6 +855,8 @@ export function OnlineStage(props: OnlineStageProps) {
         return <GambleModeView {...withThemes} />;
       case 'edge':
         return <EdgeModeView {...withThemes} />;
+      case 'roleplay':
+        return <RoleplayModeView players={players} onBack={onBack} />;
       case 'sudoku':
         return <SudokuModeView {...common} />;
       case 'go':

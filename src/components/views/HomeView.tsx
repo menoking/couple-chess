@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { GameMode, Player, PlayerRole, Theme } from '../../types';
 import { THEME_FREE_MODES } from '../../rules/registry';
-import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Disc3, Flag, Flame, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, Layers3, MessageCircleQuestion, PawPrint, ShieldQuestion, User, UserRound } from 'lucide-react';
+import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Disc3, Flag, Flame, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, PawPrint, ShieldQuestion, Theater, Timer, User, UserRound } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -41,6 +41,7 @@ const CATEGORIES: ModeCategory[] = [
       { id: 'card', title: '任务卡牌', desc: '轮流抽取任务，不用投骰子', icon: Layers3 },
       { id: 'mine', title: '扫雷模式', desc: '点击方格，触发隐藏事件', icon: Bomb },
       { id: 'roulette', title: '情侣转盘', desc: '随机组合执行者、动作、部位与时长', icon: Disc3 },
+      { id: 'pose', title: '姿势模式', desc: '轮流抽取姿势图片', icon: ImageIcon }
     ]
   },
   {
@@ -61,6 +62,7 @@ const CATEGORIES: ModeCategory[] = [
     label: '互动',
     modes: [
       { id: 'quiz', title: '默契问答', desc: '分别作答同时揭晓，比谁更懂', icon: MessageCircleQuestion },
+      { id: 'timed', title: '限时挑战', desc: '倒计时连续完成任务计分', icon: Timer },
       { id: 'bluff', title: '吹牛骰', desc: '藏骰叫点，敢不敢开对方', icon: ShieldQuestion }
     ]
   },
@@ -80,17 +82,20 @@ const CATEGORIES: ModeCategory[] = [
       { id: 'trutndare', title: '真心话大冒险', desc: '狂暴版：禁区、当众、三连事件', icon: Flame },
       { id: 'gamble', title: '赌局轮盘', desc: '赌上今晚主权，输家听差遣', icon: Crown },
       { id: 'edge', title: '高潮边缘', desc: '推对方到临界点，先崩者输', icon: Heart },
+      { id: 'roleplay', title: '角色扮演', desc: '抽剧本即兴演，权力反转台词', icon: Theater }
     ]
   }
 ];
 
 const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   card: '开始抽卡',
+  pose: '开始抽姿势',
   roulette: '开始转盘',
   bingo: '开始 Bingo',
   mine: '开始扫雷',
   quiz: '开始问答',
   memory: '开始翻牌',
+  timed: '开始挑战',
   story: '开始接龙',
   survival: '开始生存',
   territory: '开始争夺',
@@ -99,6 +104,7 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   trutndare: '开始狂暴版',
   gamble: '开始赌局',
   edge: '开始对决',
+  roleplay: '开始演戏',
   bluff: '开始吹牛',
   jungle: '开始斗兽',
   sudoku: '开始数独',
@@ -110,6 +116,7 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   roulette: '选择游戏模式和双方抽卡题库',
   bingo: '选择游戏模式和双方抽卡题库',
   memory: '选择游戏模式和双方抽卡题库',
+  timed: '选择游戏模式和双方抽卡题库',
   survival: '选择游戏模式和双方抽卡题库',
   territory: '选择游戏模式和双方抽卡题库',
   auction: '选择游戏模式和双方抽卡题库',
@@ -123,7 +130,8 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   quiz: '无需题库，直接开始默契问答',
   story: '无需题库，直接开始故事接龙',
   gamble: '无需题库，直接开始赌局轮盘',
-  edge: '无需题库，直接开始定力对决'
+  edge: '无需题库，直接开始定力对决',
+  roleplay: '无需题库，直接开始角色扮演'
 };
 
 function findCategoryOf(modeId: GameMode): string {
