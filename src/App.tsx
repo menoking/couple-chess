@@ -6,12 +6,10 @@ import { HomeView } from './components/views/HomeView';
 import { GameView } from './components/views/GameView';
 import { CardModeView } from './components/views/CardModeView';
 import { MineModeView } from './components/views/MineModeView';
-import { PoseModeView } from './components/views/PoseModeView';
 import { RouletteModeView } from './components/views/RouletteModeView';
 import { BingoModeView } from './components/views/BingoModeView';
 import { QuizModeView } from './components/views/QuizModeView';
 import { MemoryModeView } from './components/views/MemoryModeView';
-import { TimedModeView } from './components/views/TimedModeView';
 import { StoryModeView } from './components/views/StoryModeView';
 import { SurvivalModeView } from './components/views/SurvivalModeView';
 import { TerritoryModeView } from './components/views/TerritoryModeView';
@@ -20,7 +18,6 @@ import { GridChessModeView } from './components/views/GridChessModeView';
 import { TruthDareModeView } from './components/views/TruthDareModeView';
 import { GambleModeView } from './components/views/GambleModeView';
 import { EdgeModeView } from './components/views/EdgeModeView';
-import { RoleplayModeView } from './components/views/RoleplayModeView';
 import { SudokuModeView } from './components/views/SudokuModeView';
 import { GoModeView } from './components/views/GoModeView';
 import { BluffDiceModeView } from './components/views/BluffDiceModeView';
@@ -29,7 +26,6 @@ import { ThemesView } from './components/views/ThemesView';
 import { ThemeSelectorModal } from './components/modals/ThemeSelectorModal';
 import { TaskCardModal } from './components/modals/TaskCardModal';
 import { MineBombChoiceModal } from './components/modals/MineBombChoiceModal';
-import { PoseCardModal } from './components/modals/PoseCardModal';
 import { WinModal } from './components/modals/WinModal';
 import { BottomNav } from './components/BottomNav';
 import { ThemeCreateModal } from './components/modals/ThemeCreateModal';
@@ -66,7 +62,6 @@ const CARD_THEME_MODES = new Set<GameMode>([
   'roulette',
   'bingo',
   'memory',
-  'timed',
   'survival',
   'territory',
   'auction',
@@ -84,7 +79,6 @@ const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
   roulette: 'card',
   bingo: 'card',
   memory: 'card',
-  timed: 'card',
   survival: 'card',
   territory: 'card',
   auction: 'card',
@@ -230,7 +224,6 @@ function App() {
   const [selectedPlayerId, setSelectedPlayerId] = useState<number>(0);
   const [taskData, setTaskData] = useState<TaskEventData | null>(null);
   const [isMineBombChoiceOpen, setIsMineBombChoiceOpen] = useState(false);
-  const [poseImageSrc, setPoseImageSrc] = useState<string | null>(null);
   const [winnerId, setWinnerId] = useState<number | null>(null);
   const [isCreateThemeModalOpen, setIsCreateThemeModalOpen] = useState(false);
   const [editingThemeId, setEditingThemeId] = useState<string | null>(null);
@@ -490,11 +483,6 @@ function App() {
     cloudSync.status, cloudSync.error, state.gameMode, onlineSession, supabaseHost
   ]);
 
-  const handlePoseDone = () => {
-    setPoseImageSrc(null);
-    endTurn();
-  };
-
   const handleWin = (id: number) => {
     setWinnerId(id);
   };
@@ -507,7 +495,6 @@ function App() {
     if (confirm('返回主页？本局进度将清空，已选主题会保留。')) {
       setIsMineBombChoiceOpen(false);
       setTaskData(null);
-      setPoseImageSrc(null);
       resetGame();
       switchView('home');
     }
@@ -639,13 +626,6 @@ function App() {
         onChoose={handleMineBombChoice}
       />
 
-      <PoseCardModal
-        isOpen={!!poseImageSrc}
-        imageSrc={poseImageSrc}
-        onAccept={handlePoseDone}
-        onReject={handlePoseDone}
-      />
-
       <WinModal
         isOpen={winnerId !== null}
         winnerName={winnerId !== null ? state.players[winnerId].name : ''}
@@ -734,17 +714,6 @@ function App() {
         />
       )}
 
-      {state.view === 'pose' && (
-        <PoseModeView
-          players={state.players}
-          currentTurn={state.turn}
-          onPoseTrigger={setPoseImageSrc}
-          onEndTurn={endTurn}
-          pendingCards={taskData ? 1 : 0}
-          onBack={handleBackFromGame}
-        />
-      )}
-
 
       {state.view === 'roulette' && (
         <RouletteModeView
@@ -786,14 +755,6 @@ function App() {
         />
       )}
 
-
-      {state.view === 'timed' && (
-        <TimedModeView
-          players={state.players}
-          themes={state.themes}
-          onBack={handleBackFromGame}
-        />
-      )}
 
       {state.view === 'story' && (
         <StoryModeView
@@ -862,13 +823,6 @@ function App() {
         <EdgeModeView
           players={state.players}
           themes={state.themes}
-          onBack={handleBackFromGame}
-        />
-      )}
-
-      {state.view === 'roleplay' && (
-        <RoleplayModeView
-          players={state.players}
           onBack={handleBackFromGame}
         />
       )}

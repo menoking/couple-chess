@@ -9,16 +9,13 @@ export type ModeCategory = 'public' | 'hidden' | 'timed';
  * - quiz：自带题库
  * - story：自带故事碎片
  * - gamble：转盘直接给档位，不抽主题卡
- * - roleplay：自带剧本
  *
  * 首页不再显示选包卡片，联机大厅也不再要求双方锁定卡包，进房即可开局。
  */
 export const THEME_FREE_MODES: ReadonlySet<GameMode> = new Set<GameMode>([
-  'pose',
   'quiz',
   'story',
-  'gamble',
-  'roleplay'
+  'gamble'
 ]);
 
 /** 该玩法开局是否需要选卡包。 */
@@ -43,7 +40,6 @@ export const MODE_REGISTRY: ModeDef[] = [
   { key: 'card', label: '任务卡牌', category: 'public', cardRule: '每回合抽 1 张，抽卡方先翻，对方随后自动看到' },
   { key: 'mine', label: '扫雷模式', category: 'hidden', cardRule: '翻到任务格本人抽 1 张自己执行；翻到炸弹三选一' },
   { key: 'roulette', label: '情侣转盘', category: 'timed', cardRule: '四个转盘直接给出「谁 / 做什么 / 哪里 / 多久」，不额外抽卡' },
-  { key: 'pose', label: '姿势模式', category: 'public', cardRule: '每回合抽 1 张姿势卡' },
   { key: 'bingo', label: '情侣 Bingo', category: 'public', cardRule: '每连成 1 条线抽 1 张，多条线抽多张（卡包 10 张）' },
   { key: 'memory', label: '记忆翻牌', category: 'timed', cardRule: '每配对成功 1 对抽 1 张，对方执行' },
   { key: 'gridchess', label: '点格棋', category: 'public', cardRule: '每闭合 1 格抽 1 张，闭合多格抽多张，对方执行' },
@@ -52,7 +48,6 @@ export const MODE_REGISTRY: ModeDef[] = [
   { key: 'jungle', label: '斗兽棋', category: 'public', cardRule: '每吃掉 1 个棋子抽 1 张，对方执行' },
   { key: 'auction', label: '拍卖竞价', category: 'hidden', cardRule: '竞得者抽 1 张，对方执行' },
   { key: 'quiz', label: '默契问答', category: 'hidden', cardRule: '按答案是否一致计分，不额外抽卡' },
-  { key: 'timed', label: '限时挑战', category: 'timed', cardRule: '按完成度计分，不额外抽卡' },
   { key: 'bluff', label: '吹牛骰', category: 'hidden', cardRule: '开牌后胜方抽 1 张，败方执行' },
   { key: 'story', label: '故事接龙', category: 'public', cardRule: '轮流接续故事碎片，不额外抽卡' },
   { key: 'survival', label: '合作生存', category: 'timed', cardRule: '触发任务时抽 1 张，自己执行' },
@@ -60,7 +55,6 @@ export const MODE_REGISTRY: ModeDef[] = [
   { key: 'trutndare', label: '真心话大冒险', category: 'public', cardRule: '从真心话 / 大冒险 / 主题卡池抽 1 张，本人执行' },
   { key: 'gamble', label: '赌局轮盘', category: 'timed', cardRule: '转盘停在哪档就执行哪档，不额外抽卡' },
   { key: 'edge', label: '高潮边缘', category: 'timed', cardRule: '按关卡推进的限时挑战，不额外抽卡' },
-  { key: 'roleplay', label: '角色扮演', category: 'public', cardRule: '抽取剧本并按剧情推进，不额外抽卡' }
 ];
 
 export const ALL_MODE_KEYS: GameMode[] = MODE_REGISTRY.map(item => item.key);
