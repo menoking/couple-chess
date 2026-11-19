@@ -1,0 +1,119 @@
+{
+  "status": "pending_user_review",
+  "scope": "local_drafts_only",
+  "themes": 8,
+  "cards": 160,
+  "scaleRatio": "2:3:5",
+  "scaleCounts": {
+    "normal": 32,
+    "medium": 48,
+    "high": 80
+  },
+  "existingThemesCompared": 23,
+  "existingCardsCompared": 1422,
+  "maxTaskCharacters": 29,
+  "withinBatchTextDuplicates": 0,
+  "existingTextDuplicates": 0,
+  "existingIdOrNameConflicts": 0,
+  "schemaCheck": "passed",
+  "utf8Check": "passed",
+  "modes": [
+    {
+      "code": "T01",
+      "name": "暧昧开场",
+      "modes": [
+        "board",
+        "card",
+        "mineTheme"
+      ],
+      "normal": 4,
+      "medium": 6,
+      "high": 10
+    },
+    {
+      "code": "T02",
+      "name": "前戏升温",
+      "modes": [
+        "board",
+        "card",
+        "mineTheme"
+      ],
+      "normal": 4,
+      "medium": 6,
+      "high": 10
+    },
+    {
+      "code": "T03",
+      "name": "边缘掌控",
+      "modes": [
+        "board",
+        "card",
+        "mineTheme"
+      ],
+      "normal": 4,
+      "medium": 6,
+      "high": 10
+    },
+    {
+      "code": "T04",
+      "name": "私密探索",
+      "modes": [
+        "board",
+        "card",
+        "mineTheme"
+      ],
+      "normal": 4,
+      "medium": 6,
+      "high": 10
+    },
+    {
+      "code": "T05",
+      "name": "角色与命令",
+      "modes": [
+        "board",
+        "card",
+        "mineTheme"
+      ],
+      "normal": 4,
+      "medium": 6,
+      "high": 10
+    },
+    {
+      "code": "T06",
+      "name": "感官盲区",
+      "modes": [
+        "board",
+        "card",
+        "mineTheme"
+      ],
+      "normal": 4,
+      "medium": 6,
+      "high": 10
+    },
+    {
+      "code": "T07",
+      "name": "夜话加码",
+      "modes": [
+        "mineTruth"
+      ],
+      "normal": 4,
+      "medium": 6,
+      "high": 10
+    },
+    {
+      "code": "T08",
+      "name": "大尺度挑战",
+      "modes": [
+        "mineDare"
+      ],
+      "normal": 4,
+      "medium": 6,
+      "high": 10
+    }
+  ],
+  "note": "已与当前正式题库逐条核对：规范化文字完全重复 0；字符 LCS、二元组 Dice 与包含关系的最高相似阈值核对无 >=0.82 候选；最高分候选已人工复核，均不是同一任务。此结果仍保留为审核稿，未接入项目。",
+  "previewCheck": "passed",
+  "nearDuplicateThreshold": 0.82,
+  "nearDuplicateCandidates": 0,
+  "similarityAudit": "duplicate-audit.review.json"
+}
