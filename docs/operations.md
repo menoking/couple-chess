@@ -38,6 +38,21 @@ VITE_SUPABASE_ANON_KEY=eyJ...                     # 用 Publishable / anon key
 
 内置测试账号：登录面板里一键按钮 **test / test1234**（首次点击自动创建）。
 
+## 仓库与远程
+
+| 项 | 值 |
+|---|---|
+| `origin`（**推送用**） | `https://github.com/menoking/couple-chess.git` |
+| 默认分支 | `master`（推送即触发 Vercel 部署） |
+| `old-origin`（历史仓库，**别再推**） | `git@github.com:menoking/couple-flying-chess.git` |
+| 上游原始项目 | `https://github.com/woniu9524/couple-flying-chess`（README 第 8 行） |
+
+> `git remote -v` 里会看到 `old-origin` 这个残留远程，容易误推。
+> 统一只推 `origin`：`git push origin master`。
+
+部署配置在 `vercel.json`：`npm ci` 安装 → `npm run build` 构建 → 输出 `dist`。
+推 `master` 后等 Vercel 部署完，再用构建标识确认线上版本（见下一节）。
+
 ## 构建与部署
 
 ```bash

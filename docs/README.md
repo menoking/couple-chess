@@ -8,6 +8,7 @@
 | 项 | 值 |
 |---|---|
 | 技术栈 | React 18 · TypeScript · Vite 5 · Tailwind CSS · lucide-react · Supabase（仅联机/云同步） |
+| 仓库 | `https://github.com/menoking/couple-chess`（分支 `master`，推 `origin`） |
 | 入口 | `index.html` → `src/main.tsx` → `src/App.tsx` |
 | 规则唯一来源 | `src/rules/`（同屏与联机共用的 reducer + 判定函数） |
 | 玩法视图 | `src/components/views/*ModeView.tsx`，每个玩法一个，两种模式共用 |
