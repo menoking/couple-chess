@@ -237,6 +237,31 @@ export const REVIEW_THEME_DATA = [
     ],
     "tasks": [
       {
+        "text": "为对方专注口交至其呼吸急促、快感濒临爆发，在最后一秒瞬间抽离并命令对方不许动进行边缘控射",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "女方用双脚足心紧夹男方阴茎快速套弄，感到男方即将失控时用脚后跟死死顶住前端，冷笑观察对方神情",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "女方双乳紧紧夹住男方阴茎做高频乳交，在男方喘息告急时突然停止动作，只用胸口压住不准摩擦",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "双手涂满润滑液全力手交，连续进行三次高潮边缘冲刺，每次都在临界点急刹车，中途绝对不许释放",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "以极快速度刺激对方敏感点，同时要求对方从1倒数到30，声音一旦颤抖或断掉就立刻换姿势重新开始",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
         "text": "共同约定一个停止词和一个放慢节奏的手势",
         "executor": "both",
         "moveDelta": 0
@@ -463,6 +488,26 @@ export const REVIEW_THEME_DATA = [
     ],
     "tasks": [
       {
+        "text": "带入医生与病人角色，以检查为由用双手仔细抚触揉弄对方私密部位2分钟，并要求对方如实汇报快感",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "女方带入贴身女仆角色，用双乳包裹主人的阴茎，柔顺娇喘着进行温存乳交直至主人满意",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "带入强势角色，单手按住对方后脑勺将私密处送入其口中，命令其全力口交侍奉90秒",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "女方带入刁蛮千金角色，斜靠沙发用穿着丝袜的脚尖踩住男方敏感处，命令其为自己做足部精油按摩",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
         "text": "各自选择今晚的角色，并用一句台词介绍自己",
         "executor": "both",
         "moveDelta": 0
@@ -575,6 +620,31 @@ export const REVIEW_THEME_DATA = [
       "mineTheme"
     ],
     "tasks": [
+      {
+        "text": "用眼罩蒙住对方双眼，在完全无声的黑暗中，出其不意地直接含住对方私密部位深度吮吸口交2分钟",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "男方蒙眼平躺，女方悄无声息地将温润细腻的双脚探入男方双腿之间，用足弓夹紧套弄足交2分钟",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "男方戴上眼罩，女方悄悄用温热柔软的双乳沉沉压在男方敏感处，贴着其耳廓娇喘着上下蹭动乳交",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "用丝巾将对方双手固定在床头并蒙上双眼，仅凭温热润滑液和双手进行毫无防备的高潮手交",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "蒙眼状态下，用冰块和指尖交替滑过对方的大腿内侧和敏感核心，让对方猜测此刻触碰自己的是什么",
+        "executor": "both",
+        "moveDelta": 0
+      },
       {
         "text": "闭眼听对方用三种语气描述一个共同回忆",
         "executor": "both",
@@ -797,6 +867,31 @@ export const REVIEW_THEME_DATA = [
       "mineDare"
     ],
     "tasks": [
+      {
+        "text": "大尺度挑战：含住对方私处并深含口交整整2分钟，中途无论对方如何挣扎娇喘都绝对不松口",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "大尺度挑战：穿上黑色薄丝袜涂满精油，跪在男方面前用双脚与足弓完成一次完整的足交调教",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "大尺度挑战：双手用力聚拢双乳包裹男方阴茎，俯身对视连续高频乳交抽拉100下不许停顿",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "走到窗边拉开一掌宽的窗帘，背对窗外，在微弱光影与随时可能被看见的刺激中脱衣激吻抚摸下体2分钟",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "口含一把跳跳糖或一口温水，紧贴对方私密要害进行炸裂般刺激的口交吮吸直到糖粒融化",
+        "executor": "both",
+        "moveDelta": 0
+      },
       {
         "text": "背靠背同步呼吸五次，再交换一句想听的话",
         "executor": "both",

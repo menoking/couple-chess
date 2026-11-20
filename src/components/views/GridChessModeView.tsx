@@ -111,6 +111,14 @@ function DotsAndBoxesGame({
     );
   }, [cardQueue, taskData, players, themes, setCardQueue, setTaskData]);
 
+  // 联机下任务卡会被公共 CardGate 接管，本地 taskData 不落地，
+  // 「闭合最后一格 → 结算」不能只靠弹窗回调，这里按棋盘状态兜底。
+  useEffect(() => {
+    if (finished) return;
+    if (cardQueue.length > 0) return;
+    if (boxes.every(owner => owner !== -1)) setFinished(true);
+  }, [boxes, cardQueue.length, finished, setFinished]);
+
   const drawLine = (kind: 'h' | 'v', lineIndex: number) => {
     if (!canAct) return;
     if (finished || taskData) return;

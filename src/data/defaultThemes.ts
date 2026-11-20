@@ -489,6 +489,31 @@ const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes' | 'tags'> & { modes?: Theme
     "audience": "common",
     "tasks": [
       {
+        "text": "褪尽所有衣物，温柔而深情地将对方私密部位含入温热口中吮吸抚慰2分钟",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "女方俯下身子，用柔软丰满的胸部将男方挺立的阴茎夹紧，双手扶着胸部轻轻套弄进行温热乳交2分钟",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "两人紧紧相拥深吻，双手各自探到对方双腿之间，同步为对方有节奏地抚弄套弄手交90秒",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "女方侧卧，用光溜溜的脚掌和脚心来回摩擦男方大腿内侧与敏感边缘，进行柔情足部挑逗1分钟",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "在对方颈侧、锁骨、胸口与大腿内侧各留下一个清晰可见的吮吸吻痕",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
         "text": "脱掉对方的上衣",
         "executor": "both",
         "moveDelta": 0
@@ -672,6 +697,36 @@ const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes' | 'tags'> & { modes?: Theme
     "audience": "common",
     "tasks": [
       {
+        "text": "执行方先含一口冰水含吮对方私密要害30秒，再换一口温水包裹深吻，让对方感受极致冰火反差",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "女方穿上超薄丝袜涂上润滑液，坐在男方面前，用足弓和脚趾缝紧密夹揉男方阴茎与囊袋2分钟",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "一边全情为对方口交或手交，一边贴着对方耳边用最露骨羞耻的粗口呢喃，说出此刻有多渴望对方",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "让对方趴在腿上褪去下衣，用手掌清脆拍打对方臀部20下，直到泛起微红，随后轻抚亲吻安抚",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "一只手深探对方敏感带快速律动，同时嘴唇深情含吻对方另一处敏感核心，双管齐下持续2分钟",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "全裸站在床边，在对方炽热目光注视下，用双手抚摸玩弄自己的私密部位直至湿润或挺立",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
         "text": "为对方进行口交（Oral Sex）30秒",
         "executor": "both",
         "moveDelta": 0
@@ -854,6 +909,36 @@ const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes' | 'tags'> & { modes?: Theme
     "desc": "实战冲刺与特殊玩法",
     "audience": "common",
     "tasks": [
+      {
+        "text": "两人以69式躺好，同时为对方进行口交与私处爱抚，持续2分钟，比比谁先忍不住呻吟出声",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "为对方口交并尝试深含至深喉极限，感受喉咙的紧缩吞吐，中途不准离开，持续90秒",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "女方在双乳间倒满温热精油，双手托拢将男方阴茎死死夹紧，以极快频率上下套弄直至男方接近爆发",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "双手涂满润滑液以对方最舒服的高速全力手交，在对方快要射精/高潮的前三秒突然停手死死按住，重复两次",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "女方跨坐男方身上进行深入套弄，同时命令男方看着正前方的镜子，欣赏彼此律动沉沦的表情",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "男方从背后进入女方，一手紧扣女方的腰肢，另一手探向前身揉抚敏感点，深沉撞击30次",
+        "executor": "both",
+        "moveDelta": 0
+      },
       {
         "text": "解锁一个从未尝试过的性爱姿势",
         "executor": "both",
@@ -3206,6 +3291,31 @@ const DEFAULT_THEME_SEEDS: Array<Omit<Theme, 'modes' | 'tags'> & { modes?: Theme
     "desc": "从旧版「御奴风尚」迁移",
     "audience": "common",
     "tasks": [
+      {
+        "text": "命令对方跪在双腿之间，双手背在身后，只能用嘴唇与舌头温顺侍奉口交2分钟，违令者受罚",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "女方高傲靠在床头，将玉足踩在男方挺立的阴茎上任意蹂躏踩揉，命令男方吻自己的脚背进行足交调教",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "命令男方仰视自己，女方居高临下将双乳压在男方脸上磨蹭，随后夹住其下体傲慢地进行乳交侍奉",
+        "executor": "female",
+        "moveDelta": 0
+      },
+      {
+        "text": "命令对方翘起臀部，由上位者用力拍打臀部15下留下清晰巴掌印，受罚者必须道谢",
+        "executor": "both",
+        "moveDelta": 0
+      },
+      {
+        "text": "命令对方在自己眼前全裸自慰，主人掌控手势喊快或慢，未得许可绝对不许高潮",
+        "executor": "both",
+        "moveDelta": 0
+      },
       {
         "text": "带上眼罩让TA舔任意部位一分钟",
         "executor": "both",

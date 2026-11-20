@@ -46,6 +46,8 @@ function TruthDareGame({
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
   const [card, setCard] = useModeState<ActiveCard | null>('TruthDareModeView.card', null);
   const [penaltyTarget, setPenaltyTarget] = useModeState<number | null>('TruthDareModeView.penaltyTarget', null);
+  // 惩罚文案只在失败时抽一次；放在渲染里 pickRandom 会每 1.5 秒换一句
+  const [penalty, setPenalty] = useModeState<string | null>('TruthDareModeView.penalty', null);
   const [notice, setNotice] = useModeState<string | null>('TruthDareModeView.notice', null);
   const [done, setDone] = useModeState('TruthDareModeView.done', 0);
 
@@ -87,19 +89,25 @@ function TruthDareGame({
   };
 
   const resolveCard = (accepted: boolean) => {
-    if (!card) return;
+    if (!card || !canAct) return;
     if (accepted) {
       setDone(value => value + 1);
-      setNotice(null);
-    } else {
-      // 失败 → 对方指定大尺度惩罚
-      setPenaltyTarget(activePlayer.id);
+      setNotice('完成挑战，交给下一位');
+      setCard(null);
+      // 关键：完成也要交出回合，否则会一直停在同一个人
+      onEndTurn();
+      return;
     }
+    // 失败 → 对方指定惩罚（文案此时抽一次并固定）
+    setPenalty(pickRandom(SPICY_PENALTIES) ?? SPICY_PENALTIES[0]);
+    setPenaltyTarget(activePlayer.id);
     setCard(null);
   };
 
   const resolvePenalty = () => {
+    if (!canAct) return;
     setPenaltyTarget(null);
+    setPenalty(null);
     setNotice('惩罚已记下，交给下一位');
     onEndTurn();
   };
@@ -120,7 +128,9 @@ function TruthDareGame({
 
       <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
         {activePlayer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-        {activePlayer?.name || '当前玩家'} 的回合
+        {canAct
+          ? `${activePlayer?.name || '当前玩家'} 的回合`
+          : `等 ${activePlayer?.name || '对方'} 完成…（你这边暂不可操作）`}
       </div>
 
       {penaltyTarget !== null ? (
@@ -131,12 +141,13 @@ function TruthDareGame({
             {opponent?.name || '对方'} 指定一项惩罚，由 <span className="font-bold text-white">{activePlayer?.name}</span> 执行：
           </div>
           <div className="mt-4 rounded-2xl bg-black/30 p-4 text-base font-semibold leading-relaxed text-white">
-            {pickRandom(SPICY_PENALTIES)}
+            {penalty ?? '由对方指定一项惩罚'}
           </div>
           <button
             type="button"
             onClick={resolvePenalty}
-            className="ios-btn mt-5 h-12 w-full rounded-full bg-white text-base font-bold text-black"
+            disabled={!canAct}
+            className="ios-btn mt-5 h-12 w-full rounded-full bg-white text-base font-bold text-black disabled:opacity-50"
           >
             接受惩罚，交给下一位
           </button>
@@ -163,14 +174,16 @@ function TruthDareGame({
             <button
               type="button"
               onClick={() => resolveCard(false)}
-              className="ios-btn h-14 flex-1 rounded-full bg-[#3A3A3C] text-base font-bold text-[#FF453A]"
+              disabled={!canAct}
+              className="ios-btn h-14 flex-1 rounded-full bg-[#3A3A3C] text-base font-bold text-[#FF453A] disabled:opacity-50"
             >
               认怂（受罚）
             </button>
             <button
               type="button"
               onClick={() => resolveCard(true)}
-              className="ios-btn h-14 flex-[2] rounded-full bg-white text-base font-bold text-black"
+              disabled={!canAct}
+              className="ios-btn h-14 flex-[2] rounded-full bg-white text-base font-bold text-black disabled:opacity-50"
             >
               完成挑战
             </button>
@@ -180,7 +193,8 @@ function TruthDareGame({
         <button
           type="button"
           onClick={drawCard}
-          className="ios-btn flex h-48 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-[#FF375F]/30 bg-gradient-to-br from-[#FF375F]/20 to-transparent"
+          disabled={!canAct}
+          className="ios-btn flex h-48 w-full flex-col items-center justify-center gap-3 rounded-3xl border border-[#FF375F]/30 bg-gradient-to-br from-[#FF375F]/20 to-transparent disabled:opacity-50"
         >
           <Flame size={38} className="text-[#FF375F]" />
           <span className="text-xl font-bold text-white">抽一张狂暴卡</span>

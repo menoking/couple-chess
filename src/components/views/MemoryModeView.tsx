@@ -1,9 +1,8 @@
 import { useDeckSeed, useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Brain, Check, Crown, Flame, Gift, Heart, RefreshCw, Star, Sun, User, UserRound, Zap } from 'lucide-react';
-import { Player, TaskCard, TaskEventData, Theme } from '../../types';
+import { Player, TaskCard, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, seededShuffle } from '../../utils/modeKit';
-import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface MemoryModeViewProps {
   players: Player[];
@@ -69,7 +68,12 @@ function MemoryGame({
   const [board, setBoard] = useModeState<Tile[]>('MemoryModeView.board', tiles);
   const [flips, setFlips] = useModeState<number[]>('MemoryModeView.flips', []);
   const [locked, setLocked] = useModeState('MemoryModeView.locked', false);
-  const [matchTask, setMatchTask] = useModeState<TaskEventData | null>('MemoryModeView.matchTask', null);
+  // 只存纯文本：TaskEventData 形状会被 extractCard 改写成公共卡片，
+  // 本地永远拿不到值，"配对成功→交回合"这条链就断了。
+  const [matchTask, setMatchTask] = useModeState<{ text: string; themeName: string } | null>(
+    'MemoryModeView.matchTask',
+    null
+  );
   const [pairCounts, setPairCounts] = useModeState<Record<number, number>>('MemoryModeView.pairCounts', { 0: 0, 1: 0 });
   const [finished, setFinished] = useModeState('MemoryModeView.finished', false);
   const timerRef = useRef<number | null>(null);
@@ -108,19 +112,7 @@ function MemoryGame({
       setPairCounts(prev => ({ ...prev, [byId]: (prev[byId] ?? 0) + 1 }));
       setFlips([]);
       // 配对成功后弹出真正的任务卡
-      const executorId = byId === 0 ? 1 : 0;
-      setMatchTask({
-        type: 'card',
-        initiatorPlayerId: byId,
-        executorPlayerId: executorId,
-        title: '配对成功 · 对方执行',
-        subtitle: `任务来自「${matched.themeName}」`,
-        icon: 'sparkles',
-        color: executorId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
-        task: matched.task.text,
-        taskSourceId: matched.themeId,
-        moveDelta: 0
-      });
+      setMatchTask({ text: matched.task.text, themeName: matched.themeName });
       return;
     }
 
@@ -186,7 +178,9 @@ function MemoryGame({
 
       <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-3 text-sm font-bold text-white">
         {activePlayer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-        {activePlayer?.name || '当前玩家'} 的回合：翻开两张相同的任务卡
+        {canAct
+          ? `${activePlayer?.name || '当前玩家'} 的回合：翻开两张相同的任务卡`
+          : `等 ${activePlayer?.name || '对方'} 翻牌…（你这边暂不可操作）`}
       </div>
 
       <div className="grid grid-cols-4 gap-2">
@@ -229,14 +223,34 @@ function MemoryGame({
         })}
       </div>
 
-      <TaskCardModal
-        players={players}
-        isOpen={!!matchTask}
-        taskData={matchTask}
-        onAccept={handleMatchTaskDone}
-        onReject={handleMatchTaskDone}
-        onClose={handleMatchTaskDone}
-      />
+      {matchTask && (
+        <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-5 backdrop-blur-md">
+          <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#1C1C1E] p-5 shadow-2xl">
+            <div className="flex items-center justify-between text-[10px] font-bold text-gray-500">
+              <span>配对成功 · 对方执行</span>
+              <span className="truncate">来自「{matchTask.themeName}」</span>
+            </div>
+            <div className="mt-3 text-base font-bold leading-relaxed text-white">{matchTask.text}</div>
+            <div className="mt-5">
+              {canAct ? (
+                <button
+                  type="button"
+                  onClick={handleMatchTaskDone}
+                  className="ios-btn h-13 w-full rounded-full bg-white py-3.5 text-sm font-bold text-black shadow-lg"
+                >
+                  <span className="flex items-center justify-center gap-1.5">
+                    <Check size={15} />完成任务，交给下一位
+                  </span>
+                </button>
+              ) : (
+                <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-500">
+                  等 {activePlayer?.name || '对方'} 完成任务
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
