@@ -1,8 +1,8 @@
-import { useModeAuthority, useModeState, useMyTurn } from '../../rules/ModeRuntime';
-import { useEffect, useState } from 'react';
+import { useDeckSeed, useModeAuthority, useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, Flame, RefreshCw, Timer, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
-import { buildTaskPool, pickRandom } from '../../utils/modeKit';
+import { buildTaskPool, pickRandom, seededShuffle } from '../../utils/modeKit';
 import { EDGE_LADDER } from '../../data/spicyContent';
 
 interface EdgeModeViewProps {
@@ -22,12 +22,31 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
   const [breakerId, setBreakerId] = useModeState<number | null>('EdgeModeView.breakerId', null);
   const [forcedLoss, setForcedLoss] = useModeState('EdgeModeView.forcedLoss', false);
   const [now, setNow] = useState(() => Date.now());
+  // 每轮换人后轮次 +1，用它挑一批新的关卡任务（两端用同一个种子算，结果一致）
+  const [round, setRound] = useModeState('EdgeModeView.round', 0);
+  // 结算任务只抽一次并存下来，避免每次重渲染都换一句
+  const [resultTask, setResultTask] = useModeState<{ text: string; themeName: string } | null>(
+    'EdgeModeView.resultTask',
+    null
+  );
+  const deckSeed = useDeckSeed();
+  const switchLock = useRef(false);
   const authority = useModeAuthority();
 
   const attacker = players.find(player => player.id === attackerId) ?? players[0];
   const defender = players.find(player => player.id !== attackerId) ?? players[1];
   const level = EDGE_LADDER[levelIndex];
   const pool = buildTaskPool(players, themes) ?? [];
+  // 同一轮两端算出同一份动作：按房间种子把变体排成一个固定顺序，
+  // 每换一次人往前走一格 —— 必然换一句，且会把所有变体都用到。
+  const levelActions = EDGE_LADDER.map((item, index) => {
+    const order = seededShuffle(
+      item.actions.map((_, at) => at),
+      `${deckSeed}:edge-order:${index}`
+    );
+    return item.actions[order[round % order.length]] ?? item.actions[0];
+  });
+  const levelAction = levelActions[levelIndex];
 
   // 推进方负责「开始计时」，承受方负责「认输 / 继续」
   const attackerCanAct = useMyTurn(attackerId);
@@ -56,12 +75,18 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
     setPhase('running');
   };
 
+  const rollResultTask = () => {
+    const entry = pickRandom(pool);
+    setResultTask(entry ? { text: entry.task.text, themeName: entry.themeName } : null);
+  };
+
   const holdOn = () => {
     if (!defenderCanAct) return;
     // 撑住 → 进入下一级；撑满五级则推进方失败
     if (levelIndex + 1 >= EDGE_LADDER.length) {
       setBreakerId(attackerId);
       setForcedLoss(true);
+      rollResultTask();
       setPhase('result');
       return;
     }
@@ -73,22 +98,29 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
     if (!defenderCanAct) return;
     setBreakerId(defender.id);
     setForcedLoss(false);
+    rollResultTask();
     setPhase('result');
   };
 
   const switchRoles = () => {
+    if (switchLock.current) return;
+    switchLock.current = true;
     setAttackerId(prev => (prev === 0 ? 1 : 0));
     setLevelIndex(0);
     setDeadline(0);
     setBreakerId(null);
     setForcedLoss(false);
+    setResultTask(null);
+    // 轮次前进 → 下一局五个关卡都换成另一批动作
+    setRound(value => value + 1);
     setPhase('ready');
+    window.setTimeout(() => { switchLock.current = false; }, 400);
   };
 
   if (phase === 'result' && breakerId !== null) {
     const loser = players.find(player => player.id === breakerId);
     const winner = players.find(player => player.id !== breakerId);
-    const task = pickRandom(pool);
+    const task = resultTask;
 
     return (
       <div className="space-y-4">
@@ -107,7 +139,7 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
         {task && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5">
             <div className="text-xs font-bold text-gray-500">{loser?.name} 要完成的任务</div>
-            <div className="mt-2 text-base font-semibold leading-relaxed text-white">{task.task.text}</div>
+            <div className="mt-2 text-base font-semibold leading-relaxed text-white">{task.text}</div>
             <div className="mt-1 text-[11px] text-gray-500">来自「{task.themeName}」</div>
           </div>
         )}
@@ -148,7 +180,7 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
 
       <div className="rounded-3xl border border-[#FF375F]/25 bg-[#FF375F]/[0.07] p-5">
         <div className="text-xs font-bold text-[#FF7A96]">第 {level.level} 级 · {level.title}</div>
-        <div className="mt-3 text-base font-bold leading-relaxed text-white">{level.action}</div>
+        <div className="mt-3 text-base font-bold leading-relaxed text-white">{levelAction}</div>
         <div className="mt-3 flex items-center gap-1.5 text-[11px] font-bold text-gray-500">
           <Timer size={12} />需要保持 {level.seconds} 秒
         </div>
