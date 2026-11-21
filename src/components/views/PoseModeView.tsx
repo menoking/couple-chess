@@ -1,8 +1,9 @@
 import { ArrowLeft, ImageIcon, User, UserRound } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { useModeRuntime } from '../../rules/ModeRuntime';
+import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
 import { Player } from '../../types';
 import { POSE_IMAGES } from '../../data/poseImages';
+import { pickFresh } from '../../utils/freshPick';
 
 interface PoseModeViewProps {
   players: Player[];
@@ -25,6 +26,8 @@ export function PoseModeView({
   const runtime = useModeRuntime();
   const mySeat = runtime?.seat ?? null;
   const [submitting, setSubmitting] = useState(false);
+  /** 已经抽过的姿势图：同一局不再重复，整副抽完才重新洗牌 */
+  const [usedPoses, setUsedPoses] = useModeState<string[]>('PoseModeView.usedPoses', []);
   const activePlayer = players[currentTurn];
 
   // 回合切换后解除提交锁
@@ -42,9 +45,14 @@ export function PoseModeView({
       return;
     }
 
-    const imageSrc = POSE_IMAGES[Math.floor(Math.random() * POSE_IMAGES.length)];
+    const picked = pickFresh(POSE_IMAGES, usedPoses, src => src);
+    if (!picked) {
+      alert('public/img 目录下还没有可抽取的图片');
+      return;
+    }
+    setUsedPoses(picked.used);
     setSubmitting(true);
-    onPoseTrigger(imageSrc);
+    onPoseTrigger(picked.item);
     // 抽完一张姿势卡交给对方
     onEndTurn();
   };
@@ -145,7 +153,7 @@ export function PoseModeView({
           </div>
           <div className="text-2xl font-bold text-white">抽取姿势</div>
           <div className="text-sm text-gray-500 uppercase tracking-widest mt-3">
-            点击抽卡
+            点击抽卡 · 还剩 {Math.max(0, POSE_IMAGES.length - usedPoses.length)} 张没抽过
           </div>
         </button>
       </div>

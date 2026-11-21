@@ -5,7 +5,7 @@
 ```
 src/
   main.tsx            入口，挂 AppErrorBoundary（崩溃时显示错误而不是黑屏）
-  App.tsx             同屏运行时 + 云会话 + 视图路由（Home / 22 个玩法 / 主题页）
+  App.tsx             同屏运行时 + 云会话 + 视图路由（Home / 23 个玩法 / 主题页）
   hooks/
     useGameState.ts   单机全部状态：players/themes/turn/board/bingo/mine/taskData…
                       以及 canStartGameMode（开局前校验双方题库是否够用）
@@ -17,17 +17,18 @@ src/
     lobby.ts          双方卡包合并去重
     identity.ts       性别 → 座位 / 先手 / 主题包归属
     modeRules.ts      同屏与联机共用的落格、Bingo、扫雷任务构造函数
+    jubensha.ts       双人剧本杀状态机：阶段流转 / 选角 / 线索分桶 / 结局匹配 / 断点存档
     types.ts          RoomSnapshot / RoomAction / Seat 等
   cloud/
     client.ts         Supabase 客户端（无 env 时为 null）
     rooms.ts          房间号、Presence 选举房主、心跳、发现同空间的房间
     transport.ts      Supabase Broadcast + 座位频道；本地无云时用 BroadcastChannel 兜底
     useSharedRoom.ts  房主权威运行时：乐观更新、批量上报、节流广播、兜底快照
-    OnlineStage.tsx   联机大厅（选包 / 免卡包直接开局）+ 渲染 22 个玩法视图
+    OnlineStage.tsx   联机大厅（选包 / 免卡包直接开局）+ 渲染 23 个玩法视图
     diagnostics.ts    BUILD_TAG + 事件日志（真机排查核心）
     useCloud.ts       账号、登录、云端题库同步
-  components/views/   22 个玩法视图（*ModeView.tsx）
-  data/               题库与内容（storyFragments / survivalEvents / quizQuestions …）
+  components/views/   23 个玩法视图（*ModeView.tsx）
+  data/               题库与内容（storyFragments / survivalEvents / quizQuestions / jubensha 剧本 …）
 ```
 
 ## 两条运行链路
@@ -99,6 +100,18 @@ App.enterOnline(mode)
 - 房主每 1.5 秒补发一次公共快照（`room-sync`，卡面置空），座位频道丢包也能自愈。
 - 收到 `seq` 更小的旧快照直接丢弃（`room:view-stale`）。
 - Presence 用**设备号**作 key（不是座位号），才能发现「两台设备抢同一座位」。
+
+## 长对局的状态与存档（双人剧本杀）
+
+剧本杀不靠 turn，而是一条显式阶段链：
+`script_select → role_select → act_reading → act_clues → act_decision → ending_reveal`。
+
+- 阶段、幕次、Ready、已分享线索、已揭晓抉择放在一个可序列化的 `JubenshaGame` 对象里，
+  `useModeState('JubenshaModeView.game', createEmptyGame)` 读写；同屏 / 联机共用同一份视图。
+- 私人状态（角色笔记、已读线索、自己的暗投）走 `@s0/@s1` 私有槽，`viewFor` 会过滤。
+- 双方都 Ready 后由权威端推进阶段；抉择走 `sealSubmit`，都提交后房主写 `...decision.revealed`。
+- 房主端把 `JubenshaGame` 立即写入 `couples-ludo-jubensha:<scriptId>`（`saveToStorageNow`），
+  刷新 / 重进可继续；同屏也是同一套逻辑。不要用延迟队列，否则最后一步会丢。
 
 ## 同屏 / 联机的差异边界
 

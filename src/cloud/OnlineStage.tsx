@@ -34,6 +34,7 @@ import { TruthDareModeView } from '../components/views/TruthDareModeView';
 import { GambleModeView } from '../components/views/GambleModeView';
 import { EdgeModeView } from '../components/views/EdgeModeView';
 import { RoleplayModeView } from '../components/views/RoleplayModeView';
+import { JubenshaModeView } from '../components/views/JubenshaModeView';
 import { SudokuModeView } from '../components/views/SudokuModeView';
 import { GoModeView } from '../components/views/GoModeView';
 import { BluffDiceModeView } from '../components/views/BluffDiceModeView';
@@ -81,8 +82,16 @@ const AUDIENCE_LABEL: Record<Theme['audience'], string> = {
   female: '女方'
 };
 
-function poolTask(snap: RoomSnapshot, executorSeat: Seat, reason = '抽到一张任务卡'): TaskEventData {
-  const card = cardFor(snap.cardPool, snap.cardSeq + 1);
+function poolTask(
+  snap: RoomSnapshot,
+  executorSeat: Seat,
+  reason = '抽到一张任务卡',
+  excludeKeys: readonly string[] = []
+): TaskEventData {
+  // 本局抽过的卡不再重复下发；整副抽空后自动重新洗牌
+  const remaining = snap.cardPool.filter(card => !excludeKeys.includes(`${card.task}:0`));
+  const pool = remaining.length > 0 ? remaining : snap.cardPool;
+  const card = cardFor(pool, snap.cardSeq + 1);
   return {
     type: 'card',
     initiatorPlayerId: other(executorSeat),
@@ -748,9 +757,20 @@ export function OnlineStage(props: OnlineStageProps) {
   const mineBoard = (data['stage.mineBoard'] as MineTile[] | undefined) ?? [];
   const bingoBoard = data['stage.bingoBoard'] as BingoBoard | undefined;
   const patch = shared.runtime.patch;
+  /** 本局已经抽过的任务 key：所有落格 / 抽卡玩法共用，抽过的不会再重复 */
+  const drawnTasks = (data['cards.drawn'] as string[] | undefined) ?? [];
 
   const enqueue = (task: TaskEventData | null | undefined) => {
     const found = extractCard(task ?? null);
+    if (task?.task) {
+      // key 与同屏保持一致：任务文本 + 步数
+      const key = `${task.task}:${task.moveDelta ?? 0}`;
+      // 读最新值再写，避免一帧内连抽两张时后一张把前一张的记录覆盖掉
+      const latest = (shared.runtime.get('cards.drawn') as string[] | undefined) ?? drawnTasks;
+      if (!latest.includes(key)) {
+        patch('cards.drawn', [...latest, key].slice(-300));
+      }
+    }
     dispatch({
       type: 'enqueueCard',
       drawerSeat: found?.drawerSeat ?? other(mySeat),
@@ -763,20 +783,21 @@ export function OnlineStage(props: OnlineStageProps) {
 
   const endTurn = () => dispatch({ type: 'endTurn', seat: mySeat });
   const onBack = onExit;
-  const onDrawTask = () => poolTask(snap, other(mySeat));
+  const onDrawTask = (excludeKeys: readonly string[] = []) =>
+    poolTask(snap, other(mySeat), '抽到一张任务卡', [...drawnTasks, ...excludeKeys]);
   const onTaskTrigger = (task: TaskEventData) => enqueue(task);
   // 扫雷炸弹：三选一由对方指定（与同屏 chooseMineBombTask 一致）
   const onBombTrigger = () => setBombOpen(true);
   const onChooseBomb = (choice: MineTaskChoice) => {
     setBombOpen(false);
     const turnSeat: Seat = currentTurn === 1 ? 1 : 0;
-    const task = createMineTaskEvent(players, onlineThemes, turnSeat, choice, other(turnSeat));
+    const task = createMineTaskEvent(players, onlineThemes, turnSeat, choice, other(turnSeat), drawnTasks);
     if (task) enqueue(task);
     else endTurn();
   };
   const onPoseTrigger = (src: string) => patch('stage.poseImage', src);
   const onCheckTile = (landingStep: number): TaskEventData | 'win' | null =>
-    resolveBoardTile({ landingStep, players, themes: onlineThemes, turn: currentTurn, boardMap });
+    resolveBoardTile({ landingStep, players, themes: onlineThemes, turn: currentTurn, boardMap, usedTasks: drawnTasks });
   const onRevealTile = (index: number): MineRevealResult | null => {
     const board = [...mineBoard];
     if (!board[index] || board[index].revealed) return null;
@@ -786,18 +807,21 @@ export function OnlineStage(props: OnlineStageProps) {
     if (type === 'blank') return { type: 'blank' };
     if (type === 'bomb') return { type: 'bomb' };
     const choice: MineTaskChoice = type === 'truth' ? 'truth' : type === 'dare' ? 'dare' : 'theme';
-    const task = createMineTaskEvent(players, onlineThemes, currentTurn, choice);
+    const task = createMineTaskEvent(players, onlineThemes, currentTurn, choice, undefined, drawnTasks);
     return task ? { type: 'task', task } : { type: 'blank' };
   };
   const onCompleteCell = (index: number): BingoCellResult | null => {
     if (!bingoBoard) return null;
-    const done = completeBingoCellOnBoard(bingoBoard, index, currentTurn, players, onlineThemes);
+    const done = completeBingoCellOnBoard(bingoBoard, index, currentTurn, players, onlineThemes, drawnTasks);
     if (!done) return null;
     patch('stage.bingoBoard', done.board);
     return done.result;
   };
   // restart 会清空玩法局部状态，房主 effect 随即重生成 Bingo 棋盘
-  const onRestart = () => dispatch({ type: 'restart', seat: mySeat });
+  const onRestart = () => {
+    patch('cards.drawn', []);
+    dispatch({ type: 'restart', seat: mySeat });
+  };
 
   const common = { players, themes: onlineThemes, currentTurn, onBack, onEndTurn: endTurn };
   const withThemes = { players, themes: onlineThemes, onBack };
@@ -857,6 +881,8 @@ export function OnlineStage(props: OnlineStageProps) {
         return <EdgeModeView {...withThemes} />;
       case 'roleplay':
         return <RoleplayModeView players={players} onBack={onBack} />;
+      case 'jubensha':
+        return <JubenshaModeView players={players} onBack={onBack} />;
       case 'sudoku':
         return <SudokuModeView {...common} />;
       case 'go':

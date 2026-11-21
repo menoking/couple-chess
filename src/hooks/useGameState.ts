@@ -30,6 +30,7 @@ import {
   isThemeAllowedForRole
 } from '../rules/modeRules';
 import { loadFromStorage, saveToStorage } from '../utils/localStorage';
+import { taskKeyOf } from '../utils/freshPick';
 import { generateSpiralPath, generateBoardMap, calculateNewPosition, generateMineBoard, generateBingoBoard, BINGO_BOARD_SIZE } from '../utils/gameLogic';
 import { DEFAULT_THEMES } from '../data/defaultThemes';
 
@@ -76,7 +77,8 @@ const GAME_MODE_VALUES: GameMode[] = [
   'sudoku',
   'go',
   'bluff',
-  'jungle'
+  'jungle',
+  'jubensha'
 ];
 
 const VIEW_VALUES: GameView[] = [
@@ -103,6 +105,7 @@ const VIEW_VALUES: GameView[] = [
   'go',
   'bluff',
   'jungle',
+  'jubensha',
   'themes'
 ];
 
@@ -128,7 +131,8 @@ const MODE_VIEW: Record<GameMode, GameView> = {
   sudoku: 'sudoku',
   go: 'go',
   bluff: 'bluff',
-  jungle: 'jungle'
+  jungle: 'jungle',
+  jubensha: 'jubensha'
 };
 
 const VIEW_MODE: Record<string, GameMode> = {
@@ -154,7 +158,8 @@ const VIEW_MODE: Record<string, GameMode> = {
   sudoku: 'sudoku',
   go: 'go',
   bluff: 'bluff',
-  jungle: 'jungle'
+  jungle: 'jungle',
+  jubensha: 'jubensha'
 };
 
 /** 自备内容、不需要选择主题的玩法。 */
@@ -444,7 +449,10 @@ function normalizeGameState(saved: unknown): GameState | null {
     pathCoords: Array.isArray(s.pathCoords) ? s.pathCoords : generateSpiralPath(),
     mineBoard: normalizeMineBoard(s.mineBoard),
     bingoBoard,
-    isRolling: false
+    isRolling: false,
+    usedCardKeys: Array.isArray(s.usedCardKeys)
+      ? s.usedCardKeys.filter((key): key is string => typeof key === 'string')
+      : []
   };
 }
 
@@ -494,14 +502,18 @@ function canStartGameMode(mode: GameMode, players: Player[], themes: Theme[]) {
 function createRandomTaskEvent(
   players: Player[],
   themes: Theme[],
-  playerId: number
+  playerId: number,
+  excludeKeys: readonly string[] = []
 ): TaskEventData | null {
   const player = players.find(p => p.id === playerId);
   if (!player?.themeId) return null;
 
   const theme = themes.find(t => t.id === player.themeId);
   if (!theme || !isThemeAllowed(theme, player.role, 'card') || theme.tasks.length === 0) return null;
-  const task = chooseRandomTask(theme);
+  // 本局已经抽过的卡不再出现；整副抽空后自动重新洗牌
+  const remaining = theme.tasks.filter(task => !excludeKeys.includes(taskKeyOf(task)));
+  const candidates = remaining.length > 0 ? remaining : theme.tasks;
+  const task = candidates[Math.floor(Math.random() * candidates.length)];
 
   if (!task) return null;
 
@@ -538,7 +550,8 @@ export function useGameState() {
       pathCoords: generateSpiralPath(),
       mineBoard: generateMineBoard(),
       bingoBoard: null,
-      isRolling: false
+      isRolling: false,
+      usedCardKeys: []
     };
   });
 
@@ -554,6 +567,8 @@ export function useGameState() {
     setState(prev => ({
       ...prev,
       gameMode: mode,
+      // 换玩法或重开：上一局抽过的记录作废
+      usedCardKeys: [],
       players:
         mode === prev.gameMode
           ? prev.players
@@ -728,14 +743,29 @@ export function useGameState() {
       pathCoords: generateSpiralPath(),
       mineBoard: generateMineBoard(),
       bingoBoard,
-      isRolling: false
+      isRolling: false,
+      usedCardKeys: []
     }));
     return true;
   }, [state.gameMode, state.players, state.themes]);
 
-  const drawCardTask = useCallback((): TaskEventData | null => {
-    return createRandomTaskEvent(state.players, state.themes, state.turn);
-  }, [state.players, state.themes, state.turn]);
+  const drawCardTask = useCallback((excludeKeys: readonly string[] = []): TaskEventData | null => {
+    // 本局已经抽过的（含卡牌视图自己维护的灰卡记录）一起排除
+    const used = [...(state.usedCardKeys ?? []), ...excludeKeys];
+    return createRandomTaskEvent(state.players, state.themes, state.turn, used);
+  }, [state.players, state.themes, state.turn, state.usedCardKeys]);
+
+  /** 任何玩法弹出任务时都记一笔，后续抽卡不再重复同一条 */
+  const noteDrawnTask = useCallback((task: { text: string; moveDelta?: number }) => {
+    if (!task.text) return;
+    const key = taskKeyOf(task);
+    setState(prev => {
+      const used = prev.usedCardKeys ?? [];
+      if (used.includes(key)) return prev;
+      // 只留最近 300 条：够覆盖一整局，又不会让快照无限长
+      return { ...prev, usedCardKeys: [...used, key].slice(-300) };
+    });
+  }, []);
 
   const revealMineTile = useCallback((index: number): MineRevealResult | null => {
     const tile = state.mineBoard[index];
@@ -755,10 +785,10 @@ export function useGameState() {
 
     const choice: MineTaskChoice =
       tile.type === 'truth' ? 'truth' : tile.type === 'dare' ? 'dare' : 'theme';
-    const task = createMineTaskEvent(state.players, state.themes, activePlayer.id, choice);
+    const task = createMineTaskEvent(state.players, state.themes, activePlayer.id, choice, undefined, state.usedCardKeys);
 
     return task ? { type: 'task', task } : { type: 'blank' };
-  }, [state.mineBoard, state.players, state.themes, state.turn]);
+  }, [state.mineBoard, state.players, state.themes, state.turn, state.usedCardKeys]);
 
   const chooseMineBombTask = useCallback((choice: MineTaskChoice): TaskEventData | null => {
     const activePlayer = state.players[state.turn];
@@ -766,8 +796,8 @@ export function useGameState() {
 
     if (!activePlayer || !opponent) return null;
 
-    return createMineTaskEvent(state.players, state.themes, activePlayer.id, choice, opponent.id);
-  }, [state.players, state.themes, state.turn]);
+    return createMineTaskEvent(state.players, state.themes, activePlayer.id, choice, opponent.id, state.usedCardKeys);
+  }, [state.players, state.themes, state.turn, state.usedCardKeys]);
 
   const completeBingoCell = useCallback((index: number): BingoCellResult | null => {
     const board = state.bingoBoard;
@@ -794,7 +824,7 @@ export function useGameState() {
       const ownTheme = state.themes.find(t => t.id === activePlayer.themeId);
       const rewardTheme = opponentTheme && opponentTheme.tasks.length > 0 ? opponentTheme : ownTheme;
       if (rewardTheme && rewardTheme.tasks.length > 0) {
-        rewardTask = chooseRandomTask(rewardTheme);
+        rewardTask = chooseRandomTask(rewardTheme, state.usedCardKeys);
         rewardThemeName = rewardTheme.name;
       }
     }
@@ -808,7 +838,7 @@ export function useGameState() {
       rewardThemeName,
       boardComplete: cells.every(cell => cell.completedBy !== null)
     };
-  }, [state.bingoBoard, state.players, state.themes, state.turn]);
+  }, [state.bingoBoard, state.players, state.themes, state.turn, state.usedCardKeys]);
 
   const restartBingo = useCallback(() => {
     setState(prev => {
@@ -853,6 +883,8 @@ export function useGameState() {
   const checkTile = useCallback((landingStep: number): TaskEventData | 'win' | null => {
     const activePlayer = state.players[state.turn];
     const opponent = state.players[state.turn === 0 ? 1 : 0];
+    // 落格奖励也走同一份「已抽过」记录，不会反复抽到同一条
+    const usedTasks = state.usedCardKeys ?? [];
 
     if (landingStep === 48) {
       return 'win';
@@ -860,7 +892,7 @@ export function useGameState() {
 
     if (landingStep !== 0 && landingStep === opponent.step) {
       const theme = state.themes.find(t => t.id === activePlayer.themeId);
-      const task = chooseRandomTask(theme);
+      const task = chooseRandomTask(theme, usedTasks);
       if (!task) return null;
 
       return buildTaskEvent({
@@ -880,7 +912,7 @@ export function useGameState() {
 
     if (tileType === 'lucky') {
       const theme = state.themes.find(t => t.id === activePlayer.themeId);
-      const task = chooseRandomTask(theme);
+      const task = chooseRandomTask(theme, usedTasks);
       if (!task) return null;
 
       return buildTaskEvent({
@@ -898,7 +930,7 @@ export function useGameState() {
 
     if (tileType === 'trap') {
       const theme = state.themes.find(t => t.id === opponent.themeId);
-      const task = chooseRandomTask(theme);
+      const task = chooseRandomTask(theme, usedTasks);
       if (!task) return null;
 
       return buildTaskEvent({
@@ -915,7 +947,7 @@ export function useGameState() {
     }
 
     return null;
-  }, [state.players, state.turn, state.themes, state.boardMap]);
+  }, [state.players, state.turn, state.themes, state.boardMap, state.usedCardKeys]);
 
   const resolveTask = useCallback((task: TaskEventData, outcome: 'accept' | 'reject') => {
     setState(prev => {
@@ -967,7 +999,8 @@ export function useGameState() {
       pathCoords: generateSpiralPath(),
       mineBoard: generateMineBoard(),
       bingoBoard: null,
-      isRolling: false
+      isRolling: false,
+      usedCardKeys: []
     }));
   }, []);
 
@@ -985,6 +1018,7 @@ export function useGameState() {
     importThemeTasks,
     startGame,
     drawCardTask,
+    noteDrawnTask,
     revealMineTile,
     chooseMineBombTask,
     completeBingoCell,

@@ -2,7 +2,7 @@ import { useModeState } from '../../rules/ModeRuntime';
 
 import { ArrowLeft, RefreshCw, Theater, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
-import { pickRandom } from '../../utils/modeKit';
+import { pickFresh } from '../../utils/freshPick';
 import { ROLEPLAY_SCRIPTS } from '../../data/spicyContent';
 
 interface RoleplayModeViewProps {
@@ -14,9 +14,16 @@ interface RoleplayModeViewProps {
 function RoleplayGame({ players, onExit }: { players: Player[]; onExit: () => void }) {
   const [script, setScript] = useModeState<typeof ROLEPLAY_SCRIPTS[number] | null>('RoleplayModeView.script', null);
   const [revealed, setRevealed] = useModeState('RoleplayModeView.revealed', false);
+  /** 已经抽过的剧本：同一局不再重复，全部演过才重新洗牌 */
+  const [usedScripts, setUsedScripts] = useModeState<string[]>('RoleplayModeView.usedScripts', []);
+  const [notice, setNotice] = useModeState<string | null>('RoleplayModeView.notice', null);
 
   const draw = () => {
-    setScript(pickRandom(ROLEPLAY_SCRIPTS) ?? ROLEPLAY_SCRIPTS[0]);
+    const picked = pickFresh(ROLEPLAY_SCRIPTS, usedScripts, item => item.forcedLine);
+    if (!picked) return;
+    setUsedScripts(picked.used);
+    setNotice(picked.reset ? '所有剧本都演过了，重新洗好一套' : null);
+    setScript(picked.item);
     setRevealed(false);
   };
 
@@ -30,6 +37,12 @@ function RoleplayGame({ players, onExit }: { players: Player[]; onExit: () => vo
         <User size={15} className="text-[#0A84FF]" />{first?.name || '男方'} × {second?.name || '女方'}<UserRound size={15} className="text-[#FF375F]" />
       </div>
 
+      {notice && (
+        <div className="rounded-2xl border border-[#BF5AF2]/25 bg-[#BF5AF2]/10 px-4 py-2.5 text-center text-[11px] font-bold text-[#D08BFF]">
+          {notice}
+        </div>
+      )}
+
       {!script ? (
         <button
           type="button"
@@ -39,6 +52,9 @@ function RoleplayGame({ players, onExit }: { players: Player[]; onExit: () => vo
           <Theater size={38} className="text-[#D08BFF]" />
           <span className="text-xl font-bold text-white">抽取角色剧本</span>
           <span className="text-xs text-gray-500">人设 + 场景 + 剧情走向 + 强制台词</span>
+          <span className="text-[10px] text-gray-600">
+            本局还剩 {Math.max(0, ROLEPLAY_SCRIPTS.length - usedScripts.length)} 个剧本没演过
+          </span>
         </button>
       ) : (
         <div className="space-y-4">
@@ -94,6 +110,16 @@ function RoleplayGame({ players, onExit }: { players: Player[]; onExit: () => vo
 
 export function RoleplayModeView({ players, onBack }: RoleplayModeViewProps) {
   const [runId, setRunId] = useModeState('RoleplayModeView.runId', 0);
+  const [, setUsedScripts] = useModeState<string[]>('RoleplayModeView.usedScripts', []);
+  const [, setScript] = useModeState<typeof ROLEPLAY_SCRIPTS[number] | null>('RoleplayModeView.script', null);
+  const [, setNotice] = useModeState<string | null>('RoleplayModeView.notice', null);
+
+  const restart = () => {
+    setUsedScripts([]);
+    setScript(null);
+    setNotice(null);
+    setRunId(value => value + 1);
+  };
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">
@@ -114,7 +140,7 @@ export function RoleplayModeView({ players, onBack }: RoleplayModeViewProps) {
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 no-scrollbar">
           <RoleplayGame key={runId} players={players} onExit={onBack} />
-          <button type="button" onClick={() => setRunId(value => value + 1)} className="ios-btn mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-5 py-2.5 text-xs font-bold text-gray-400">
+          <button type="button" onClick={restart} className="ios-btn mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-5 py-2.5 text-xs font-bold text-gray-400">
             <RefreshCw size={13} />重新开始
           </button>
         </main>

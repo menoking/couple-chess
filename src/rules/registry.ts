@@ -18,7 +18,8 @@ export const THEME_FREE_MODES: ReadonlySet<GameMode> = new Set<GameMode>([
   'quiz',
   'story',
   'gamble',
-  'roleplay'
+  'roleplay',
+  'jubensha'
 ]);
 
 /** 该玩法开局是否需要选卡包。 */
@@ -60,7 +61,8 @@ export const MODE_REGISTRY: ModeDef[] = [
   { key: 'trutndare', label: '真心话大冒险', category: 'public', cardRule: '从真心话 / 大冒险 / 主题卡池抽 1 张，本人执行' },
   { key: 'gamble', label: '赌局轮盘', category: 'timed', cardRule: '转盘停在哪档就执行哪档，不额外抽卡' },
   { key: 'edge', label: '高潮边缘', category: 'timed', cardRule: '按关卡推进的限时挑战，不额外抽卡' },
-  { key: 'roleplay', label: '角色扮演', category: 'public', cardRule: '抽取剧本并按剧情推进，不额外抽卡' }
+  { key: 'roleplay', label: '角色扮演', category: 'public', cardRule: '抽取剧本并按剧情推进，不额外抽卡' },
+  { key: 'jubensha', label: '双人剧本杀', category: 'hidden', cardRule: '分幕读本、搜证分享与密封抉择，按选择组合进入不同结局' }
 ];
 
 export const ALL_MODE_KEYS: GameMode[] = MODE_REGISTRY.map(item => item.key);

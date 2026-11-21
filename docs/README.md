@@ -1,6 +1,6 @@
 # 情侣飞行棋 · 项目文档（面向 agent / 新接手的人）
 
-双人互动游戏合集：**22 个玩法**，支持「一台手机同屏」和「两台设备联机」。
+双人互动游戏合集：**23 个玩法**，支持「一台手机同屏」和「两台设备联机」。
 联机不是另写一套，而是复用同屏的同一份规则和同一批视图组件。
 
 ## 30 秒速览
@@ -35,7 +35,7 @@ npm run build      # 产物在 dist/
 |---|---|
 | `src/rules/` | 房间 reducer、抽卡状态机、玩法注册表、共享状态 hook、性别座位映射 |
 | `src/cloud/` | Supabase 传输、房间选举、联机舞台、云端账号与题库同步、诊断 |
-| `src/components/views/` | 22 个玩法视图（同屏 / 联机共用） |
+| `src/components/views/` | 23 个玩法视图（同屏 / 联机共用） |
 | `src/components/modals/` | 任务卡、炸弹三选一、胜负等弹窗 |
 | `src/hooks/useGameState.ts` | **单机**全部状态与开局校验 |
 | `src/data/` | 默认题库、故事碎片、生存事件、问答题库、生成好的姿势图清单 |
@@ -46,7 +46,7 @@ npm run build      # 产物在 dist/
 ## 文档索引
 
 - [architecture.md](./architecture.md) — 目录地图、同屏/联机两条链路、房间状态模型、消息可靠性
-- [game-modes.md](./game-modes.md) — 22 个玩法清单（是否需要卡包、抽卡规则、回合归属）+ 新增玩法清单
+- [game-modes.md](./game-modes.md) — 23 个玩法清单（是否需要卡包、抽卡规则、回合归属）+ 新增玩法清单
 - [conventions.md](./conventions.md) — 必须遵守的约定与高频 bug 模式（**改代码前先看这个**）
 - [operations.md](./operations.md) — 环境变量、联机配置、部署、诊断面板判读、常见问题
 

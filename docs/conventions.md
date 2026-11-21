@@ -75,7 +75,27 @@ const queue = useModeState('X.queue', () =>
 - 收到 `seq` 更小的旧快照必须丢弃（`room:view-stale`），否则界面会退回上一帧。
 - 一次性写多个键时，能合并就合并；分散写很容易撞上每秒消息上限，丢掉的那条若是 `turn` 就表现为「对面没跟上」。
 
-## 9. 其它工程约定
+## 9. 一次性内容必须「不可重复」
+
+抽任务 / 抽题 / 抽剧本这类内容，同一局里不能反复抽到同一条。统一走
+`src/utils/freshPick.ts` 的 `pickFresh(items, used, keyOf)`：
+
+```ts
+const picked = pickFresh(pool, used, item => taskKeyOf(item));
+if (!picked) return;
+setUsed(picked.used);        // 写回共享状态，联机两端同一份记录
+```
+
+- `used` 是「本局已抽过的 key」数组；池抽空后 `pickFresh` 自动洗牌（`reset: true`），
+  不会出现「抽完就永远抽不到」。
+- 轮盘 / 剧本 / 姿势这类有独立抽取动作的玩法，`used` 放各自的 `useModeState`；
+  飞行棋 / 扫雷 / Bingo / 卡牌共用 `GameState.usedCardKeys`（同屏）和
+  `data['cards.drawn']`（联机），由 `chooseRandomTask(theme, used)` 排除。
+- 联机取卡 `cardFor` 已改成**线性轮转**，连续抽卡会把卡池走完一遍才回绕；
+  不要改回哈希取模，小池子会连续撞同一张。
+- 牌堆记录要跟着「重新开始」清空，否则新一局会接着上一局的已抽列表。
+
+## 10. 其它工程约定
 
 - 仓库里的源码是 **CRLF** 行尾；用脚本改写文件时保持原行尾（Python 用 `newline=''`，否则整文件 diff）。
 - 不要在 `src/data/poseImages.ts` 上手改——它由 `npm run generate:poses` 生成。

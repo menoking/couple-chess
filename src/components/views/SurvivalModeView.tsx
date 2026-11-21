@@ -3,7 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, Heart, HeartPulse, RefreshCw, Timer, User, UserRound, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { SURVIVAL_EVENTS, SURVIVAL_MAX_HEARTS, SURVIVAL_TOTAL_ROUNDS, SurvivalEvent } from '../../data/survivalEvents';
-import { ThemeTaskEntry, collectThemeTasks, pickRandom, seededShuffle } from '../../utils/modeKit';
+import { ThemeTaskEntry, collectThemeTasks, seededShuffle } from '../../utils/modeKit';
+import { pickFresh, taskKeyOf } from '../../utils/freshPick';
 
 interface SurvivalModeViewProps {
   players: Player[];
@@ -45,6 +46,8 @@ function SurvivalGame({
   const [points, setPoints] = useModeState('SurvivalModeView.points', 0);
   const [activeEvent, setActiveEvent] = useModeState<SurvivalEvent | null>('SurvivalModeView.activeEvent', null);
   const [currentTask, setCurrentTask] = useModeState<SurvivalTask | null>('SurvivalModeView.currentTask', null);
+  /** 已经做过的任务：同一局不再重复，抽空了自动洗牌 */
+  const [usedTasks, setUsedTasks] = useModeState<string[]>('SurvivalModeView.usedTasks', []);
   const [notice, setNotice] = useModeState<string | null>('SurvivalModeView.notice', null);
   // 用截止时间而不是每秒写一次共享状态：两端各自算剩余秒数，不会互相覆盖
   const [deadline, setDeadline] = useModeState('SurvivalModeView.deadline', 0);
@@ -113,11 +116,12 @@ function SurvivalGame({
 
   const drawEvent = () => {
     if (!canAct) return;
-    const [event, ...rest] = eventDeck;
-    if (!event) {
-      setActiveEvent(SURVIVAL_EVENTS[0]);
-      return;
-    }
+    // 事件牌堆抽空后按本轮重新洗一遍，不会把上一轮的事件顺序原样再来
+    const deck = eventDeck.length > 0
+      ? eventDeck
+      : seededShuffle(SURVIVAL_EVENTS, `${deckSeed}:survival:${round}`);
+    const [event, ...rest] = deck;
+    if (!event) return;
     setEventDeck(rest);
     setActiveEvent(event);
     setNotice(null);
@@ -126,15 +130,16 @@ function SurvivalGame({
 
   const openTask = () => {
     if (!canAct) return;
-    const entry = pickRandom(pool);
-    if (!entry) {
+    const picked = pickFresh(pool, usedTasks, entry => taskKeyOf(entry.task));
+    if (!picked) {
       setNotice('当前玩家没有可用任务，按跳过处理');
       resolveTask(false);
       return;
     }
-    setNotice(null);
+    setUsedTasks(picked.used);
+    setNotice(picked.reset ? '任务已经全部做过，牌堆重新洗好了' : null);
     resolvingRef.current = false;
-    setCurrentTask({ text: entry.task.text, themeName: entry.themeName });
+    setCurrentTask({ text: picked.item.task.text, themeName: picked.item.themeName });
     const limit = activeEvent && activeEvent.timeLimit > 0 ? activeEvent.timeLimit : 0;
     setDeadline(limit > 0 ? Date.now() + limit * 1000 : 0);
     setNow(Date.now());
@@ -310,6 +315,14 @@ function SurvivalGame({
 
 export function SurvivalModeView({ players, themes, currentTurn, onEndTurn, onBack }: SurvivalModeViewProps) {
   const [runId, setRunId] = useModeState('SurvivalModeView.runId', 0);
+  const [, setUsedTasks] = useModeState<string[]>('SurvivalModeView.usedTasks', []);
+  const [, setNotice] = useModeState<string | null>('SurvivalModeView.notice', null);
+
+  const restart = () => {
+    setUsedTasks([]);
+    setNotice(null);
+    setRunId(value => value + 1);
+  };
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">
@@ -345,7 +358,7 @@ export function SurvivalModeView({ players, themes, currentTurn, onEndTurn, onBa
 
           <button
             type="button"
-            onClick={() => setRunId(value => value + 1)}
+            onClick={restart}
             className="ios-btn mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-5 py-2.5 text-xs font-bold text-gray-400"
           >
             <RefreshCw size={13} />重新开始

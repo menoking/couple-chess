@@ -24,7 +24,8 @@ export type GameMode =
   | 'sudoku'
   | 'go'
   | 'bluff'
-  | 'jungle';
+  | 'jungle'
+  | 'jubensha';
 
 export type GameView =
   | 'home'
@@ -50,6 +51,7 @@ export type GameView =
   | 'go'
   | 'bluff'
   | 'jungle'
+  | 'jubensha'
   | 'themes';
 
 export interface BingoCell {
@@ -151,6 +153,12 @@ export interface GameState {
   mineBoard: MineTile[];
   bingoBoard: BingoBoard | null;
   isRolling: boolean;
+  /**
+   * 本局已经抽过的任务 key（文本 + 步数）。
+   * 飞行棋 / 扫雷 / Bingo / 卡牌共用同一份记录，抽过的不会再抽到；
+   * 整副抽空后由 chooseRandomTask 自动重新洗牌。
+   */
+  usedCardKeys?: string[];
 }
 
 export interface TaskEventData {

@@ -8,6 +8,7 @@ import type {
   ThemeMode
 } from '../types';
 import { calculateNewPosition, type BingoDeck } from '../utils/gameLogic';
+import { taskKeyOf } from '../utils/freshPick';
 
 /**
  * 同屏与联机共用的玩法规则纯函数。
@@ -27,9 +28,20 @@ export function isThemeAllowed(theme: Theme, role: Player['role'], mode: ThemeMo
   return isThemeAllowedForRole(theme, role) && isThemeAllowedForMode(theme, mode);
 }
 
-export function chooseRandomTask(theme: Theme | undefined): TaskCard | null {
+/**
+ * 从主题里抽一张任务。
+ *
+ * `used` 是本局已经抽过的任务 key（见 `taskKeyOf`）：传了它就不会再抽到重复的，
+ * 整副抽空后自动重新洗牌。飞行棋 / 扫雷 / Bingo 这些落格抽卡都走这里。
+ */
+export function chooseRandomTask(theme: Theme | undefined, used?: readonly string[]): TaskCard | null {
   if (!theme || theme.tasks.length === 0) return null;
-  return theme.tasks[Math.floor(Math.random() * theme.tasks.length)];
+  const usedKeys = used && used.length > 0 ? new Set(used) : null;
+  const remaining = usedKeys
+    ? theme.tasks.filter(task => !usedKeys.has(taskKeyOf(task)))
+    : theme.tasks;
+  const pool = remaining.length > 0 ? remaining : theme.tasks;
+  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 export function chooseRandomTheme(
@@ -99,7 +111,8 @@ export function createMineTaskEvent(
   themes: Theme[],
   playerId: number,
   choice: MineTaskChoice,
-  selectedByPlayerId?: number
+  selectedByPlayerId?: number,
+  usedTasks?: readonly string[]
 ): TaskEventData | null {
   const player = players.find(p => p.id === playerId);
   const selector = players.find(p => p.id === selectedByPlayerId);
@@ -112,7 +125,7 @@ export function createMineTaskEvent(
     choice === 'theme' && player.themeId
       ? themes.find(t => t.id === player.themeId && isThemeAllowed(t, player.role, 'mineTheme')) || null
       : chooseRandomTheme(themes, player.role, mode);
-  const task = chooseRandomTask(theme || undefined);
+  const task = chooseRandomTask(theme || undefined, usedTasks);
   if (!theme || !task) return null;
 
   if (choice === 'truth') {
@@ -163,8 +176,10 @@ export function resolveBoardTile(input: {
   themes: Theme[];
   turn: number;
   boardMap: string[];
+  /** 本局已经抽过的任务 key：落格奖励不再重复 */
+  usedTasks?: readonly string[];
 }): TaskEventData | 'win' | null {
-  const { landingStep, players, themes, turn, boardMap } = input;
+  const { landingStep, players, themes, turn, boardMap, usedTasks } = input;
   const activePlayer = players[turn];
   const opponent = players[turn === 0 ? 1 : 0];
   if (!activePlayer || !opponent) return null;
@@ -173,7 +188,7 @@ export function resolveBoardTile(input: {
 
   if (landingStep !== 0 && landingStep === opponent.step) {
     const theme = themes.find(t => t.id === activePlayer.themeId);
-    const task = chooseRandomTask(theme);
+    const task = chooseRandomTask(theme, usedTasks);
     if (!task) return null;
     return buildTaskEvent({
       type: 'collision',
@@ -191,7 +206,7 @@ export function resolveBoardTile(input: {
   const tileType = boardMap[landingStep];
   if (tileType === 'lucky') {
     const theme = themes.find(t => t.id === activePlayer.themeId);
-    const task = chooseRandomTask(theme);
+    const task = chooseRandomTask(theme, usedTasks);
     if (!task) return null;
     return buildTaskEvent({
       type: 'lucky',
@@ -208,7 +223,7 @@ export function resolveBoardTile(input: {
 
   if (tileType === 'trap') {
     const theme = themes.find(t => t.id === opponent.themeId);
-    const task = chooseRandomTask(theme);
+    const task = chooseRandomTask(theme, usedTasks);
     if (!task) return null;
     return buildTaskEvent({
       type: 'trap',
@@ -232,7 +247,8 @@ export function completeBingoCellOnBoard(
   index: number,
   playerId: number,
   players: Player[],
-  themes: Theme[]
+  themes: Theme[],
+  usedTasks?: readonly string[]
 ): { board: BingoBoard; result: { newLines: number; rewardTask: TaskCard | null; rewardThemeName: string | null; boardComplete: boolean } } | null {
   if (index < 0 || index >= board.cells.length) return null;
   if (board.cells[index].completedBy !== null) return null;
@@ -256,7 +272,7 @@ export function completeBingoCellOnBoard(
     const ownTheme = activePlayer ? themes.find(t => t.id === activePlayer.themeId) : undefined;
     const rewardTheme = opponentTheme && opponentTheme.tasks.length > 0 ? opponentTheme : ownTheme;
     if (rewardTheme && rewardTheme.tasks.length > 0) {
-      rewardTask = chooseRandomTask(rewardTheme);
+      rewardTask = chooseRandomTask(rewardTheme, usedTasks);
       rewardThemeName = rewardTheme.name;
     }
   }

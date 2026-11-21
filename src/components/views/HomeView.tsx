@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { GameMode, Player, PlayerRole, Theme } from '../../types';
 import { THEME_FREE_MODES } from '../../rules/registry';
-import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Disc3, Flag, Flame, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, PawPrint, ShieldQuestion, Theater, Timer, User, UserRound } from 'lucide-react';
+import { Bomb, BookOpen, Brain, ChevronRight, CircleDashed, CircleDot, Crown, Dice5, Disc3, Flag, Flame, Gavel, Grid2x2, Grid3x3, Heart, HeartPulse, ImageIcon, Layers3, MessageCircleQuestion, PawPrint, ScrollText, ShieldQuestion, Theater, Timer, User, UserRound } from 'lucide-react';
 
 interface HomeViewProps {
   players: Player[];
@@ -71,6 +71,7 @@ const CATEGORIES: ModeCategory[] = [
     label: '剧情',
     modes: [
       { id: 'story', title: '故事接龙', desc: '轮流抽情节卡，共写情侣故事', icon: BookOpen },
+      { id: 'jubensha', title: '双人剧本杀', desc: '分幕读本搜证，关键抉择走向不同结局', icon: ScrollText },
       { id: 'survival', title: '合作生存', desc: '共享生命值，完成任务抵御事件', icon: HeartPulse },
       { id: 'territory', title: '领地争夺', desc: '占领棋盘区域，攻城夺地', icon: Flag }
     ]
@@ -97,6 +98,7 @@ const MODE_START_LABELS: Partial<Record<GameMode, string>> = {
   memory: '开始翻牌',
   timed: '开始挑战',
   story: '开始接龙',
+  jubensha: '开始剧本',
   survival: '开始生存',
   territory: '开始争夺',
   auction: '开始拍卖',
@@ -129,6 +131,7 @@ const MODE_THEME_HINTS: Partial<Record<GameMode, string>> = {
   mine: '选择游戏模式和双方扫雷主题题库',
   quiz: '无需题库，直接开始默契问答',
   story: '无需题库，直接开始故事接龙',
+  jubensha: '无需题库，直接开始双人剧本杀',
   gamble: '无需题库，直接开始赌局轮盘',
   edge: '无需题库，直接开始定力对决',
   roleplay: '无需题库，直接开始角色扮演'

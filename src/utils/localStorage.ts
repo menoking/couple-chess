@@ -82,6 +82,22 @@ export function saveToStorage<T>(key: string, value: T): void {
   }
 }
 
+/**
+ * 立即写入（不走延迟队列）。
+ *
+ * `saveToStorage` 只有一个待写槽，多个 key 连续保存会互相覆盖；剧本杀这类
+ * 「写完马上要读回来（继续上次进度）」的小体量数据用这个，避免丢档。
+ */
+export function saveToStorageNow<T>(key: string, value: T): boolean {
+  try {
+    localStorage.setItem(resolveKey(key), JSON.stringify(value));
+    return true;
+  } catch (error) {
+    console.error('Error saving to localStorage:', error);
+    return false;
+  }
+}
+
 /** 退出登录/切换账号时使用：取消待写入并清空对局数据，避免串号 */
 export function resetLocalState(): void {
   if (idleSaveTimer !== null) {

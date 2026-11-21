@@ -2,7 +2,8 @@ import { useDeckSeed, useModeAuthority, useModeState, useMyTurn } from '../../ru
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, Flame, RefreshCw, Timer, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
-import { buildTaskPool, pickRandom, seededShuffle } from '../../utils/modeKit';
+import { buildTaskPool, seededShuffle } from '../../utils/modeKit';
+import { pickFresh, taskKeyOf } from '../../utils/freshPick';
 import { EDGE_LADDER } from '../../data/spicyContent';
 
 interface EdgeModeViewProps {
@@ -29,6 +30,8 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
     'EdgeModeView.resultTask',
     null
   );
+  /** 已经结算过的任务：同一局不再重复 */
+  const [usedResultTasks, setUsedResultTasks] = useModeState<string[]>('EdgeModeView.usedResultTasks', []);
   const deckSeed = useDeckSeed();
   const switchLock = useRef(false);
   const authority = useModeAuthority();
@@ -76,8 +79,13 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
   };
 
   const rollResultTask = () => {
-    const entry = pickRandom(pool);
-    setResultTask(entry ? { text: entry.task.text, themeName: entry.themeName } : null);
+    const picked = pickFresh(pool, usedResultTasks, entry => taskKeyOf(entry.task));
+    if (!picked) {
+      setResultTask(null);
+      return;
+    }
+    setUsedResultTasks(picked.used);
+    setResultTask({ text: picked.item.task.text, themeName: picked.item.themeName });
   };
 
   const holdOn = () => {
@@ -248,6 +256,14 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
 
 export function EdgeModeView({ players, themes, onBack }: EdgeModeViewProps) {
   const [runId, setRunId] = useModeState('EdgeModeView.runId', 0);
+  const [, setUsedResultTasks] = useModeState<string[]>('EdgeModeView.usedResultTasks', []);
+  const [, setResultTask] = useModeState<{ text: string; themeName: string } | null>('EdgeModeView.resultTask', null);
+
+  const restart = () => {
+    setUsedResultTasks([]);
+    setResultTask(null);
+    setRunId(value => value + 1);
+  };
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">
@@ -268,7 +284,7 @@ export function EdgeModeView({ players, themes, onBack }: EdgeModeViewProps) {
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 no-scrollbar">
           <EdgeGame key={runId} players={players} themes={themes} />
-          <button type="button" onClick={() => setRunId(value => value + 1)} className="ios-btn mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-5 py-2.5 text-xs font-bold text-gray-400">
+          <button type="button" onClick={restart} className="ios-btn mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-5 py-2.5 text-xs font-bold text-gray-400">
             <RefreshCw size={13} />重新开始
           </button>
         </main>

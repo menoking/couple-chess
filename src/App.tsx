@@ -21,6 +21,7 @@ import { TruthDareModeView } from './components/views/TruthDareModeView';
 import { GambleModeView } from './components/views/GambleModeView';
 import { EdgeModeView } from './components/views/EdgeModeView';
 import { RoleplayModeView } from './components/views/RoleplayModeView';
+import { JubenshaModeView } from './components/views/JubenshaModeView';
 import { SudokuModeView } from './components/views/SudokuModeView';
 import { GoModeView } from './components/views/GoModeView';
 import { BluffDiceModeView } from './components/views/BluffDiceModeView';
@@ -214,6 +215,7 @@ function App() {
     importThemeTasks,
     startGame,
     drawCardTask,
+    noteDrawnTask,
     revealMineTile,
     chooseMineBombTask,
     completeBingoCell,
@@ -413,6 +415,8 @@ function App() {
   }, [remoteRoom]);
 
   const handleTaskTrigger = (data: TaskEventData) => {
+    // 记下抽到的任务：飞行棋 / 扫雷 / Bingo / 卡牌共用同一份记录，之后不再重复
+    noteDrawnTask({ text: data.task, moveDelta: data.moveDelta });
     setTaskData(data);
   };
 
@@ -431,6 +435,7 @@ function App() {
       return;
     }
 
+    noteDrawnTask({ text: task.task, moveDelta: task.moveDelta });
     setTaskData(task);
   };
 
@@ -868,6 +873,13 @@ function App() {
 
       {state.view === 'roleplay' && (
         <RoleplayModeView
+          players={state.players}
+          onBack={handleBackFromGame}
+        />
+      )}
+
+      {state.view === 'jubensha' && (
+        <JubenshaModeView
           players={state.players}
           onBack={handleBackFromGame}
         />

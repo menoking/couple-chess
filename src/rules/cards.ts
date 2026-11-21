@@ -49,8 +49,10 @@ export function normalizeCardPool(pool?: OnlineCard[]): OnlineCard[] {
 /** 按卡序号确定性取卡，两台设备看到的永远是同一张。 */
 export function cardFor(pool: OnlineCard[], id: number): OnlineCard {
   const list = pool.length > 0 ? pool : [FALLBACK_CARD];
-  const seed = Math.imul(id, 2654435761) >>> 0;
-  return list[seed % list.length];
+  // 线性轮转而不是哈希：连续抽卡时池里每张都轮到一次才会回绕，
+  // 哈希取模在小池子里很容易连续撞到同一张（表现为「翻来覆去都是这条任务」）。
+  const index = ((Math.max(0, id - 1) % list.length) + list.length) % list.length;
+  return list[index];
 }
 
 /** 入队时只记录归属，不生成卡面；胜方点「抽卡」后才取卡。 */

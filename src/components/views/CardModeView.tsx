@@ -7,7 +7,8 @@ interface CardModeViewProps {
   players: Player[];
   themes: Theme[];
   currentTurn: number;
-  onDrawTask: () => TaskEventData | null;
+  /** excludeKeys：本局已经抽过的卡（文本 + 步数），抽卡时不再重复 */
+  onDrawTask: (excludeKeys?: readonly string[]) => TaskEventData | null;
   onTaskTrigger: (data: TaskEventData) => void;
   onEndTurn: () => void;
   /** 队列里还有没确认的卡：双方抽卡按钮都要锁住 */
@@ -56,14 +57,16 @@ export function CardModeView({
     if (submitting) return;
     if (pendingCards > 0) return;
     if (mySeat !== null && currentTurn !== mySeat) return;
-    const task = onDrawTask();
+    // 牌堆抽空 → 重新洗一副，从这一抽开始重新记已抽
+    const freshRound = remainingCards <= 0;
+    const task = onDrawTask(freshRound ? [] : Array.from(drawnKeys));
     if (!task) {
       alert('当前玩家还没有可抽取的任务');
       return;
     }
     setSubmitting(true);
     setDrawnKeys(previous => {
-      const next = new Set(previous);
+      const next = new Set(freshRound ? [] : previous);
       // 用任务文本 + 步数做 key：联机的 taskSourceId 固定是 online，带它会导致灰卡匹配不上
       next.add(`${task.task}:${task.moveDelta}`);
       return next;
@@ -181,7 +184,12 @@ export function CardModeView({
             <div className="mb-3 flex items-center justify-between">
               <div>
                 <div className="text-xs font-bold uppercase tracking-widest text-gray-500">任务牌堆</div>
-                <div className="mt-1 text-sm text-gray-300">已抽 {drawnKeys.size} 张 · 剩余 {remainingCards} 张</div>
+                <div className="mt-1 text-sm text-gray-300">
+                  已抽 {drawnKeys.size} 张 · 剩余 {remainingCards} 张
+                </div>
+                {remainingCards <= 0 && (
+                  <div className="mt-1 text-[10px] font-bold text-[#FFD60A]">牌堆已抽空，下一抽自动重新洗牌</div>
+                )}
               </div>
               <div className="text-2xl font-bold text-white">{remainingCards}</div>
             </div>

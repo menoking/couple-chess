@@ -3,6 +3,7 @@ import { useMemo } from 'react';
 import { ArrowLeft, Flame, RefreshCw, Skull, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, pickRandom } from '../../utils/modeKit';
+import { pickFresh, taskKeyOf } from '../../utils/freshPick';
 import { SPICY_DARE_CHALLENGES, SPICY_PENALTIES, SPICY_TRUTH_QUESTIONS } from '../../data/spicyContent';
 
 interface TruthDareModeViewProps {
@@ -22,6 +23,16 @@ interface ActiveCard {
   content: string;
   themeName?: string;
 }
+
+/** 各池子已经抽过的条目：一局内绝不复用，抽空后自动洗牌 */
+interface UsedPools {
+  truth: string[];
+  dare: string[];
+  task: string[];
+  penalty: string[];
+}
+
+const EMPTY_USED: UsedPools = { truth: [], dare: [], task: [], penalty: [] };
 
 const EVENT_LABELS: Record<Event, string> = {
   normal: '普通',
@@ -50,6 +61,7 @@ function TruthDareGame({
   const [penalty, setPenalty] = useModeState<string | null>('TruthDareModeView.penalty', null);
   const [notice, setNotice] = useModeState<string | null>('TruthDareModeView.notice', null);
   const [done, setDone] = useModeState('TruthDareModeView.done', 0);
+  const [used, setUsed] = useModeState<UsedPools>('TruthDareModeView.used', EMPTY_USED);
 
   const drawEvent = (): Event => {
     const roll = Math.random();
@@ -66,25 +78,44 @@ function TruthDareGame({
     let kind: Kind;
     let content: string;
     let themeName: string | undefined;
+    // 这一抽动了哪些池子，最后一次性写回，避免多次 patch 互相覆盖
+    const nextUsed: Partial<UsedPools> = {};
+    let resetPool = '';
 
     if (kindRoll < 0.35) {
       kind = 'truth';
-      content = pickRandom(SPICY_TRUTH_QUESTIONS) ?? SPICY_TRUTH_QUESTIONS[0];
+      const picked = pickFresh(SPICY_TRUTH_QUESTIONS, used.truth, item => item);
+      content = picked?.item ?? pickRandom(SPICY_TRUTH_QUESTIONS) ?? SPICY_TRUTH_QUESTIONS[0];
+      if (picked) {
+        nextUsed.truth = picked.used;
+        if (picked.reset) resetPool = '真心话';
+      }
     } else if (kindRoll < 0.7) {
       kind = 'dare';
-      content = pickRandom(SPICY_DARE_CHALLENGES) ?? SPICY_DARE_CHALLENGES[0];
+      const picked = pickFresh(SPICY_DARE_CHALLENGES, used.dare, item => item);
+      content = picked?.item ?? pickRandom(SPICY_DARE_CHALLENGES) ?? SPICY_DARE_CHALLENGES[0];
+      if (picked) {
+        nextUsed.dare = picked.used;
+        if (picked.reset) resetPool = '大冒险';
+      }
     } else {
       kind = 'task';
-      const entry = pickRandom(pool);
-      if (!entry) {
+      const picked = pickFresh(pool, used.task, entry => taskKeyOf(entry.task));
+      if (!picked) {
         kind = 'truth';
-        content = pickRandom(SPICY_TRUTH_QUESTIONS) ?? SPICY_TRUTH_QUESTIONS[0];
+        const fallback = pickFresh(SPICY_TRUTH_QUESTIONS, used.truth, item => item);
+        content = fallback?.item ?? SPICY_TRUTH_QUESTIONS[0];
+        if (fallback) nextUsed.truth = fallback.used;
       } else {
-        content = entry.task.text;
-        themeName = entry.themeName;
+        content = picked.item.task.text;
+        themeName = picked.item.themeName;
+        nextUsed.task = picked.used;
+        if (picked.reset) resetPool = '主题任务';
       }
     }
 
+    setUsed(previous => ({ ...previous, ...nextUsed }));
+    setNotice(resetPool ? `「${resetPool}」已经全部抽过，牌堆重新洗好了` : null);
     setCard({ kind, event, content, themeName });
   };
 
@@ -98,8 +129,15 @@ function TruthDareGame({
       onEndTurn();
       return;
     }
-    // 失败 → 对方指定惩罚（文案此时抽一次并固定）
-    setPenalty(pickRandom(SPICY_PENALTIES) ?? SPICY_PENALTIES[0]);
+    // 失败 → 对方指定惩罚（文案此时抽一次并固定；同一局不重复）
+    const picked = pickFresh(SPICY_PENALTIES, used.penalty, item => item);
+    if (picked) {
+      setPenalty(picked.item);
+      setUsed(previous => ({ ...previous, penalty: picked.used }));
+    } else {
+      setPenalty(pickRandom(SPICY_PENALTIES) ?? SPICY_PENALTIES[0]);
+    }
+    setNotice(picked?.reset ? '惩罚池已经全部抽过，重新洗好了' : null);
     setPenaltyTarget(activePlayer.id);
     setCard(null);
   };
@@ -213,6 +251,22 @@ function TruthDareGame({
 
 export function TruthDareModeView({ players, themes, currentTurn, onEndTurn, onBack }: TruthDareModeViewProps) {
   const [runId, setRunId] = useModeState('TruthDareModeView.runId', 0);
+  const [, setUsed] = useModeState<UsedPools>('TruthDareModeView.used', EMPTY_USED);
+  const [, setCard] = useModeState<ActiveCard | null>('TruthDareModeView.card', null);
+  const [, setPenalty] = useModeState<string | null>('TruthDareModeView.penalty', null);
+  const [, setPenaltyTarget] = useModeState<number | null>('TruthDareModeView.penaltyTarget', null);
+  const [, setNotice] = useModeState<string | null>('TruthDareModeView.notice', null);
+  const [, setDone] = useModeState('TruthDareModeView.done', 0);
+
+  const restart = () => {
+    setUsed(EMPTY_USED);
+    setCard(null);
+    setPenalty(null);
+    setPenaltyTarget(null);
+    setNotice(null);
+    setDone(0);
+    setRunId(value => value + 1);
+  };
 
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">
@@ -233,7 +287,7 @@ export function TruthDareModeView({ players, themes, currentTurn, onEndTurn, onB
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 no-scrollbar">
           <TruthDareGame key={runId} players={players} themes={themes} currentTurn={currentTurn} onEndTurn={onEndTurn} />
-          <button type="button" onClick={() => setRunId(value => value + 1)} className="ios-btn mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-5 py-2.5 text-xs font-bold text-gray-400">
+          <button type="button" onClick={restart} className="ios-btn mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-5 py-2.5 text-xs font-bold text-gray-400">
             <RefreshCw size={13} />重新开始
           </button>
         </main>

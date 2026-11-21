@@ -1,8 +1,9 @@
 import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, CheckCircle2, Disc3, RotateCw, ShieldAlert, Sparkles, User, UserRound } from 'lucide-react';
 import { Player, TaskCard, Theme } from '../../types';
 import { loadFromStorage, saveToStorage } from '../../utils/localStorage';
+import { pickFresh } from '../../utils/freshPick';
 
 interface RouletteModeViewProps {
   players: Player[];
@@ -40,8 +41,9 @@ const targetGroups: OptionGroup[] = [
 
 const durations: OptionGroup[] = [{ items: ['15 秒', '30 秒', '45 秒', '90 秒', '1 分钟', '2 分钟', '3 分钟'] }];
 
-const SPIN_DURATION = 1250;
-const TICK_INTERVAL = 90;
+const SPIN_DURATION = 1500;
+const TICK_START = 60;
+const TICK_MAX = 180;
 
 function flatten(groups: OptionGroup[]): string[] {
   return groups.flatMap(group => group.items);
@@ -100,12 +102,12 @@ function WheelCard({
   const flatItems = useMemo(() => flatten(groups), [groups]);
   void groups;
   void highlightLabel;
-  void highlightLabel;
-  const [rotation, setRotation] = useModeState('RouletteModeView.rotation', 0);
+  // 装饰环的角度只影响本机画面，用本地状态即可，不必每转一次写共享快照
+  const [rotation, setRotation] = useState(0);
 
   useEffect(() => {
     if (spinToken === 0) return;
-    setRotation(prev => prev + 720 + Math.floor(Math.random() * 360));
+    setRotation(previous => previous + 1080);
   }, [spinToken]);
 
   const display = spinning ? flatItems[tick % flatItems.length] : value;
@@ -117,8 +119,14 @@ function WheelCard({
       </div>
       <div className="relative h-[96px] w-[96px]">
         <div
-          className="absolute inset-0 rounded-full border-4 border-[#1C1C1E] bg-[#1C1C1E] shadow-lg transition-transform duration-[1200ms] ease-out"
-          style={{ borderColor: `${color}66`, transform: `rotate(${rotation}deg)` }}
+          className="absolute inset-0 rounded-full border-4 border-[#1C1C1E] bg-[#1C1C1E] shadow-lg ease-out"
+          style={{
+            borderColor: `${color}66`,
+            transform: `rotate(${rotation}deg)`,
+            transitionProperty: 'transform',
+            transitionDuration: `${SPIN_DURATION}ms`,
+            transitionTimingFunction: 'cubic-bezier(0.12, 0.75, 0.05, 1)'
+          }}
         >
           <div
             className="absolute inset-2 rounded-full opacity-50"
@@ -153,13 +161,18 @@ export function RouletteModeView({
   const [bonusTask, setBonusTask] = useModeState<TaskCard | null>('RouletteModeView.bonusTask', null);
   const [round, setRound] = useModeState('RouletteModeView.round', 0);
   const [spinToken, setSpinToken] = useModeState('RouletteModeView.spinToken', 0);
-  const [tick, setTick] = useModeState('RouletteModeView.tick', 0);
+  // 转盘上的文字滚动只是本机动画：不写共享状态，避免每秒几十条 patch
+  const [tick, setTick] = useState(0);
+  /** 主题加码任务：同一局不重复，抽完自动洗牌 */
+  const [bonusUsed, setBonusUsed] = useModeState<string[]>('RouletteModeView.bonusUsed', []);
+  const [bonusThemeName, setBonusThemeName] = useModeState<string | null>('RouletteModeView.bonusThemeName', null);
+  /** 已经转出过的四维组合：同一局不重复 */
+  const [usedCombos, setUsedCombos] = useModeState<string[]>('RouletteModeView.usedCombos', []);
   const [intensity, setIntensity] = useModeState<RouletteIntensity>('RouletteModeView.intensity', () =>
     loadFromStorage<RouletteIntensity>(INTENSITY_STORAGE_KEY, 'gentle')
   );
   const isWild = intensity === 'wild';
   const timerRef = useRef<number | null>(null);
-  const tickRef = useRef<number | null>(null);
   const selectedTheme = themes.find(theme => theme.id === activePlayer?.themeId);
   const hasResult = !!result.executor;
   const targetTier = useMemo(
@@ -173,8 +186,22 @@ export function RouletteModeView({
 
   useEffect(() => () => {
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
-    if (tickRef.current !== null) window.clearInterval(tickRef.current);
   }, []);
+
+  // 转盘文字：间隔从 60ms 一路拉长到 180ms，先飞快跳动再慢慢停住
+  useEffect(() => {
+    if (!isSpinning) return;
+    setTick(0);
+    let timer = 0;
+    let delay = TICK_START;
+    const step = () => {
+      setTick(value => value + 1);
+      delay = Math.min(TICK_MAX, Math.round(delay * 1.14));
+      timer = window.setTimeout(step, delay);
+    };
+    timer = window.setTimeout(step, delay);
+    return () => window.clearTimeout(timer);
+  }, [isSpinning, spinToken]);
 
   const resultText = useMemo(() => {
     if (!hasResult) return '';
@@ -191,22 +218,39 @@ export function RouletteModeView({
       target: pickTarget(result.target || null, isWild),
       duration: pick(flatten(durations), result.duration || null)
     };
+    const comboKey = (value: typeof next) =>
+      `${value.executor}|${value.action}|${value.target}|${value.duration}`;
+    // 四维组合也不允许和本局之前的任何一次完全相同（几轮内重叠的概率极低，但不该出现）
+    let guard = 0;
+    while (usedCombos.includes(comboKey(next)) && guard < 40) {
+      next.executor = pick(flatten(executors), next.executor);
+      next.action = pick(flatten(actions), next.action);
+      next.target = pickTarget(next.target, isWild);
+      next.duration = pick(flatten(durations), next.duration);
+      guard += 1;
+    }
+    setUsedCombos(previous => [...previous, comboKey(next)].slice(-80));
     setIsSpinning(true);
     setBonusTask(null);
+    setBonusThemeName(null);
     setSpinToken(value => value + 1);
     setTick(0);
     if (navigator.vibrate) navigator.vibrate([15, 30, 15]);
-    tickRef.current = window.setInterval(() => setTick(value => value + 1), TICK_INTERVAL);
     timerRef.current = window.setTimeout(() => {
       setResult(next);
       setRound(value => value + 1);
+      // 主题加码：同一局不重复抽同一张
       const tasks = selectedTheme?.tasks || [];
-      setBonusTask(tasks.length > 0 ? tasks[Math.floor(Math.random() * tasks.length)] : null);
-      setIsSpinning(false);
-      if (tickRef.current !== null) {
-        window.clearInterval(tickRef.current);
-        tickRef.current = null;
+      const picked = pickFresh(tasks, bonusUsed, task => task.text);
+      if (picked) {
+        setBonusTask(picked.item);
+        setBonusUsed(picked.used);
+        setBonusThemeName(selectedTheme?.name ?? null);
+      } else {
+        setBonusTask(null);
+        setBonusThemeName(null);
       }
+      setIsSpinning(false);
     }, SPIN_DURATION);
   };
 
@@ -304,7 +348,7 @@ export function RouletteModeView({
               </div>
               {bonusTask && (
                 <div className="rounded-3xl border border-[#BF5AF2]/25 bg-[#BF5AF2]/10 p-5">
-                  <div className="flex items-center gap-2 text-xs font-bold text-[#D08BFF]"><Sparkles size={15} />主题加码 · {selectedTheme?.name}</div>
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#D08BFF]"><Sparkles size={15} />主题加码 · {bonusThemeName || selectedTheme?.name}</div>
                   <div className="mt-3 text-sm leading-relaxed text-white">{bonusTask.text}</div>
                 </div>
               )}
