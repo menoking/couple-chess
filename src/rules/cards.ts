@@ -1,6 +1,8 @@
+import type { TaskContinuation } from '../types';
 import type { OnlineCard, PendingCard, RoomAction, RoomSnapshot, Seat } from './types';
 import { applyMoveDelta } from './modeRules';
 import { DEFAULT_THEMES } from '../data/defaultThemes';
+import { seatScopedKey } from './registry';
 
 /** 内置主题 id → 中文名，用于把旧数据里的 `mine_dare_default` 这类 id 翻成可读名称。 */
 const DEFAULT_THEME_NAME: Record<string, string> = Object.fromEntries(
@@ -63,6 +65,7 @@ export function enqueueCard(state: RoomSnapshot, spec: {
   /** 玩法视图自己抽出的具体任务；不给时由公共卡池按序号确定性取卡 */
   card?: OnlineCard;
   moveDelta?: number;
+  continuation?: TaskContinuation;
 }): RoomSnapshot {
   const cardSeq = state.cardSeq + 1;
   const card: PendingCard = {
@@ -71,10 +74,11 @@ export function enqueueCard(state: RoomSnapshot, spec: {
     drawerSeat: spec.drawerSeat,
     executorSeat: spec.executorSeat,
     reason: spec.reason,
-    // 抽到后先只有抽卡方可见，抽卡方手动翻卡后才对双方可见
-    phase: 'drawn',
+    // 入队时没有任何一方拿到卡面；抽卡方点「抽卡」后才进入 drawn。
+    phase: 'locked',
     card: spec.card ?? null,
-    moveDelta: spec.moveDelta ?? 0
+    moveDelta: spec.moveDelta ?? 0,
+    continuation: spec.continuation
   };
   return { ...state, cardSeq, cards: [...state.cards, card] };
 }
@@ -93,6 +97,8 @@ export function reduceCard(state: RoomSnapshot, action: RoomAction): RoomSnapsho
   const first = state.cards[0];
   if (!first) return state;
 
+  if ('cardId' in action && action.cardId !== first.id) return state;
+
   if (action.type === 'drawCard') {
     if (action.seat !== first.drawerSeat || first.phase !== 'locked') return state;
     return {
@@ -110,29 +116,76 @@ export function reduceCard(state: RoomSnapshot, action: RoomAction): RoomSnapsho
     return { ...state, cards: [{ ...first, phase: 'revealed' }, ...state.cards.slice(1)] };
   }
 
-  if (action.type === 'ackCard') {
+  if (action.type === 'ackCard' || action.type === 'forceCloseCard') {
     // 执行人确认；抽卡人也能关掉，避免座位判定异常时整局卡死在这张卡上
-    if (first.phase !== 'revealed') return state;
-    if (action.seat !== first.executorSeat && action.seat !== first.drawerSeat) return state;
+    if (action.type === 'ackCard') {
+      if (first.phase !== 'revealed') return state;
+      if (action.seat !== first.executorSeat && action.seat !== first.drawerSeat) return state;
+    }
+    const outcome = action.type === 'ackCard' ? action.outcome : 'skip';
     // 飞行棋的「完成后前进/后退 N 格」在这里落到执行人身上
     let data = state.data;
-    if (first.moveDelta !== 0) {
+    const changedKeys: string[] = [];
+    if (outcome === 'accept' && first.moveDelta !== 0) {
       const steps = state.data['stage.steps'];
       if (Array.isArray(steps)) {
         const next = [...(steps as number[])];
         const seat = first.executorSeat;
         next[seat] = applyMoveDelta(typeof next[seat] === 'number' ? next[seat] : 0, first.moveDelta);
         data = { ...state.data, 'stage.steps': next };
+        changedKeys.push('stage.steps');
       }
     }
-    return { ...state, cards: state.cards.slice(1), data };
-  }
-
-  if (action.type === 'forceCloseCard') {
-    if (state.cards.length === 0) return state;
-    // 逃生通道：对方退出房间或卡在翻卡时，长按 3 秒把这卡直接放掉，游戏继续。
-    // 不结算 moveDelta —— 强制关闭不该白拿步数。
-    return { ...state, cards: state.cards.slice(1) };
+    const continuation = first.continuation;
+    let turn = state.turn;
+    if (continuation?.kind === 'endTurn') {
+      turn = turn === 0 ? 1 : 0;
+    } else if (continuation?.kind === 'sudoku' && state.mode === 'sudoku') {
+      if (continuation.finish) {
+        data = { ...data, 'SudokuModeView.finished': true, 'SudokuModeView.taskData': null };
+        changedKeys.push('SudokuModeView.finished', 'SudokuModeView.taskData');
+      } else {
+        const current = data['SudokuModeView.turn'];
+        data = {
+          ...data,
+          'SudokuModeView.turn': current === 1 ? 0 : 1,
+          'SudokuModeView.taskData': null
+        };
+        changedKeys.push('SudokuModeView.turn', 'SudokuModeView.taskData');
+      }
+    } else if (continuation?.kind === 'auction' && state.mode === 'auction') {
+      const currentRound = data['AuctionModeView.round'];
+      if (currentRound === continuation.round) {
+        data = {
+          ...data,
+          'AuctionModeView.round': continuation.round + 1,
+          'AuctionModeView.revealed': null,
+          'AuctionModeView.confirmed': [false, false],
+          'AuctionModeView.taskData': null,
+          'AuctionModeView.notice': outcome === 'skip' ? '拍得任务却跳过，金币不退' : null,
+          [seatScopedKey('AuctionModeView.myBid', 0)]: 0,
+          [seatScopedKey('AuctionModeView.myBid', 1)]: 0,
+          [seatScopedKey('AuctionModeView.sealedBid', 0)]: null,
+          [seatScopedKey('AuctionModeView.sealedBid', 1)]: null
+        };
+        changedKeys.push(
+          'AuctionModeView.round',
+          'AuctionModeView.revealed',
+          'AuctionModeView.confirmed',
+          'AuctionModeView.taskData',
+          'AuctionModeView.notice',
+          seatScopedKey('AuctionModeView.myBid', 0),
+          seatScopedKey('AuctionModeView.myBid', 1),
+          seatScopedKey('AuctionModeView.sealedBid', 0),
+          seatScopedKey('AuctionModeView.sealedBid', 1)
+        );
+      }
+    }
+    const writeSeq = state.seq + 1;
+    const dataSeq = changedKeys.length === 0
+      ? state.dataSeq
+      : { ...state.dataSeq, ...Object.fromEntries(changedKeys.map(key => [key, writeSeq])) };
+    return { ...state, cards: state.cards.slice(1), data, dataSeq, turn };
   }
 
   return state;
@@ -162,6 +215,20 @@ export interface ExtractedCard {
   executorSeat: Seat;
   reason: string;
   moveDelta: number;
+  continuation?: TaskContinuation;
+}
+
+function parseContinuation(value: unknown): TaskContinuation | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (record.kind === 'endTurn') return { kind: 'endTurn' };
+  if (record.kind === 'sudoku' && typeof record.finish === 'boolean') {
+    return { kind: 'sudoku', finish: record.finish };
+  }
+  if (record.kind === 'auction' && typeof record.round === 'number' && Number.isInteger(record.round)) {
+    return { kind: 'auction', round: record.round };
+  }
+  return undefined;
 }
 
 /**
@@ -200,5 +267,6 @@ export function extractCard(value: unknown): ExtractedCard | null {
     ? record.moveDelta
     : 0;
 
-  return { card: { task: text.trim(), themeName }, drawerSeat, executorSeat, reason, moveDelta };
+  const continuation = parseContinuation(record.continuation);
+  return { card: { task: text.trim(), themeName }, drawerSeat, executorSeat, reason, moveDelta, continuation };
 }

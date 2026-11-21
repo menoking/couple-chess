@@ -174,7 +174,14 @@ export interface TaskEventData {
   /** 卡面来源的中文主题名；不再拿 taskSourceId（主题 id）当来源展示 */
   themeName?: string;
   moveDelta: number;
+  /** 联机公共卡确认后，由房主 reducer 原子执行的白名单后续动作。 */
+  continuation?: TaskContinuation;
 }
+
+export type TaskContinuation =
+  | { kind: 'endTurn' }
+  | { kind: 'sudoku'; finish: boolean }
+  | { kind: 'auction'; round: number };
 
 export type MineRevealResult =
   | { type: 'blank' }

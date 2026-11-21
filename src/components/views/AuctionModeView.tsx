@@ -101,7 +101,7 @@ function AuctionGame({
     if (iConfirmed || revealed) return;
     if (online) {
       // 价格只交给房主，对方拿不到；双方都提交后房主一次性公开
-      runtime.dispatch({ type: 'sealBid', seat: mySeat ?? 0, amount: myBid });
+      runtime.dispatch({ type: 'sealBid', seat: mySeat ?? 0, amount: myBid, round });
       return;
     }
     const next: [number | null, number | null] = [localSealed[0], localSealed[1]];
@@ -128,7 +128,8 @@ function AuctionGame({
         entry,
         title: '拍得 · 对方执行',
         executorPlayerId: revealed.winner === 0 ? 1 : 0,
-        initiatorPlayerId: revealed.winner
+        initiatorPlayerId: revealed.winner,
+        continuation: { kind: 'auction', round }
       })
     );
   }, [authority, revealed, round, queue, setTaskData]);

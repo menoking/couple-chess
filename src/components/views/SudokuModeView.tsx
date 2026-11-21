@@ -94,7 +94,13 @@ function SudokuGame({
       if (entry) {
         const opponentId = byId === 0 ? 1 : 0;
         setTaskData(
-          createViewTaskEvent({ entry, title: '解格成功 · 对方执行', executorPlayerId: opponentId, initiatorPlayerId: byId })
+          createViewTaskEvent({
+            entry,
+            title: '解格成功 · 对方执行',
+            executorPlayerId: opponentId,
+            initiatorPlayerId: byId,
+            continuation: { kind: 'sudoku', finish: blanksLeft === 1 }
+          })
         );
       } else {
         setTurn(turn === 0 ? 1 : 0);

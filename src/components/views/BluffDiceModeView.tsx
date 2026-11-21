@@ -38,6 +38,7 @@ interface RevealInfo {
   bidderWins: boolean;
   loserId: number;
   winnerId: number;
+  dice: [number[], number[]];
 }
 
 function rollDice(): number[] {
@@ -70,6 +71,9 @@ function BluffDiceGame({
   currentTurn: number;
 }) {
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
+  const runtime = useModeRuntime();
+  const mySeat = runtime?.seat ?? null;
+  const online = runtime !== null;
 
   const [phase, setPhase] = useModeState<Phase>('BluffDiceModeView.phase', 'handoff1');
   const [round, setRound] = useModeState('BluffDiceModeView.round', 1);
@@ -77,9 +81,10 @@ function BluffDiceGame({
   const [turn, setTurn] = useModeState('BluffDiceModeView.turn', currentTurn === 1 ? 1 : 0);
   // 联机：只有当前回合方能推进阶段 / 叫骰 / 开牌，同屏恒可操作
   const canAct = useMyTurn(turn);
-  // 注意：这里不能按座位隔离。隔离后两端会各随机一副骰子，开牌人数对不上。
-  // 骰子由房主生成、两端同一份；界面上只展示自己的点数。
-  const [dice, setDice] = useModeState<Record<number, number[]>>('BluffDiceModeView.dice', { 0: rollDice(), 1: rollDice() });
+  // 同屏保留交接手机流程；联机时每个座位只持有自己的私有骰子。
+  const [localDice, setLocalDice] = useModeState<Record<number, number[]>>('BluffDiceModeView.localDice', { 0: rollDice(), 1: rollDice() });
+  const [myDice] = useModeState<number[]>('BluffDiceModeView.dice', () => rollDice(), 'seat');
+  const [ready] = useModeState<[boolean, boolean]>('BluffDiceModeView.ready', [false, false]);
   const [bid, setBid] = useModeState<Bid | null>('BluffDiceModeView.bid', null);
   const [draftQty, setDraftQty] = useModeState('BluffDiceModeView.draftQty', 2);
   const [draftFace, setDraftFace] = useModeState('BluffDiceModeView.draftFace', 1);
@@ -89,9 +94,6 @@ function BluffDiceGame({
 
   const first = players[0];
   const currentPlayer = players.find(player => player.id === turn) ?? first;
-  const runtime = useModeRuntime();
-  const mySeat = runtime?.seat ?? null;
-  const online = runtime !== null;
   // 联机没有「把手机交给对方」这回事：各自看自己的骰子，直接进叫点页
   const phaseView: Phase =
     online && (phase === 'handoff1' || phase === 'view1' || phase === 'handoff2' || phase === 'view2')
@@ -125,9 +127,39 @@ function BluffDiceGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bidSig]);
 
+  // 每轮各设备只提交自己的骰子；双方都到齐后，房主 reducer 才开放叫骰。
+  useEffect(() => {
+    if (!runtime || mySeat === null || ready[mySeat]) return;
+    runtime.dispatch({ type: 'bluffReady', seat: mySeat, round, dice: rollDice() });
+  }, [runtime, mySeat, ready, round]);
+
+  // 联机揭晓后，仅权威端生成一次惩罚卡，避免双方各抽一张。
+  const issuedRound = useRef(-1);
+  useEffect(() => {
+    if (!runtime?.authority || !reveal || issuedRound.current === round) return;
+    issuedRound.current = round;
+    const entry = pickRandom(pool);
+    if (!entry) return;
+    setTaskData(createViewTaskEvent({
+      entry,
+      title: '吹牛失败 · 惩罚卡',
+      executorPlayerId: reveal.loserId,
+      initiatorPlayerId: reveal.winnerId
+    }));
+  }, [runtime, reveal, round, pool, setTaskData]);
+
   const startRound = (nextStarter: number) => {
     if (!canAct) return;
-    setDice({ 0: rollDice(), 1: rollDice() });
+    if (runtime && mySeat !== null) {
+      runtime.dispatch({
+        type: 'bluffNextRound',
+        seat: mySeat,
+        round,
+        nextStarter: nextStarter === 1 ? 1 : 0
+      });
+      return;
+    }
+    setLocalDice({ 0: rollDice(), 1: rollDice() });
     setBid(null);
     setReveal(null);
     setTaskData(null);
@@ -147,14 +179,18 @@ function BluffDiceGame({
   const challenge = () => {
     if (!canAct) return;
     if (!bid) return;
-    const all = [...dice[0], ...dice[1]];
+    if (runtime && mySeat !== null) {
+      runtime.dispatch({ type: 'bluffChallenge', seat: mySeat, round });
+      return;
+    }
+    const all = [...localDice[0], ...localDice[1]];
     const count = all.filter(value => value === bid.face).length;
     const bidderWins = count >= bid.qty;
     const loserId = bidderWins ? turn : bid.by;
     const winnerId = bidderWins ? bid.by : turn;
 
     setPoints(prev => ({ ...prev, [winnerId]: (prev[winnerId] ?? 0) + 1 }));
-    setReveal({ count, bidderWins, loserId, winnerId });
+    setReveal({ count, bidderWins, loserId, winnerId, dice: [localDice[0], localDice[1]] });
     setPhase('reveal');
 
     const entry = pickRandom(pool);
@@ -208,7 +244,7 @@ function BluffDiceGame({
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-2 rounded-3xl border border-white/10 bg-white/[0.04] p-6">
-          {(dice[targetId] ?? []).map((value, index) => (
+          {(localDice[targetId] ?? []).map((value, index) => (
             <Die key={index} value={value} size="lg" />
           ))}
         </div>
@@ -225,6 +261,27 @@ function BluffDiceGame({
         >
           {phase === 'view1' ? '记住了，交给对方' : '双方都记住了，开始叫点'}
         </button>
+      </div>
+    );
+  }
+
+  if (online && (!ready[0] || !ready[1])) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.06] p-6 text-center">
+          <Dices size={32} className="mx-auto animate-pulse text-[#FFD60A]" />
+          <div className="mt-3 text-lg font-bold text-white">正在密封双方骰子</div>
+          <div className="mt-2 text-sm text-gray-500">
+            你的骰子已在自己的座位私有槽位提交；等对方准备好后自动开始。
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {players.map(player => (
+            <div key={player.id} className="rounded-2xl bg-white/[0.04] p-3 text-center text-xs font-bold" style={{ color: player.color }}>
+              {player.name} · {ready[player.id] ? '已准备' : '等待中'}
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -262,7 +319,7 @@ function BluffDiceGame({
                 </span>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {(dice[player.id] ?? []).map((value, index) => (
+                {(reveal.dice[player.id] ?? []).map((value, index) => (
                   <Die key={index} value={value} size="sm" />
                 ))}
               </div>
@@ -320,7 +377,7 @@ function BluffDiceGame({
         <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4">
           <div className="text-center text-[10px] font-bold text-gray-500">你的骰子（对方看不到）</div>
           <div className="mt-2 flex items-center justify-center gap-2">
-            {(dice[mySeat] ?? []).map((value, index) => (
+            {(myDice ?? []).map((value, index) => (
               <Die key={index} value={value} size="sm" />
             ))}
           </div>

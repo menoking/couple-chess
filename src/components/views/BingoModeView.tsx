@@ -32,9 +32,22 @@ export function BingoModeView({
   const canAct = useMyTurn(currentTurn);
   const activePlayer = players[currentTurn] || players[0];
   const [pendingIndex, setPendingIndex] = useModeState<number | null>('BingoModeView.pendingIndex', null);
-  const [reward, setReward] = useModeState<{ lines: number; task: TaskCard; themeName: string } | null>('BingoModeView.reward', null);
+  const [reward, setReward] = useModeState<{
+    lines: number;
+    task: TaskCard;
+    themeName: string;
+    initiatorPlayerId: number;
+    executorPlayerId: number;
+    continuation?: TaskEventData['continuation'];
+  } | null>('BingoModeView.reward', null);
   // 一次连成多条线就抽多张，用队列逐张弹（卡包容量共用 drawnCount）
-  const [rewardQueue, setRewardQueue] = useModeState<Array<{ task: TaskCard; themeName: string }>>('BingoModeView.rewardQueue', []);
+  const [rewardQueue, setRewardQueue] = useModeState<Array<{
+    task: TaskCard;
+    themeName: string;
+    initiatorPlayerId: number;
+    executorPlayerId: number;
+    continuation?: TaskEventData['continuation'];
+  }>>('BingoModeView.rewardQueue', []);
   const [finished, setFinished] = useModeState('BingoModeView.finished', false);
 
   // 有限卡包：只有赢下回合（连成一线）才能从里面抽一张。
@@ -104,7 +117,13 @@ export function BingoModeView({
       setDrawnCount(value => value + count);
       setRewardQueue(prev => [
         ...prev,
-        ...picks.map(entry => ({ task: entry.task, themeName: entry.themeName }))
+        ...picks.map((entry, index) => ({
+          task: entry.task,
+          themeName: entry.themeName,
+          initiatorPlayerId: activePlayer.id,
+          executorPlayerId: opponentPlayer?.id ?? (activePlayer.id === 0 ? 1 : 0),
+          continuation: index === picks.length - 1 ? { kind: 'endTurn' as const } : undefined
+        }))
       ]);
       return;
     }
@@ -127,7 +146,7 @@ export function BingoModeView({
     if (reward || rewardQueue.length === 0) return;
     const [next, ...rest] = rewardQueue;
     setRewardQueue(rest);
-    setReward({ lines: 1, task: next.task, themeName: next.themeName });
+    setReward({ lines: 1, ...next });
   }, [reward, rewardQueue, setReward, setRewardQueue]);
 
   const handleRewardDone = () => {

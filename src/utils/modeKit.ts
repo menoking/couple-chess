@@ -81,6 +81,7 @@ export function createViewTaskEvent(input: {
   executorPlayerId?: number;
   /** 抽卡的人（默认与执行人相同） */
   initiatorPlayerId?: number;
+  continuation?: TaskEventData['continuation'];
 }): TaskEventData {
   const { entry } = input;
   const playerId = input.executorPlayerId ?? entry.playerId;
@@ -96,7 +97,8 @@ export function createViewTaskEvent(input: {
     task: entry.task.text,
     taskSourceId: entry.themeId,
     themeName: entry.themeName,
-    moveDelta: 0
+      moveDelta: 0,
+      continuation: input.continuation
   };
 }
 

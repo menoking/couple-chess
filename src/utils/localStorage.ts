@@ -1,5 +1,6 @@
 let idleSaveTimer: number | null = null;
-let pendingSave: { key: string; value: unknown } | null = null;
+let idleSaveKind: 'idle' | 'timeout' | null = null;
+const pendingSaves = new Map<string, unknown>();
 
 /**
  * 存储命名空间：
@@ -39,15 +40,29 @@ function migrateLegacyKey(key: string): void {
   }
 }
 
-function flushPendingSave() {
-  if (!pendingSave) return;
-  const { key, value } = pendingSave;
-  pendingSave = null;
-  try {
-    localStorage.setItem(resolveKey(key), JSON.stringify(value));
-  } catch (error) {
-    console.error('Error saving to localStorage:', error);
+function cancelScheduledSave(): void {
+  if (idleSaveTimer === null) return;
+  if (idleSaveKind === 'idle') {
+    const scoped = window as unknown as { cancelIdleCallback?: (id: number) => void };
+    scoped.cancelIdleCallback?.(idleSaveTimer);
+  } else {
+    window.clearTimeout(idleSaveTimer);
   }
+  idleSaveTimer = null;
+  idleSaveKind = null;
+}
+
+export function flushPendingSave(): void {
+  if (pendingSaves.size === 0) return;
+  const entries = [...pendingSaves.entries()];
+  pendingSaves.clear();
+  entries.forEach(([resolvedKey, value]) => {
+    try {
+      localStorage.setItem(resolvedKey, JSON.stringify(value));
+    } catch (error) {
+      console.error('Error saving to localStorage:', error);
+    }
+  });
 }
 
 export function loadFromStorage<T>(key: string, defaultValue: T): T {
@@ -66,18 +81,21 @@ export function loadFromStorage<T>(key: string, defaultValue: T): T {
  * 保留同步语义对外不变：调用方无需等待。
  */
 export function saveToStorage<T>(key: string, value: T): void {
-  pendingSave = { key, value: value as unknown };
+  pendingSaves.set(resolveKey(key), value as unknown);
 
   if (idleSaveTimer !== null) return;
 
   const run = () => {
     idleSaveTimer = null;
+    idleSaveKind = null;
     flushPendingSave();
   };
 
   if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+    idleSaveKind = 'idle';
     idleSaveTimer = window.requestIdleCallback(run, { timeout: 2000 });
   } else {
+    idleSaveKind = 'timeout';
     idleSaveTimer = setTimeout(run, 500) as unknown as number;
   }
 }
@@ -85,12 +103,15 @@ export function saveToStorage<T>(key: string, value: T): void {
 /**
  * 立即写入（不走延迟队列）。
  *
- * `saveToStorage` 只有一个待写槽，多个 key 连续保存会互相覆盖；剧本杀这类
- * 「写完马上要读回来（继续上次进度）」的小体量数据用这个，避免丢档。
+ * 剧本杀这类「写完马上要读回来（继续上次进度）」的小体量数据用这个；
+ * 写入前会移除同键的延迟任务，保证旧值不会在稍后回写覆盖新值。
  */
 export function saveToStorageNow<T>(key: string, value: T): boolean {
+  const resolvedKey = resolveKey(key);
+  pendingSaves.delete(resolvedKey);
+  if (pendingSaves.size === 0) cancelScheduledSave();
   try {
-    localStorage.setItem(resolveKey(key), JSON.stringify(value));
+    localStorage.setItem(resolvedKey, JSON.stringify(value));
     return true;
   } catch (error) {
     console.error('Error saving to localStorage:', error);
@@ -100,16 +121,8 @@ export function saveToStorageNow<T>(key: string, value: T): boolean {
 
 /** 退出登录/切换账号时使用：取消待写入并清空对局数据，避免串号 */
 export function resetLocalState(): void {
-  if (idleSaveTimer !== null) {
-    const scoped = window as unknown as { cancelIdleCallback?: (id: number) => void };
-    if (typeof scoped.cancelIdleCallback === 'function') {
-      scoped.cancelIdleCallback(idleSaveTimer);
-    } else {
-      window.clearTimeout(idleSaveTimer);
-    }
-    idleSaveTimer = null;
-  }
-  pendingSave = null;
+  cancelScheduledSave();
+  pendingSaves.clear();
   try {
     localStorage.removeItem(resolveKey('couples-ludo-game-state'));
   } catch (error) {
@@ -119,8 +132,11 @@ export function resetLocalState(): void {
 
 
 export function removeFromStorage(key: string): void {
+  const resolvedKey = resolveKey(key);
+  pendingSaves.delete(resolvedKey);
+  if (pendingSaves.size === 0) cancelScheduledSave();
   try {
-    localStorage.removeItem(resolveKey(key));
+    localStorage.removeItem(resolvedKey);
   } catch (error) {
     console.error('Error removing from localStorage:', error);
   }
@@ -137,6 +153,7 @@ export interface LocalBackup {
 export function exportLocalBackup(): LocalBackup {
   const entries: Record<string, string> = {};
   try {
+    flushPendingSave();
     for (let i = 0; i < localStorage.length; i++) {
       const rawKey = localStorage.key(i);
       if (!rawKey) continue;
@@ -163,11 +180,14 @@ export function importLocalBackup(backup: LocalBackup): number {
   let count = 0;
   for (const [key, value] of Object.entries(backup.entries)) {
     try {
-      localStorage.setItem(`${SCOPE_PREFIX}${key}`, value);
+      const resolvedKey = `${SCOPE_PREFIX}${key}`;
+      pendingSaves.delete(resolvedKey);
+      localStorage.setItem(resolvedKey, value);
       count += 1;
     } catch (error) {
       console.error('Error importing key:', key, error);
     }
   }
+  if (pendingSaves.size === 0) cancelScheduledSave();
   return count;
 }

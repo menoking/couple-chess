@@ -61,7 +61,8 @@ const AUCTION_CONFIRMED_KEY = 'AuctionModeView.confirmed';
  * 拍卖密封出价：价格写进按座位隔离的槽位，viewFor 只会把它下发给本人，
  * 对方（包括观战视角）拿不到。双方都提交后，房主一次性算出结果写进公共字段。
  */
-function sealBid(state: RoomSnapshot, seat: Seat, amount: number): RoomSnapshot {
+function sealBid(state: RoomSnapshot, seat: Seat, amount: number, round: number): RoomSnapshot {
+  if (state.data['AuctionModeView.round'] !== round) return state;
   // 本轮已经揭晓就不再接受新的密封出价，避免重复结算
   if (state.data[AUCTION_REVEAL_KEY]) return state;
   const value = Math.max(0, Math.floor(amount));
@@ -76,6 +77,7 @@ function sealBid(state: RoomSnapshot, seat: Seat, amount: number): RoomSnapshot 
     [seatScopedKey(SEALED_BID_KEY, seat)]: value,
     [AUCTION_CONFIRMED_KEY]: confirmed
   };
+  const changedKeys = [seatScopedKey(SEALED_BID_KEY, seat), AUCTION_CONFIRMED_KEY];
 
   if (confirmed[0] && confirmed[1]) {
     const a = data[seatScopedKey(SEALED_BID_KEY, 0)];
@@ -83,6 +85,7 @@ function sealBid(state: RoomSnapshot, seat: Seat, amount: number): RoomSnapshot 
     if (typeof a === 'number' && typeof b === 'number') {
       const winner = a === b ? null : a > b ? 0 : 1;
       data[AUCTION_REVEAL_KEY] = { bids: [a, b], winner };
+      changedKeys.push(AUCTION_REVEAL_KEY);
       if (winner !== null) {
         const coinsRaw = data['AuctionModeView.coins'];
         const coins: Record<number, number> = coinsRaw && typeof coinsRaw === 'object'
@@ -91,10 +94,19 @@ function sealBid(state: RoomSnapshot, seat: Seat, amount: number): RoomSnapshot 
         const paid = winner === 0 ? a : b;
         coins[winner] = Math.max(0, (coins[winner] ?? 0) - paid);
         data['AuctionModeView.coins'] = coins;
+        changedKeys.push('AuctionModeView.coins');
       }
     }
   }
-  return { ...state, data };
+  const writeSeq = state.seq + 1;
+  return {
+    ...state,
+    data,
+    dataSeq: {
+      ...(state.dataSeq ?? {}),
+      ...Object.fromEntries(changedKeys.map(key => [key, writeSeq]))
+    }
+  };
 }
 
 /**
@@ -118,12 +130,22 @@ function sealSubmit(
     ...state.data,
     [sealedKey(seat)]: { round, value }
   };
+  const changedKeys = [sealedKey(seat)];
   const a = data[sealedKey(0)] as { round: number; value: unknown } | undefined;
   const b = data[sealedKey(1)] as { round: number; value: unknown } | undefined;
   if (a?.round === round && b?.round === round) {
     data[revealedKey] = { round, values: [a.value, b.value] };
+    changedKeys.push(revealedKey);
   }
-  return { ...state, data };
+  const writeSeq = state.seq + 1;
+  return {
+    ...state,
+    data,
+    dataSeq: {
+      ...(state.dataSeq ?? {}),
+      ...Object.fromEntries(changedKeys.map(key => [key, writeSeq]))
+    }
+  };
 }
 
 export function createRoom(
@@ -144,7 +166,9 @@ export function createRoom(
     lobbyLocked: false,
     cards: [],
     cardSeq: 0,
-    data: {}
+    data: {},
+    dataSeq: {},
+    dataResetSeq: 0
   };
 }
 
@@ -155,13 +179,27 @@ export function createRoom(
 export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapshot {
   const bump = (next: RoomSnapshot): RoomSnapshot => ({ ...next, seq: state.seq + 1 });
 
+  const patchConflicts = (key: string, baseSeq: number): boolean =>
+    baseSeq < (state.dataResetSeq ?? 0) || (state.dataSeq?.[key] ?? 0) > baseSeq;
+
+  const validatePatch = (key: string, value: unknown, seat: Seat): boolean => {
+    if (isAuthorityOnlyState(key) && seat !== state.hostSeat) return false;
+    const turnPrefix = turnBoundPrefixOf(key);
+    if (!turnPrefix || isCardInternalKey(key)) return true;
+    const started = isGameStarted(state, turnPrefix);
+    const owner = viewTurnOf(state, turnPrefix);
+    const isInitialWrite = !(key in state.data) && seat === state.hostSeat;
+    return !started || isInitialWrite || value === null || seat === owner;
+  };
+
   switch (action.type) {
     case 'replace':
       return action.snapshot;
 
     case 'patch': {
+      if (patchConflicts(action.key, action.baseSeq)) return state;
       // 计时状态只允许权威端推进，否则两台设备的秒数会互相覆盖
-      if (isAuthorityOnlyState(action.key) && action.seat !== state.hostSeat) return state;
+      if (!validatePatch(action.key, action.value, action.seat)) return state;
       // 严格轮流玩法：非当前回合方不能写玩法状态。
       // 前端守卫（useMyTurn）会因为座位 / Presence 竞态失效，这里是最终裁决——
       // 只要写的人不是当前回合方，房主直接丢弃，绝不让两端各走各的。
@@ -197,11 +235,13 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
           executorSeat: found.executorSeat,
           reason: found.reason,
           card: found.card,
-          moveDelta: found.moveDelta
+          moveDelta: found.moveDelta,
+          continuation: found.continuation
         }));
       }
       // 视图用 runId 重挂内层组件重开一局；清空全部玩法局部状态，两端一起重开
-      const data = isRestartState(action.key)
+      const resetting = isRestartState(action.key);
+      const data = resetting
         ? { [action.key]: action.value }
         : { ...state.data, [action.key]: action.value };
       // 开局确认和 turn 必须原子落地：只写 started 不写 turn 的话，
@@ -209,22 +249,61 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       if (turnPrefix && startConfirmTurn !== null) {
         data[`${turnPrefix}turn`] = startConfirmTurn;
       }
-      return bump({ ...state, data });
+      const writeSeq = state.seq + 1;
+      const dataSeq: Record<string, number> = resetting
+        ? { [action.key]: writeSeq }
+        : { ...(state.dataSeq ?? {}), [action.key]: writeSeq };
+      if (turnPrefix && startConfirmTurn !== null) dataSeq[`${turnPrefix}turn`] = writeSeq;
+      return bump({ ...state, data, dataSeq, dataResetSeq: resetting ? writeSeq : state.dataResetSeq });
     }
 
     case 'patchBatch': {
-      // 按顺序逐条应用，每条都走和单个 patch 完全相同的校验
-      let next = state;
+      if (action.entries.length === 0) return state;
+      const keys = new Set<string>();
       for (const entry of action.entries) {
-        next = reduceRoom(next, {
-          type: 'patch',
-          key: entry.key,
-          value: entry.value,
-          baseSeq: action.baseSeq,
-          seat: action.seat
-        });
+        if (keys.has(entry.key) || patchConflicts(entry.key, action.baseSeq) || !validatePatch(entry.key, entry.value, action.seat)) {
+          return state;
+        }
+        keys.add(entry.key);
       }
-      return next;
+      if (action.entries.some(entry => isRestartState(entry.key))) return state;
+      const cardEntries = action.entries
+        .map(entry => ({ entry, found: extractCard(entry.value) }))
+        .filter(item => item.found !== null);
+      if (cardEntries.length > 1) return state;
+      const data = { ...state.data };
+      let startTurn: { prefix: string; seat: Seat } | null = null;
+      for (const entry of action.entries) {
+        if (extractCard(entry.value)) continue;
+        data[entry.key] = entry.value;
+        const prefix = turnBoundPrefixOf(entry.key);
+        if (prefix && !isGameStarted(state, prefix) && isStartConfirmAction(entry.key, prefix, entry.value)) {
+          startTurn = { prefix, seat: action.seat };
+        }
+      }
+      if (startTurn) data[`${startTurn.prefix}turn`] = startTurn.seat;
+      const writeSeq = state.seq + 1;
+      const dataSeq = { ...(state.dataSeq ?? {}) };
+      action.entries.forEach(entry => {
+        if (!extractCard(entry.value)) dataSeq[entry.key] = writeSeq;
+      });
+      if (startTurn) dataSeq[`${startTurn.prefix}turn`] = writeSeq;
+      let next: RoomSnapshot = { ...state, data, dataSeq };
+      const found = cardEntries[0]?.found;
+      if (found) {
+        const head = state.cards[0];
+        if (!head || head.executorSeat !== found.executorSeat || head.card?.task !== found.card.task) {
+          next = enqueueCard(next, {
+            drawerSeat: found.drawerSeat,
+            executorSeat: found.executorSeat,
+            reason: found.reason,
+            card: found.card,
+            moveDelta: found.moveDelta,
+            continuation: found.continuation
+          });
+        }
+      }
+      return bump(next);
     }
 
     case 'sealSubmit': {
@@ -233,11 +312,107 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
     }
 
     case 'sealBid': {
-      const next = sealBid(state, action.seat, action.amount);
+      const next = sealBid(state, action.seat, action.amount, action.round);
       return next === state ? state : bump(next);
     }
 
+    case 'bluffChallenge': {
+      if (state.mode !== 'bluff') return state;
+      const round = state.data['BluffDiceModeView.round'];
+      const turn = state.data['BluffDiceModeView.turn'];
+      const phase = state.data['BluffDiceModeView.phase'];
+      const bid = state.data['BluffDiceModeView.bid'] as { qty?: number; face?: number; by?: number } | null;
+      if (round !== action.round || turn !== action.seat || phase !== 'bid' || !bid) return state;
+      const hand0 = state.data[seatScopedKey('BluffDiceModeView.dice', 0)];
+      const hand1 = state.data[seatScopedKey('BluffDiceModeView.dice', 1)];
+      if (!Array.isArray(hand0) || !Array.isArray(hand1) || hand0.length !== 5 || hand1.length !== 5) return state;
+      if (typeof bid.qty !== 'number' || typeof bid.face !== 'number' || (bid.by !== 0 && bid.by !== 1)) return state;
+
+      const count = [...hand0, ...hand1].filter(value => value === bid.face).length;
+      const bidderWins = count >= bid.qty;
+      const loserId = bidderWins ? action.seat : bid.by;
+      const winnerId = bidderWins ? bid.by : action.seat;
+      const pointsRaw = state.data['BluffDiceModeView.points'];
+      const points = pointsRaw && typeof pointsRaw === 'object'
+        ? { ...(pointsRaw as Record<number, number>) }
+        : { 0: 0, 1: 0 };
+      points[winnerId] = (points[winnerId] ?? 0) + 1;
+      const writeSeq = state.seq + 1;
+      const changed = ['BluffDiceModeView.points', 'BluffDiceModeView.reveal', 'BluffDiceModeView.phase'];
+      const dataSeq = { ...(state.dataSeq ?? {}) };
+      changed.forEach(key => { dataSeq[key] = writeSeq; });
+      return bump({
+        ...state,
+        data: {
+          ...state.data,
+          'BluffDiceModeView.points': points,
+          'BluffDiceModeView.reveal': { count, bidderWins, loserId, winnerId, dice: [hand0, hand1] },
+          'BluffDiceModeView.phase': 'reveal'
+        },
+        dataSeq
+      });
+    }
+
+    case 'bluffReady': {
+      if (state.mode !== 'bluff' || state.data['BluffDiceModeView.round'] !== action.round) return state;
+      if (action.dice.length !== 5 || action.dice.some(value => !Number.isInteger(value) || value < 1 || value > 6)) return state;
+      const readyRaw = state.data['BluffDiceModeView.ready'];
+      const ready: [boolean, boolean] = Array.isArray(readyRaw)
+        ? [readyRaw[0] === true, readyRaw[1] === true]
+        : [false, false];
+      if (ready[action.seat]) return state;
+      ready[action.seat] = true;
+      const diceKey = seatScopedKey('BluffDiceModeView.dice', action.seat);
+      const writeSeq = state.seq + 1;
+      const dataSeq = {
+        ...(state.dataSeq ?? {}),
+        [diceKey]: writeSeq,
+        'BluffDiceModeView.ready': writeSeq,
+        ...(ready[0] && ready[1] ? { 'BluffDiceModeView.phase': writeSeq } : {})
+      };
+      return bump({
+        ...state,
+        data: {
+          ...state.data,
+          [diceKey]: [...action.dice],
+          'BluffDiceModeView.ready': ready,
+          ...(ready[0] && ready[1] ? { 'BluffDiceModeView.phase': 'bid' } : {})
+        },
+        dataSeq
+      });
+    }
+
+    case 'bluffNextRound': {
+      if (state.mode !== 'bluff' || state.data['BluffDiceModeView.round'] !== action.round) return state;
+      if (state.data['BluffDiceModeView.phase'] !== 'reveal' || state.data['BluffDiceModeView.turn'] !== action.seat) return state;
+      const nextRound = action.round + 1;
+      const data = {
+        ...state.data,
+        'BluffDiceModeView.round': nextRound,
+        'BluffDiceModeView.starterId': action.nextStarter,
+        'BluffDiceModeView.turn': action.nextStarter,
+        'BluffDiceModeView.phase': 'handoff1',
+        'BluffDiceModeView.bid': null,
+        'BluffDiceModeView.reveal': null,
+        'BluffDiceModeView.taskData': null,
+        'BluffDiceModeView.ready': [false, false],
+        [seatScopedKey('BluffDiceModeView.dice', 0)]: null,
+        [seatScopedKey('BluffDiceModeView.dice', 1)]: null
+      };
+      const writeSeq = state.seq + 1;
+      const changed = [
+        'BluffDiceModeView.round', 'BluffDiceModeView.starterId', 'BluffDiceModeView.turn',
+        'BluffDiceModeView.phase', 'BluffDiceModeView.bid', 'BluffDiceModeView.reveal',
+        'BluffDiceModeView.taskData', 'BluffDiceModeView.ready',
+        seatScopedKey('BluffDiceModeView.dice', 0), seatScopedKey('BluffDiceModeView.dice', 1)
+      ];
+      const dataSeq = { ...(state.dataSeq ?? {}) };
+      changed.forEach(key => { dataSeq[key] = writeSeq; });
+      return bump({ ...state, data, dataSeq });
+    }
+
     case 'endTurn':
+      if (action.expectedTurn !== state.turn || action.seat !== state.turn) return state;
       return bump({ ...state, turn: state.turn === 0 ? 1 : 0 });
 
     case 'setTurn':
@@ -249,7 +424,8 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
         executorSeat: action.executorSeat,
         reason: action.reason,
         card: action.card,
-        moveDelta: action.moveDelta
+        moveDelta: action.moveDelta,
+        continuation: action.continuation
       }));
 
     case 'drawCard':
@@ -261,13 +437,14 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       const cleared = bump(next);
       // 扫雷：任务卡/炸弹卡确认完就是一次回合，由房主统一交回合，
       // 避免 blank / task / bomb 三条分支各写一次 endTurn 还容易漏
-      if (cleared.cards.length === 0 && state.mode === 'mine') {
+      if (cleared.cards.length === 0 && state.mode === 'mine' && !state.cards[0]?.continuation) {
         return { ...cleared, turn: cleared.turn === 0 ? 1 : 0 };
       }
       return cleared;
     }
 
     case 'pickThemes': {
+      if (state.lobbyLocked || state.picks[action.seat].locked) return state;
       const picks: RoomSnapshot['picks'] = [...state.picks] as RoomSnapshot['picks'];
       picks[action.seat] = { themeIds: action.themeIds, locked: false };
       const draftPools: RoomSnapshot['draftPools'] = [...state.draftPools] as RoomSnapshot['draftPools'];
@@ -276,6 +453,7 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
     }
 
     case 'lockLobby': {
+      if (state.lobbyLocked || state.picks[action.seat].locked) return state;
       const picks: RoomSnapshot['picks'] = [...state.picks] as RoomSnapshot['picks'];
       picks[action.seat] = { themeIds: action.themeIds, locked: true };
       const draftPools: RoomSnapshot['draftPools'] = [...state.draftPools] as RoomSnapshot['draftPools'];
@@ -288,6 +466,7 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
     }
 
     case 'unlockLobby': {
+      if (state.lobbyLocked || !state.picks[action.seat].locked) return state;
       const picks: RoomSnapshot['picks'] = [...state.picks] as RoomSnapshot['picks'];
       picks[action.seat] = { ...picks[action.seat], locked: false };
       return bump({ ...state, picks, lobbyLocked: false });
@@ -295,6 +474,7 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
 
     // 对方还没上线时，允许本设备用自己的卡包先开局
     case 'forceLobby': {
+      if (state.lobbyLocked) return state;
       const picks: RoomSnapshot['picks'] = [
         { ...state.picks[0], locked: true },
         { ...state.picks[1], locked: true }
@@ -306,7 +486,7 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
     }
 
     case 'restart':
-      return bump({ ...state, data: {}, cards: [], turn: state.hostSeat });
+      return bump({ ...state, data: {}, dataSeq: {}, dataResetSeq: state.seq + 1, cards: [], turn: state.hostSeat });
 
     default:
       return state;

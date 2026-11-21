@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { PendingCard, RoomAction, RoomSnapshot, Seat } from '../rules/types';
+import type { PendingCard, RoomAction, RoomActionEnvelope, RoomSnapshot, Seat } from '../rules/types';
 import { reduceRoom, viewFor } from '../rules/room';
 import { extractCard } from '../rules/cards';
 import { privateKeyOf } from '../rules/registry';
@@ -7,6 +7,7 @@ import { reviveValue, serializeValue, type ModeRuntimeValue } from '../rules/Mod
 import { createTransport, type RoomTransport, type TransportKind } from './transport';
 import { diagLog, setDiagnosticContext } from './diagnostics';
 import { getDeviceId } from './device';
+import { createActionEnvelope, normalizeEnvelopeAction, validateActionEnvelope } from './actionProtocol';
 
 export interface SharedRoomInput {
   roomId: string | null;
@@ -33,6 +34,30 @@ export interface SharedRoomResult {
 
 const ROOM_SNAPSHOT_PREFIX = 'cfc:room-snapshot:';
 
+export function normalizeRoomSnapshot(snapshot: RoomSnapshot): RoomSnapshot {
+  const picks: RoomSnapshot['picks'] = ([0, 1] as const).map(index => {
+    const pick = Array.isArray(snapshot.picks) ? snapshot.picks[index] : undefined;
+    return {
+      themeIds: Array.isArray(pick?.themeIds)
+        ? pick.themeIds.filter((value): value is string => typeof value === 'string')
+        : [],
+      locked: pick?.locked === true
+    };
+  }) as RoomSnapshot['picks'];
+  return {
+    ...snapshot,
+    cardPool: Array.isArray(snapshot.cardPool) ? snapshot.cardPool : [],
+    draftPools: Array.isArray(snapshot.draftPools) && snapshot.draftPools.length === 2
+      ? snapshot.draftPools
+      : [[], []],
+    cards: Array.isArray(snapshot.cards) ? snapshot.cards : [],
+    picks,
+    data: snapshot.data && typeof snapshot.data === 'object' ? snapshot.data : {},
+    dataSeq: snapshot.dataSeq && typeof snapshot.dataSeq === 'object' ? snapshot.dataSeq : {},
+    dataResetSeq: typeof snapshot.dataResetSeq === 'number' ? snapshot.dataResetSeq : 0
+  };
+}
+
 /** 房主房间快照落 sessionStorage：组件重挂 / 刷新后不会退回「重新选卡包」。 */
 export function loadRoomSnapshot(roomId: string): RoomSnapshot | null {
   try {
@@ -40,8 +65,22 @@ export function loadRoomSnapshot(roomId: string): RoomSnapshot | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as RoomSnapshot;
     if (!parsed || typeof parsed.seq !== 'number') return null;
-    // 快照只用来保留「大厅已锁定 + 卡包」，绝不能把上次没做完的卡带回来
-    return { ...parsed, cards: [], data: {} };
+    const safeParsed = { ...(parsed as RoomSnapshot & Record<string, unknown>) };
+    delete safeParsed.protocolVersion;
+    delete safeParsed.actionId;
+    delete safeParsed.deviceId;
+    delete safeParsed.actorSeat;
+    delete safeParsed.baseSeq;
+    // 旧快照只保留大厅结构和主题 id；玩法状态、卡面与旧题库都不可信，恢复时本地重建。
+    return normalizeRoomSnapshot({
+      ...(safeParsed as unknown as RoomSnapshot),
+      cards: [],
+      cardPool: [],
+      draftPools: [[], []],
+      data: {},
+      dataSeq: {},
+      dataResetSeq: 0
+    });
   } catch {
     return null;
   }
@@ -62,8 +101,11 @@ export function saveRoomSnapshot(roomId: string, snapshot: RoomSnapshot): void {
     const slim: RoomSnapshot = {
       ...snapshot,
       cards: [],
-      cardPool: snapshot.cardPool.slice(0, 500),
-      data: {}
+      cardPool: [],
+      draftPools: [[], []],
+      data: {},
+      dataSeq: {},
+      dataResetSeq: 0
     };
     window.sessionStorage.setItem(ROOM_SNAPSHOT_PREFIX + roomId, JSON.stringify(slim));
   } catch {
@@ -72,32 +114,77 @@ export function saveRoomSnapshot(roomId: string, snapshot: RoomSnapshot): void {
 }
 
 /** 公共频道兜底快照：去掉卡面明文与他人私有状态，只保留房间结构。 */
-function publicSnapshot(state: RoomSnapshot): RoomSnapshot {
+export function publicSnapshot(state: RoomSnapshot): RoomSnapshot {
   const data: Record<string, unknown> = {};
+  const dataSeq: Record<string, number> = {};
+  const contentKeys = [
+    '.cardPack',
+    '.queue',
+    '.taskData',
+    '.reward',
+    '.rewardQueue',
+    '.sealed',
+    'stage.bingoBoard',
+    'cards.drawn'
+  ];
   Object.entries(state.data).forEach(([key, value]) => {
-    if (privateKeyOf(key) === null) data[key] = value;
+    if (privateKeyOf(key) !== null || contentKeys.some(marker => key.includes(marker))) return;
+    data[key] = value;
+    if (typeof state.dataSeq?.[key] === 'number') dataSeq[key] = state.dataSeq[key];
   });
   return {
     ...state,
     hostId: getDeviceId(),
     cards: state.cards.map(card => ({ ...card, card: null })),
-    data
+    cardPool: [],
+    draftPools: [[], []],
+    data,
+    dataSeq
   };
 }
 
 /** 兜底快照收到后，保留本机已经看到的卡面明文和自己的私有状态。 */
-function mergeSnapshot(local: RoomSnapshot | null, incoming: RoomSnapshot, seat: Seat): RoomSnapshot {
+export function mergeSnapshot(local: RoomSnapshot | null, incomingRaw: RoomSnapshot, seat: Seat): RoomSnapshot {
+  const incoming = normalizeRoomSnapshot(incomingRaw);
   if (!local) return incoming;
   const cards: PendingCard[] = incoming.cards.map(card => {
     const mine = local.cards.find(item => item.id === card.id);
     if (mine && mine.phase === card.phase && mine.card) return { ...card, card: mine.card };
     return card;
   });
-  const data = { ...incoming.data };
-  Object.entries(local.data).forEach(([key, value]) => {
-    if (privateKeyOf(key) === seat) data[key] = value;
-  });
-  return { ...incoming, cards, data };
+  // 公共心跳刻意省略题库、卡面和私有槽位；它只能覆盖携带的公共键，不能把
+  // 座位专属视图已经拿到的内容删除。真正 reset 时则必须丢弃全部旧玩法状态。
+  const reset = incoming.dataResetSeq > local.dataResetSeq;
+  const data = reset ? { ...incoming.data } : { ...local.data, ...incoming.data };
+  if (!reset) {
+    Object.entries(local.data).forEach(([key, value]) => {
+      if (privateKeyOf(key) === seat) data[key] = value;
+    });
+  }
+  return {
+    ...incoming,
+    cards,
+    data,
+    cardPool: incoming.cardPool.length > 0 ? incoming.cardPool : local.cardPool,
+    draftPools: incoming.draftPools.some(pool => pool.length > 0) ? incoming.draftPools : local.draftPools
+  };
+}
+
+function rejectionReason(state: RoomSnapshot, action: RoomAction): string {
+  if (action.type === 'patch') {
+    if (action.baseSeq < state.dataResetSeq) return 'data-reset-conflict';
+    if ((state.dataSeq[action.key] ?? 0) > action.baseSeq) return 'data-key-conflict';
+  }
+  if (action.type === 'patchBatch') {
+    if (action.baseSeq < state.dataResetSeq) return 'data-reset-conflict';
+    if (action.entries.some(entry => (state.dataSeq[entry.key] ?? 0) > action.baseSeq)) return 'data-key-conflict';
+  }
+  if ('cardId' in action && state.cards[0]?.id !== action.cardId) return 'stale-card';
+  if (action.type === 'endTurn' && action.expectedTurn !== state.turn) return 'stale-turn';
+  if (action.type === 'sealBid' && state.data['AuctionModeView.round'] !== action.round) return 'stale-round';
+  if ((action.type === 'bluffReady' || action.type === 'bluffChallenge' || action.type === 'bluffNextRound')
+    && state.data['BluffDiceModeView.round'] !== action.round) return 'stale-round';
+  return 'rule-validation';
 }
 
 /**
@@ -123,13 +210,18 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
   const localVersion = useRef(0);
   const viewReady = useRef(false);
   const lastPresence = useRef('');
+  const deviceSeats = useRef(new Map<string, Seat>([[getDeviceId(), mySeat]]));
+  const seenActionIds = useRef(new Set<string>());
+  const actionIds = useRef(new WeakMap<object, string>());
+  const queuedActions = useRef<Array<{ envelope: RoomActionEnvelope; expiresAt: number }>>([]);
   const initialRef = useRef(input.createInitial);
   initialRef.current = input.createInitial;
 
   const applySnapshot = useCallback((next: RoomSnapshot) => {
+    const normalized = normalizeRoomSnapshot(next);
     localVersion.current = 0;
-    viewRef.current = next;
-    setSnapshot(next);
+    viewRef.current = normalized;
+    setSnapshot(normalized);
     listeners.current.forEach(listener => listener());
   }, []);
 
@@ -193,6 +285,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
       if (next === current) {
         // 记录被拒的动作，便于真机诊断「点了没反应」
         diagLog('room:rejected', {
+          reason: rejectionReason(current, action),
           type: action.type,
           seat: 'seat' in action ? action.seat : '-',
           key: action.type === 'patch' ? action.key : undefined,
@@ -212,6 +305,54 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
     [isHost, publish]
   );
 
+  const rejectEnvelope = useCallback((reason: string, envelope?: Partial<RoomActionEnvelope>) => {
+    diagLog('room:envelope-rejected', {
+      reason,
+      actionId: envelope?.actionId,
+      device: envelope?.deviceId?.slice(0, 8),
+      seat: envelope?.actorSeat
+    });
+    if (reason !== 'duplicate-action' && (envelope?.actorSeat === 0 || envelope?.actorSeat === 1)) {
+      transportRef.current?.sendTo(envelope.actorSeat, 'protocol-error', { reason });
+    }
+    const current = authoritativeRef.current;
+    if (current) publish(current);
+  }, [publish]);
+
+  const acceptEnvelope = useCallback((value: unknown, allowQueue = true) => {
+    if (!isHost) return;
+    const checked = validateActionEnvelope(value, deviceSeats.current, seenActionIds.current);
+    if (!checked.ok) {
+      if (checked.reason === 'unknown-device' && allowQueue && value && typeof value === 'object') {
+        const envelope = value as RoomActionEnvelope;
+        if (typeof envelope.deviceId === 'string' && (envelope.actorSeat === 0 || envelope.actorSeat === 1)) {
+          queuedActions.current.push({ envelope, expiresAt: Date.now() + 1200 });
+          window.setTimeout(() => {
+            const index = queuedActions.current.findIndex(item => item.envelope.actionId === envelope.actionId);
+            if (index < 0) return;
+            const [pending] = queuedActions.current.splice(index, 1);
+            const retry = validateActionEnvelope(pending.envelope, deviceSeats.current, seenActionIds.current);
+            if (retry.ok) {
+              seenActionIds.current.add(retry.envelope.actionId);
+              applyAction(normalizeEnvelopeAction(retry.envelope));
+            } else {
+              rejectEnvelope(retry.reason, pending.envelope);
+            }
+          }, 1250);
+          return;
+        }
+      }
+      rejectEnvelope(checked.reason, value as Partial<RoomActionEnvelope>);
+      return;
+    }
+    seenActionIds.current.add(checked.envelope.actionId);
+    if (seenActionIds.current.size > 500) {
+      const oldest = seenActionIds.current.values().next().value as string | undefined;
+      if (oldest) seenActionIds.current.delete(oldest);
+    }
+    applyAction(normalizeEnvelopeAction(checked.envelope));
+  }, [applyAction, isHost, rejectEnvelope]);
+
   useEffect(() => {
     if (!enabled || !roomId) {
       setStatus('idle');
@@ -225,6 +366,9 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
     viewRef.current = null;
     viewReady.current = false;
     lastPresence.current = '';
+    deviceSeats.current = new Map([[getDeviceId(), mySeat]]);
+    seenActionIds.current.clear();
+    queuedActions.current = [];
     setDiagnosticContext({ roomStatus: 'connecting', roomError: null, presence: [], viewReady: false });
     diagLog('room:transport', { kind, room: roomId.slice(-8), seat: mySeat, isHost });
 
@@ -252,9 +396,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         }
         if (!isHost) return;
         if (messageKind === 'action') {
-          const envelope = data as { seat?: Seat; action?: RoomAction } | null;
-          if (typeof envelope?.seat !== 'number' || !envelope.action) return;
-          applyAction(envelope.action);
+          acceptEnvelope(data);
           return;
         }
         if (messageKind === 'request-view') {
@@ -263,7 +405,17 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         }
       },
       onSeat: (messageKind, data) => {
-        if (cancelled || messageKind !== 'view') return;
+        if (cancelled) return;
+        if (messageKind === 'protocol-error') {
+          const reason = data && typeof data === 'object' ? (data as { reason?: string }).reason : undefined;
+          const message = reason === 'protocol-mismatch'
+            ? '联机协议版本不一致，请双方刷新页面后重新进入房间。'
+            : '联机动作被房主拒绝，已恢复为权威状态。';
+          setError(message);
+          diagLog('room:protocol-error', { reason });
+          return;
+        }
+        if (messageKind !== 'view') return;
         const next = data as RoomSnapshot;
         // 网络乱序时旧快照可能晚到，无条件覆盖会让界面退回上一帧，
         // 表现为「操作了但画面没跟上 / 同步不出来」。
@@ -282,6 +434,19 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         if (cancelled) return;
         setPresence(seats);
         setDiagnosticContext({ presence: seats });
+        if (metas) {
+          const nextMap = new Map<string, Seat>();
+          nextMap.set(getDeviceId(), mySeat);
+          metas.forEach(item => {
+            if (item.deviceId) nextMap.set(item.deviceId, item.seat);
+          });
+          deviceSeats.current = nextMap;
+          if (isHost && queuedActions.current.length > 0) {
+            const pending = queuedActions.current;
+            queuedActions.current = [];
+            pending.forEach(item => acceptEnvelope(item.envelope));
+          }
+        }
         // 两台设备抢到同一座位时，两端都能操作同一方，表现就是「操作权混淆」。
         // Presence 现在按设备号上报，能直接发现；设备号大的一方主动重进让位。
         if (metas && metas.length > 1) {
@@ -337,7 +502,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         await transport.connect();
         if (cancelled) return;
         if (isHost) {
-          const initial = initialRef.current();
+          const initial = normalizeRoomSnapshot(initialRef.current());
           authoritativeRef.current = initial;
           // 先把状态切到 playing，再广播；发送异常也不影响房主进入大厅
           setStatus('playing');
@@ -364,7 +529,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
       transportRef.current = null;
       authoritativeRef.current = null;
     };
-  }, [enabled, isHost, kind, mySeat, publish, applyAction, roomId]);
+  }, [enabled, isHost, kind, mySeat, publish, acceptEnvelope, applySnapshot, roomId]);
 
   // 访客首包可能发得太早，拿到视图前持续重试
   useEffect(() => {
@@ -406,13 +571,22 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
 
   const dispatch = useCallback(
     (action: RoomAction) => {
+      const existingId = actionIds.current.get(action as object);
+      const envelope = createActionEnvelope(
+        action,
+        getDeviceId(),
+        mySeat,
+        viewRef.current?.seq ?? authoritativeRef.current?.seq ?? 0,
+        existingId
+      );
+      actionIds.current.set(action as object, envelope.actionId);
       if (isHost) {
-        applyAction(action);
+        acceptEnvelope(envelope);
         return;
       }
-      transportRef.current?.send('action', { seat: mySeat, action });
+      transportRef.current?.send('action', envelope);
     },
-    [applyAction, isHost, mySeat]
+    [acceptEnvelope, isHost, mySeat]
   );
 
   // 反序列化结果必须保持引用稳定，否则视图里以共享状态为依赖的 useEffect 会无限重跑

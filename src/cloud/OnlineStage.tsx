@@ -43,7 +43,7 @@ import { JungleModeView } from '../components/views/JungleModeView';
 import type { RoomAction, RoomSnapshot, Role, Seat } from '../rules/types';
 import { cardFor, extractCard } from '../rules/cards';
 import { buildMergedTheme, buildOnlinePlayers, MERGED_THEME_ID, PLAYER_NAME } from '../rules/identity';
-import { picksToPool } from '../rules/lobby';
+import { mergePools, picksToPool } from '../rules/lobby';
 import { ALL_THEME_MODES, MODE_LABEL, MODE_REGISTRY, THEME_FREE_MODES, turnKeyOfMode } from '../rules/registry';
 import { createRoom } from '../rules/room';
 import { ModeRuntimeProvider } from '../rules/ModeRuntime';
@@ -195,8 +195,8 @@ function CardGateBody({
     if (navigator.vibrate) navigator.vibrate(30);
     // 直接覆盖 pending：即使抽卡/翻卡还在重试，逃生也要能发出去
     tries.current = 0;
-    setPending({ type: 'forceCloseCard', seat: mySeat });
-    dispatch({ type: 'forceCloseCard', seat: mySeat });
+    setPending({ type: 'forceCloseCard', seat: mySeat, cardId: card.id });
+    dispatch({ type: 'forceCloseCard', seat: mySeat, cardId: card.id });
   };
 
   /**
@@ -224,10 +224,10 @@ function CardGateBody({
     if (busy) return;
     if (canReveal) {
       setFlipped(true);
-      send({ type: 'revealCard', seat: mySeat });
+      send({ type: 'revealCard', seat: mySeat, cardId: card.id });
       return;
     }
-    if (canDraw) send({ type: 'drawCard', seat: mySeat });
+    if (canDraw) send({ type: 'drawCard', seat: mySeat, cardId: card.id });
   };
 
   // 抽卡方翻完卡后，对方设备自动弹出卡面并自动翻转
@@ -334,7 +334,7 @@ function CardGateBody({
             <button
               type="button"
               disabled={busy}
-              onClick={() => send({ type: 'ackCard', seat: mySeat })}
+              onClick={() => send({ type: 'ackCard', seat: mySeat, cardId: card.id, outcome: 'skip' })}
               className="ios-btn h-11 flex-1 rounded-full bg-[#3A3A3C] text-xs font-bold text-[#FF453A] disabled:opacity-60"
             >
               跳过任务
@@ -342,7 +342,7 @@ function CardGateBody({
             <button
               type="button"
               disabled={busy}
-              onClick={() => send({ type: 'ackCard', seat: mySeat })}
+              onClick={() => send({ type: 'ackCard', seat: mySeat, cardId: card.id, outcome: 'accept' })}
               className="ios-btn h-11 flex-1 rounded-full bg-white text-xs font-bold text-black disabled:opacity-60"
             >
               {busy ? '确认中…' : '接受任务'}
@@ -440,12 +440,30 @@ export function OnlineStage(props: OnlineStageProps) {
   const createInitial = useCallback(() => {
     // 恢复本机上一次的房间快照：组件重挂/刷新后不会把已锁定的卡包清空
     const restored = loadRoomSnapshot(roomId);
-    if (restored && restored.mode === mode && restored.hostSeat === hostSeat) return restored;
+    if (restored && restored.mode === mode && restored.hostSeat === hostSeat) {
+      const draftPools: RoomSnapshot['draftPools'] = [
+        picksToPool(themes, restored.picks[0].themeIds),
+        picksToPool(themes, restored.picks[1].themeIds)
+      ];
+      return {
+        ...restored,
+        draftPools,
+        cardPool: restored.lobbyLocked ? mergePools(draftPools[0], draftPools[1]) : []
+      };
+    }
     return createRoom(mode, roles, hostSeat, hostSeat);
-  }, [mode, roles, hostSeat, roomId]);
+  }, [mode, roles, hostSeat, roomId, themes]);
   const shared = useSharedRoom({ roomId, mySeat, hostSeat, kind, enabled: true, createInitial, onConflict });
   const snap = shared.snapshot;
   const dispatch = shared.dispatch;
+  const announce = shared.announce;
+  const resolvedCardPool = useMemo(() => {
+    if (!snap) return [];
+    if (snap.cardPool.length > 0) return snap.cardPool;
+    const first = picksToPool(themes, snap.picks[0].themeIds);
+    const second = picksToPool(themes, snap.picks[1].themeIds);
+    return mergePools(first, second);
+  }, [snap, themes]);
 
   const [selected, setSelected] = useState<string[]>([]);
   const [bombOpen, setBombOpen] = useState(false);
@@ -499,7 +517,7 @@ export function OnlineStage(props: OnlineStageProps) {
     lockTries.current = 0;
     setLockPending(true);
     // 双通道：Presence（头像已证明可用）+ 普通动作
-    shared.announce({ lobbyLocked: true, themeIds: selected });
+    announce({ lobbyLocked: true, themeIds: selected });
     dispatch({ type: 'lockLobby', seat: mySeat, themeIds: selected, pool: myPool });
   };
 
@@ -516,11 +534,11 @@ export function OnlineStage(props: OnlineStageProps) {
     }
     const timer = window.setTimeout(() => {
       lockTries.current += 1;
-      shared.announce({ lobbyLocked: true, themeIds: selected });
+      announce({ lobbyLocked: true, themeIds: selected });
       dispatch({ type: 'lockLobby', seat: mySeat, themeIds: selected, pool: myPool });
     }, 1500);
     return () => window.clearTimeout(timer);
-  }, [lockPending, myLocked, selected, myPool, dispatch, mySeat, shared.announce]);
+  }, [lockPending, myLocked, selected, myPool, dispatch, mySeat, announce]);
 
   useEffect(() => {
     if (snap) setSelected(snap.picks[mySeat].themeIds);
@@ -536,19 +554,19 @@ export function OnlineStage(props: OnlineStageProps) {
     if (data['stage.pathCoords'] === undefined) shared.runtime.patch('stage.pathCoords', generateSpiralPath());
     if (data['stage.mineBoard'] === undefined) shared.runtime.patch('stage.mineBoard', generateMineBoard());
     if (snap.lobbyLocked && data['stage.bingoBoard'] === undefined) {
-      const tasks: TaskCard[] = snap.cardPool.map(card => ({ text: card.task, executor: 'both', moveDelta: 0 }));
+      const tasks: TaskCard[] = resolvedCardPool.map(card => ({ text: card.task, executor: 'both', moveDelta: 0 }));
       shared.runtime.patch('stage.bingoBoard', generateBingoBoard([{ themeId: MERGED_THEME_ID, tasks }], BINGO_BOARD_SIZE));
     }
-  }, [isHost, snap, shared.status, shared.runtime]);
+  }, [isHost, snap, shared.status, shared.runtime, resolvedCardPool]);
 
   const onlineThemes = useMemo<Theme[]>(() => {
-    const tasks: TaskCard[] = (snap?.cardPool ?? []).map(card => ({
+    const tasks: TaskCard[] = resolvedCardPool.map(card => ({
       text: card.task,
       executor: 'both',
       moveDelta: 0
     }));
     return [buildMergedTheme(tasks, ALL_THEME_MODES), ...themes];
-  }, [snap?.cardPool, themes]);
+  }, [resolvedCardPool, themes]);
 
   const players = useMemo<Player[]>(() => {
     const steps = (snap?.data['stage.steps'] as number[] | undefined) ?? [0, 0];
@@ -617,6 +635,7 @@ export function OnlineStage(props: OnlineStageProps) {
         <span className="truncate">{THEME_FREE_MODES.has(mode) ? '本玩法不需要卡包' : `抽卡：${rule}`}</span>
       </div>
       {snap.cards.length > 0 && <div className="mt-1 text-center text-[10px] font-bold text-[#FFD60A]">抽卡中 · 玩法操作已锁定</div>}
+      {shared.error && <div className="mt-1 text-center text-[10px] font-bold text-[#FF7A96]">{shared.error}</div>}
     </div>
   );
 
@@ -717,7 +736,7 @@ export function OnlineStage(props: OnlineStageProps) {
               </button>
               <button
                 type="button"
-                onClick={() => dispatch({ type: 'forceLobby', seat: mySeat, pool: myPool.length ? myPool : snap.cardPool })}
+                onClick={() => dispatch({ type: 'forceLobby', seat: mySeat, pool: myPool.length ? myPool : resolvedCardPool })}
                 className="ios-btn mt-2 h-10 w-full rounded-full border border-white/10 text-[11px] font-bold text-gray-400"
               >
                 对方还没上线 · 先用我的卡包开局
@@ -736,7 +755,7 @@ export function OnlineStage(props: OnlineStageProps) {
               <button
                 type="button"
                 onClick={() => {
-                  shared.announce({ lobbyLocked: false, themeIds: [] });
+                  announce({ lobbyLocked: false, themeIds: [] });
                   dispatch({ type: 'unlockLobby', seat: mySeat });
                 }}
                 className="ios-btn mt-3 rounded-full border border-white/10 px-4 py-2 text-[11px] text-gray-300"
@@ -773,18 +792,20 @@ export function OnlineStage(props: OnlineStageProps) {
     }
     dispatch({
       type: 'enqueueCard',
+      seat: mySeat,
       drawerSeat: found?.drawerSeat ?? other(mySeat),
       executorSeat: found?.executorSeat ?? mySeat,
       reason: found?.reason ?? '抽到一张任务卡',
       card: found?.card,
-      moveDelta: found?.moveDelta ?? 0
+      moveDelta: found?.moveDelta ?? 0,
+      continuation: found?.continuation
     });
   };
 
-  const endTurn = () => dispatch({ type: 'endTurn', seat: mySeat });
+  const endTurn = () => dispatch({ type: 'endTurn', seat: mySeat, expectedTurn: snap.turn });
   const onBack = onExit;
   const onDrawTask = (excludeKeys: readonly string[] = []) =>
-    poolTask(snap, other(mySeat), '抽到一张任务卡', [...drawnTasks, ...excludeKeys]);
+    poolTask({ ...snap, cardPool: resolvedCardPool }, other(mySeat), '抽到一张任务卡', [...drawnTasks, ...excludeKeys]);
   const onTaskTrigger = (task: TaskEventData) => enqueue(task);
   // 扫雷炸弹：三选一由对方指定（与同屏 chooseMineBombTask 一致）
   const onBombTrigger = () => setBombOpen(true);

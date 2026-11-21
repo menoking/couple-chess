@@ -37,7 +37,7 @@ class LocalRoomTransport implements RoomTransport {
   kind: TransportKind = 'local';
   private pub: BroadcastChannel | null = null;
   private mine: BroadcastChannel | null = null;
-  private peers = new Map<Seat, number>();
+  private peers = new Map<Seat, { time: number; meta: PresenceMeta }>();
   private heartbeat: number | null = null;
 
   constructor(
@@ -56,7 +56,18 @@ class LocalRoomTransport implements RoomTransport {
     this.pub.onmessage = event => {
       const message = event.data as { kind?: string; data?: unknown; seat?: Seat } | null;
       if (!message) return;
-      if (typeof message.seat === 'number') this.peers.set(message.seat, Date.now());
+      if (typeof message.seat === 'number') {
+        const current = this.peers.get(message.seat);
+        const payload = message.data && typeof message.data === 'object' ? message.data as Record<string, unknown> : {};
+        this.peers.set(message.seat, {
+          time: Date.now(),
+          meta: {
+            ...current?.meta,
+            seat: message.seat,
+            deviceId: typeof payload.deviceId === 'string' ? payload.deviceId : current?.meta.deviceId
+          }
+        });
+      }
       if (message.kind === 'ping') return;
       this.handlers.onPublic?.(message.kind ?? '', message.data);
     };
@@ -67,16 +78,20 @@ class LocalRoomTransport implements RoomTransport {
       this.handlers.onSeat?.(message.kind ?? '', message.data);
     };
 
-    this.peers.set(this.mySeat, Date.now());
+    this.peers.set(this.mySeat, { time: Date.now(), meta: { seat: this.mySeat, deviceId: getDeviceId() } });
     const beat = () => {
-      this.pub?.postMessage({ kind: 'ping', seat: this.mySeat });
+      this.pub?.postMessage({ kind: 'ping', seat: this.mySeat, data: { deviceId: getDeviceId() } });
       const now = Date.now();
       const alive: Seat[] = [];
-      this.peers.forEach((time, seat) => {
-        if (now - time < PRESENCE_TTL_MS) alive.push(seat);
+      const metas: PresenceMeta[] = [];
+      this.peers.forEach((entry, seat) => {
+        if (now - entry.time < PRESENCE_TTL_MS) {
+          alive.push(seat);
+          metas.push(entry.meta);
+        }
       });
       if (!alive.includes(this.mySeat)) alive.push(this.mySeat);
-      this.handlers.onPresence?.(alive.sort());
+      this.handlers.onPresence?.(alive.sort(), metas);
     };
     beat();
     this.heartbeat = window.setInterval(beat, HEARTBEAT_MS);
@@ -98,7 +113,12 @@ class LocalRoomTransport implements RoomTransport {
   }
 
   track(meta: Record<string, unknown>): void {
-    this.pub?.postMessage({ kind: 'presence', seat: this.mySeat, ...meta });
+    const current = this.peers.get(this.mySeat);
+    this.peers.set(this.mySeat, {
+      time: Date.now(),
+      meta: { seat: this.mySeat, deviceId: getDeviceId(), ...current?.meta, ...meta }
+    });
+    this.pub?.postMessage({ kind: 'presence', seat: this.mySeat, data: { deviceId: getDeviceId(), ...meta } });
   }
 
   close(): void {
