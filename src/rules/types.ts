@@ -72,7 +72,8 @@ export type RoomAction =
   | { type: 'endTurn'; seat: Seat; expectedTurn: number }
   | { type: 'setTurn'; seat: Seat; turn: number }
   | { type: 'enqueueCard'; seat: Seat; drawerSeat: Seat; executorSeat: Seat; reason: string; card?: OnlineCard; moveDelta?: number; continuation?: TaskContinuation }
-  | { type: 'drawCard'; seat: Seat; cardId: number }
+  /** reveal=true 时在同一个权威动作里完成抽取和翻开。 */
+  | { type: 'drawCard'; seat: Seat; cardId: number; reveal?: boolean }
   | { type: 'revealCard'; seat: Seat; cardId: number }
   | { type: 'ackCard'; seat: Seat; cardId: number; outcome: 'accept' | 'skip' }
   /** 拍卖密封出价：价格只下发给本人，双方都提交后房主一次性公开 */

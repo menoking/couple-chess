@@ -107,7 +107,7 @@ function poolTask(
   };
 }
 
-/** 四阶段抽卡闸门：胜方抽卡看到 → 败方才能翻卡 → 败方确认后出队。 */
+/** 抽卡闸门：抽卡方点击一次完成抽取和翻开，执行方确认后出队。 */
 function CardGate(props: {
   snap: RoomSnapshot;
   mySeat: Seat;
@@ -149,9 +149,9 @@ function CardGateBody({
   const executorName = executor?.name ?? '对方';
   const face = card.card;
   const canDraw = card.phase === 'locked' && isDrawer;
-  // 只有抽卡方本人能翻卡
+  // 仅兼容旧快照留下的 drawn 阶段；新版不会再停在这里。
   const canReveal = card.phase === 'drawn' && isDrawer;
-  // 和离线模式一致：卡面不自动翻，点一下才翻
+  // 权威状态确认 revealed 后再播放翻牌动画。
   const [flipped, setFlipped] = useState(false);
 
   // 双击卡面强制关闭：对方退出房间 / 卡在翻卡时的逃生通道。
@@ -190,7 +190,7 @@ function CardGateBody({
 
   const busy = pending !== null;
 
-  // 和离线模式一致：点卡面抽卡 / 翻卡，只有翻牌后才出现接受/跳过
+  // 新版一次点击完成抽卡和翻卡；canReveal 分支只处理旧快照。
   const forceClose = () => {
     if (navigator.vibrate) navigator.vibrate(30);
     // 直接覆盖 pending：即使抽卡/翻卡还在重试，逃生也要能发出去
@@ -227,20 +227,20 @@ function CardGateBody({
       send({ type: 'revealCard', seat: mySeat, cardId: card.id });
       return;
     }
-    if (canDraw) send({ type: 'drawCard', seat: mySeat, cardId: card.id });
+    if (canDraw) send({ type: 'drawCard', seat: mySeat, cardId: card.id, reveal: true });
   };
 
-  // 抽卡方翻完卡后，对方设备自动弹出卡面并自动翻转
+  // 同一个权威动作完成后，抽卡方和执行方都自动翻到正面。
   useEffect(() => {
-    if (card.phase !== 'revealed' || isDrawer) return;
+    if (card.phase !== 'revealed') return;
     const timer = window.setTimeout(() => setFlipped(true), 140);
     return () => window.clearTimeout(timer);
-  }, [card.phase, isDrawer, card.id]);
+  }, [card.phase, card.id]);
 
   const frontHint = canReveal
-    ? '点击卡面翻开'
+    ? '点击卡面继续翻开'
     : card.phase === 'locked'
-      ? isDrawer ? '点击卡面抽一张' : `等 ${drawerName} 抽卡`
+      ? isDrawer ? '点击抽取并翻开' : `等 ${drawerName} 抽卡`
       : `等 ${drawerName} 翻卡`;
 
   const assignmentStrip = (
@@ -365,9 +365,9 @@ function CardGateBody({
         {card.phase !== 'revealed' && (
           <div className="mt-4 w-full rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-400">
             {canDraw
-              ? '点击卡面抽卡，抽到后只有你能先看到'
+              ? '点击一次即可抽取并翻开'
               : canReveal
-                ? '点击卡面翻卡，翻牌后双方同时看到'
+                ? '旧版卡片状态：点击继续翻开'
                 : `等 ${isDrawer ? executorName : drawerName} 操作`}
           </div>
         )}

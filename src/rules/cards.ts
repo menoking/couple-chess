@@ -74,7 +74,7 @@ export function enqueueCard(state: RoomSnapshot, spec: {
     drawerSeat: spec.drawerSeat,
     executorSeat: spec.executorSeat,
     reason: spec.reason,
-    // 入队时没有任何一方拿到卡面；抽卡方点「抽卡」后才进入 drawn。
+    // 入队时没有任何一方拿到卡面；抽卡方点击后才生成卡面。
     phase: 'locked',
     card: spec.card ?? null,
     moveDelta: spec.moveDelta ?? 0,
@@ -104,7 +104,11 @@ export function reduceCard(state: RoomSnapshot, action: RoomAction): RoomSnapsho
     return {
       ...state,
       cards: [
-        { ...first, phase: 'drawn', card: first.card ?? cardFor(state.cardPool, first.cardIndex) },
+        {
+          ...first,
+          phase: action.reveal === true ? 'revealed' : 'drawn',
+          card: first.card ?? cardFor(state.cardPool, first.cardIndex)
+        },
         ...state.cards.slice(1)
       ]
     };

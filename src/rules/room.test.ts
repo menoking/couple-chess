@@ -10,7 +10,7 @@ function readyCard(
 ): RoomSnapshot {
   const drawer = options.drawer ?? 0;
   const executor = options.executor ?? 1;
-  let next = enqueueCard(state, {
+  const next = enqueueCard(state, {
     drawerSeat: drawer,
     executorSeat: executor,
     reason: 'test',
@@ -19,11 +19,29 @@ function readyCard(
     continuation: options.continuation
   });
   const id = next.cards[0].id;
-  next = reduceRoom(next, { type: 'drawCard', seat: drawer, cardId: id });
-  return reduceRoom(next, { type: 'revealCard', seat: drawer, cardId: id });
+  return reduceRoom(next, { type: 'drawCard', seat: drawer, cardId: id, reveal: true });
 }
 
 describe('room card reducer', () => {
+  it('draws and reveals with one action while retaining legacy snapshots', () => {
+    const base = enqueueCard(createRoom('card', ['male', 'female'], 0), {
+      drawerSeat: 1,
+      executorSeat: 0,
+      reason: 'single tap',
+      card: { task: '一次点击', themeName: '测试' }
+    });
+    const id = base.cards[0].id;
+
+    expect(reduceRoom(base, { type: 'drawCard', seat: 0, cardId: id, reveal: true })).toBe(base);
+    expect(reduceRoom(base, { type: 'drawCard', seat: 1, cardId: id, reveal: true }).cards[0])
+      .toMatchObject({ phase: 'revealed', card: { task: '一次点击' } });
+
+    const legacyDrawn = reduceRoom(base, { type: 'drawCard', seat: 1, cardId: id });
+    expect(legacyDrawn.cards[0].phase).toBe('drawn');
+    expect(reduceRoom(legacyDrawn, { type: 'revealCard', seat: 1, cardId: id }).cards[0].phase)
+      .toBe('revealed');
+  });
+
   it('does not default a legacy card without an initiator to the male seat', () => {
     expect(extractCard({
       task: '兼容旧任务',
@@ -93,13 +111,11 @@ describe('room card reducer', () => {
     state = enqueueCard(state, { drawerSeat: 0, executorSeat: 1, reason: 'first', card: { task: '1', themeName: 't' } });
     state = enqueueCard(state, { drawerSeat: 0, executorSeat: 1, reason: 'last', card: { task: '2', themeName: 't' }, continuation: { kind: 'endTurn' } });
     const firstId = state.cards[0].id;
-    state = reduceRoom(state, { type: 'drawCard', seat: 0, cardId: firstId });
-    state = reduceRoom(state, { type: 'revealCard', seat: 0, cardId: firstId });
+    state = reduceRoom(state, { type: 'drawCard', seat: 0, cardId: firstId, reveal: true });
     state = reduceRoom(state, { type: 'ackCard', seat: 1, cardId: firstId, outcome: 'accept' });
     expect(state.turn).toBe(0);
     const lastId = state.cards[0].id;
-    state = reduceRoom(state, { type: 'drawCard', seat: 0, cardId: lastId });
-    state = reduceRoom(state, { type: 'revealCard', seat: 0, cardId: lastId });
+    state = reduceRoom(state, { type: 'drawCard', seat: 0, cardId: lastId, reveal: true });
     state = reduceRoom(state, { type: 'ackCard', seat: 1, cardId: lastId, outcome: 'accept' });
     expect(state.turn).toBe(1);
   });
