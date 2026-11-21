@@ -1,8 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createRoom } from '../rules/room';
+import { createRoom, reduceRoom } from '../rules/room';
 import { seatScopedKey } from '../rules/registry';
 import type { RoomSnapshot } from '../rules/types';
-import { loadRoomSnapshot, mergeSnapshot, publicSnapshot, saveRoomSnapshot } from './useSharedRoom';
+import {
+  applyViewDelta,
+  createViewDelta,
+  loadRoomSnapshot,
+  mergeSnapshot,
+  publicSnapshot,
+  saveRoomSnapshot
+} from './useSharedRoom';
 
 class MemoryStorage {
   private values = new Map<string, string>();
@@ -81,5 +88,56 @@ describe('room snapshot privacy', () => {
     expect(restored?.draftPools).toEqual([[], []]);
     expect(restored?.data).toEqual({});
     expect(restored?.cards).toEqual([]);
+  });
+
+  it('applies compact consecutive view deltas and rejects sequence gaps', () => {
+    const previous = createRoom('story', ['male', 'female'], 0);
+    const next = reduceRoom(previous, {
+      type: 'patchBatch',
+      seat: 0,
+      baseSeq: previous.seq,
+      entries: [
+        { key: 'changed', value: { count: 1 } },
+        { key: 'second', value: true }
+      ]
+    });
+    const delta = createViewDelta(previous, next);
+    expect(delta.baseSeq).toBe(previous.seq);
+    expect(delta.seq).toBe(next.seq);
+    expect(delta.data).toEqual(next.data);
+    expect(delta.changes).not.toHaveProperty('cardPool');
+    expect(applyViewDelta(previous, delta)).toEqual(next);
+    expect(applyViewDelta({ ...previous, seq: previous.seq + 1 }, delta)).toBeNull();
+  });
+
+  it('propagates removals without resending unchanged private-safe data', () => {
+    const previous: RoomSnapshot = {
+      ...createRoom('story', ['male', 'female'], 0),
+      seq: 4,
+      data: { keep: 'same', remove: 'old' },
+      dataSeq: { keep: 2, remove: 3 }
+    };
+    const next: RoomSnapshot = {
+      ...previous,
+      seq: 5,
+      data: { keep: 'same' },
+      dataSeq: { keep: 2 }
+    };
+    const delta = createViewDelta(previous, next);
+    expect(delta.data).toEqual({});
+    expect(delta.removedData).toEqual(['remove']);
+    expect(applyViewDelta(previous, delta)).toEqual(next);
+  });
+
+  it('keeps normal sync payloads compact when the card pool is unchanged', () => {
+    const cardPool = Array.from({ length: 100 }, (_, index) => ({
+      task: `task-${index}-${'x'.repeat(40)}`,
+      themeName: 'shared'
+    }));
+    const previous: RoomSnapshot = { ...createRoom('card', ['male', 'female'], 0), cardPool };
+    const next = reduceRoom(previous, { type: 'patch', seat: 0, baseSeq: 0, key: 'counter', value: 1 });
+    const delta = createViewDelta(previous, next);
+    expect(delta.changes).not.toHaveProperty('cardPool');
+    expect(JSON.stringify(delta).length).toBeLessThan(JSON.stringify(next).length / 5);
   });
 });

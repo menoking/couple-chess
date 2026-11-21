@@ -141,8 +141,49 @@ class SupabaseRoomTransport implements RoomTransport {
   constructor(
     private roomId: string,
     private mySeat: Seat,
-    private handlers: TransportHandlers
+    private handlers: TransportHandlers,
+    private authority: boolean
   ) {}
+
+  private subscribeSeatChannel(seat: Seat, receive: boolean): Promise<void> {
+    if (!supabase) return Promise.resolve();
+    const existing = this.seatChannels.get(seat);
+    if (existing && !this.pendingSeats.has(seat)) return Promise.resolve();
+
+    const channel = existing ?? supabase.channel(`cfc-room-${this.roomId}-s${seat}`, {
+      config: { broadcast: { self: true } }
+    });
+    if (!existing) {
+      if (receive) {
+        channel.on('broadcast', { event: 'msg' }, payload => {
+          const message = payload.payload as { kind?: string; data?: unknown } | undefined;
+          if (!message) return;
+          this.handlers.onSeat?.(message.kind ?? '', message.data);
+        });
+      }
+      this.seatChannels.set(seat, channel);
+      this.pendingSeats.set(seat, []);
+    }
+
+    return new Promise<void>(resolve => {
+      let done = false;
+      const finish = () => {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+      channel.subscribe(status => {
+        if (status !== 'SUBSCRIBED') return;
+        const queued = this.pendingSeats.get(seat) ?? [];
+        this.pendingSeats.delete(seat);
+        queued.forEach(item => {
+          void channel.send({ type: 'broadcast', event: 'msg', payload: item });
+        });
+        finish();
+      });
+      window.setTimeout(finish, 6000);
+    });
+  }
 
   async connect(): Promise<void> {
     if (!supabase) throw new Error('云服务未配置');
@@ -188,8 +229,9 @@ class SupabaseRoomTransport implements RoomTransport {
     });
 
     this.publicChannel = channel;
-    // subscribe() 本身不返回 Promise，必须等 SUBSCRIBED 回调，否则紧接着的 send 会丢
-    await new Promise<void>(resolve => {
+    // 公共频道与私有收件频道并行握手；房主同时预热对方的发件频道，
+    // 避免首个权威视图到了发布阶段才额外等待一次 SUBSCRIBED。
+    const publicReady = new Promise<void>(resolve => {
       let done = false;
       const finish = () => {
         if (done) return;
@@ -207,47 +249,20 @@ class SupabaseRoomTransport implements RoomTransport {
       window.setTimeout(finish, 6000);
     });
 
-    // 自己的收件频道
-    const mineTopic = `cfc-room-${this.roomId}-s${this.mySeat}`;
-    const mine = supabase.channel(mineTopic, { config: { broadcast: { self: true } } });
-    mine.on('broadcast', { event: 'msg' }, payload => {
-      const message = payload.payload as { kind?: string; data?: unknown } | undefined;
-      if (!message) return;
-      this.handlers.onSeat?.(message.kind ?? '', message.data);
-    });
-    await new Promise<void>(resolve => {
-      let done = false;
-      const finish = () => {
-        if (done) return;
-        done = true;
-        resolve();
-      };
-      mine.subscribe(status => {
-        if (status === 'SUBSCRIBED') finish();
-      });
-      window.setTimeout(finish, 6000);
-    });
-    this.seatChannels.set(this.mySeat, mine);
+    const seatReady = [this.subscribeSeatChannel(this.mySeat, true)];
+    if (this.authority) {
+      const peer: Seat = this.mySeat === 0 ? 1 : 0;
+      seatReady.push(this.subscribeSeatChannel(peer, false));
+    }
+    await Promise.all([publicReady, ...seatReady]);
   }
 
   private channelFor(seat: Seat): RealtimeChannel | null {
     if (!supabase) return null;
     const existing = this.seatChannels.get(seat);
     if (existing) return existing;
-    const channel = supabase.channel(`cfc-room-${this.roomId}-s${seat}`, {
-      config: { broadcast: { self: true } }
-    });
-    this.pendingSeats.set(seat, []);
-    channel.subscribe(status => {
-      if (status !== 'SUBSCRIBED') return;
-      const queued = this.pendingSeats.get(seat) ?? [];
-      this.pendingSeats.delete(seat);
-      queued.forEach(item => {
-        channel.send({ type: 'broadcast', event: 'msg', payload: item });
-      });
-    });
-    this.seatChannels.set(seat, channel);
-    return channel;
+    void this.subscribeSeatChannel(seat, seat === this.mySeat);
+    return this.seatChannels.get(seat) ?? null;
   }
 
   send(kind: string, data: unknown): void {
@@ -296,9 +311,10 @@ export function createTransport(
   kind: TransportKind,
   roomId: string,
   mySeat: Seat,
-  handlers: TransportHandlers
+  handlers: TransportHandlers,
+  authority = false
 ): RoomTransport {
   return kind === 'supabase'
-    ? new SupabaseRoomTransport(roomId, mySeat, handlers)
+    ? new SupabaseRoomTransport(roomId, mySeat, handlers, authority)
     : new LocalRoomTransport(roomId, mySeat, handlers);
 }

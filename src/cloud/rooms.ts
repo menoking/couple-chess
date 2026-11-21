@@ -81,19 +81,36 @@ export function decideHost(peers: RoomPresence[], myId: string, at: number): boo
 }
 
 /** 从在场设备里找到房主的性别；找不到时以我自己的性别兜底。 */
-/** Presence 轮询：看到足够多的设备就立刻返回，不再死等固定时长。 */
+/** Presence 事件驱动等待：看到对方立即返回；无人时只留一个很短的稳定窗口。 */
 async function waitForPresence(
   channel: RealtimeChannel,
   minPeers: number,
-  timeoutMs: number
+  timeoutMs: number,
+  settleMs = 120
 ): Promise<RoomPresence[]> {
-  const start = Date.now();
-  let peers = readPresence(channel);
-  while (peers.length < minPeers && Date.now() - start < timeoutMs) {
-    await new Promise<void>(resolve => window.setTimeout(resolve, 100));
-    peers = readPresence(channel);
-  }
-  return peers;
+  const initial = readPresence(channel);
+  if (initial.length >= minPeers) return initial;
+  return new Promise(resolve => {
+    let done = false;
+    let settleTimer: number | null = null;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      if (settleTimer !== null) window.clearTimeout(settleTimer);
+      resolve(readPresence(channel));
+    };
+    const scheduleSettle = () => {
+      if (settleTimer !== null) window.clearTimeout(settleTimer);
+      settleTimer = window.setTimeout(finish, settleMs);
+    };
+    channel.on('presence', { event: 'sync' }, () => {
+      if (readPresence(channel).length >= minPeers) finish();
+      else scheduleSettle();
+    });
+    // 如果 track 的 sync 在注册监听前已经到达，也不会退回过去的 600ms 轮询。
+    scheduleSettle();
+    window.setTimeout(finish, timeoutMs);
+  });
 }
 
 /**
@@ -141,8 +158,7 @@ export async function enterOnlineRoom(
   });
 
   activeChannels.set(roomId, channel);
-  // 对方已经在房间时 100~200ms 就能读到，只在「只有我自己」时才等满 600ms
-  const peers = await waitForPresence(channel, 2, 600);
+  const peers = await waitForPresence(channel, 2, 600, 140);
   // forceHost：对方已离线时由本机接管，避免永远停在「正在连接房间」
   let isHost = forceHost || decideHost(peers, myId, at);
 
@@ -171,7 +187,7 @@ export async function enterOnlineRoom(
   // 只有「自认房主」才需要再确认一轮；访客直接返回，省掉一次等待。
   let settledPeers = peers;
   if (isHost) {
-    settledPeers = await waitForPresence(channel, 2, 450);
+    settledPeers = await waitForPresence(channel, 2, 450, 100);
   }
   const rivalHost = settledPeers
     .filter(entry => entry.role === 'host' && entry.deviceId !== myId)
@@ -223,12 +239,14 @@ const roomListeners = new Set<(room: RoomAnnounce) => void>();
 let sharedChannel: RealtimeChannel | null = null;
 let sharedSpaceId: string | null = null;
 let sharedSubscribed = false;
+const pendingRoomAnnouncements = new Map<string, RoomAnnounce>();
 
 function getRoomChannel(client: NonNullable<typeof supabase>, spaceId: string): RealtimeChannel {
   if (sharedChannel && sharedSpaceId === spaceId) return sharedChannel;
   if (sharedChannel) void client.removeChannel(sharedChannel);
 
   sharedSubscribed = false;
+  pendingRoomAnnouncements.clear();
   const channel = client.channel(SPACE_ROOM_TOPIC(spaceId));
   channel.on('broadcast', { event: 'room-open' }, payload => {
     const data = payload.payload as RoomAnnounce | undefined;
@@ -236,7 +254,17 @@ function getRoomChannel(client: NonNullable<typeof supabase>, spaceId: string): 
     roomListeners.forEach(listener => listener(data));
   });
   channel.subscribe(status => {
-    if (status === 'SUBSCRIBED') sharedSubscribed = true;
+    if (status !== 'SUBSCRIBED') return;
+    sharedSubscribed = true;
+    // startRoomHeartbeat 可能早于 SUBSCRIBED；订阅成功后立即补发，不再等下一次心跳。
+    pendingRoomAnnouncements.forEach(announce => {
+      channel.send({
+        type: 'broadcast',
+        event: 'room-open',
+        payload: { ...announce, fromDevice: getDeviceId() }
+      });
+    });
+    pendingRoomAnnouncements.clear();
   });
   sharedChannel = channel;
   sharedSpaceId = spaceId;
@@ -244,7 +272,10 @@ function getRoomChannel(client: NonNullable<typeof supabase>, spaceId: string): 
 }
 
 function broadcastRoom(channel: RealtimeChannel, announce: RoomAnnounce): void {
-  if (!sharedSubscribed) return;
+  if (!sharedSubscribed) {
+    pendingRoomAnnouncements.set(announce.roomId, announce);
+    return;
+  }
   channel.send({
     type: 'broadcast',
     event: 'room-open',
@@ -266,7 +297,10 @@ export function startRoomHeartbeat(
   send();
   const timer = window.setInterval(send, 1500);
 
-  return () => window.clearInterval(timer);
+  return () => {
+    window.clearInterval(timer);
+    pendingRoomAnnouncements.delete(roomId);
+  };
 }
 
 /** 常驻监听别的设备「我来玩了」的通知 */
