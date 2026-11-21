@@ -3,6 +3,9 @@
 双人互动游戏合集：**23 个玩法**，支持「一台手机同屏」和「两台设备联机」。
 联机不是另写一套，而是复用同屏的同一份规则和同一批视图组件。
 
+> 最近一次大更新：**2026-11-21**，新增第 23 个玩法「双人剧本杀」，并把全玩法的抽取改成不重复。
+> 版本、验证记录与待办见 [status.md](./status.md)。
+
 ## 30 秒速览
 
 | 项 | 值 |
@@ -14,7 +17,7 @@
 | 玩法视图 | `src/components/views/*ModeView.tsx`，每个玩法一个，两种模式共用 |
 | 联机模型 | **房主权威**：先入房者当房主，独占唯一 `RoomSnapshot`，按座位裁剪后广播 |
 | 无云配置 | 全部玩法照常纯本地运行，云功能整体关闭 |
-| 构建标识 | `src/cloud/diagnostics.ts` 的 `BUILD_TAG`，用于确认线上是不是新版本 |
+| 构建标识 | `src/cloud/diagnostics.ts` 的 `BUILD_TAG`（当前 `rules-20261121-1`），用于确认线上是不是新版本 |
 
 ## 常用命令
 
@@ -33,24 +36,25 @@ npm run build      # 产物在 dist/
 
 | 路径 | 作用 |
 |---|---|
-| `src/rules/` | 房间 reducer、抽卡状态机、玩法注册表、共享状态 hook、性别座位映射 |
+| `src/rules/` | 房间 reducer、抽卡状态机、玩法注册表、共享状态 hook、性别座位映射、剧本杀状态机 |
 | `src/cloud/` | Supabase 传输、房间选举、联机舞台、云端账号与题库同步、诊断 |
 | `src/components/views/` | 23 个玩法视图（同屏 / 联机共用） |
 | `src/components/modals/` | 任务卡、炸弹三选一、胜负等弹窗 |
 | `src/hooks/useGameState.ts` | **单机**全部状态与开局校验 |
-| `src/data/` | 默认题库、故事碎片、生存事件、问答题库、生成好的姿势图清单 |
+| `src/data/` | 默认题库、故事碎片、生存事件、问答题库、剧本杀剧本（`jubensha/`）、生成好的姿势图清单 |
 | `supabase/` | 题库云同步的 SQL（联机本身不依赖它） |
 | `scripts/generate-pose-images.mjs` | 扫描姿势图 → 生成 `poseImages.ts` |
 | `docs/` | 本目录，agent 阅读入口 |
 
 ## 文档索引
 
+- [status.md](./status.md) — 当前版本 / 最近改动 / 验证记录 / 待办 / 不要动的东西
 - [architecture.md](./architecture.md) — 目录地图、同屏/联机两条链路、房间状态模型、消息可靠性
 - [game-modes.md](./game-modes.md) — 23 个玩法清单（是否需要卡包、抽卡规则、回合归属）+ 新增玩法清单
 - [conventions.md](./conventions.md) — 必须遵守的约定与高频 bug 模式（**改代码前先看这个**）
 - [operations.md](./operations.md) — 环境变量、联机配置、部署、诊断面板判读、常见问题
 
-## 给 agent 的 6 条硬规则
+## 给 agent 的 9 条硬规则
 
 1. **规则只写一处**：判定逻辑放 `src/rules/`，不要在各视图里另写一份，否则同屏与联机会分叉。
 2. **共享状态只放可序列化纯数据**：组件、函数、闭包写进 `useModeState` 会被 JSON 序列化成 `{}`，渲染时直接崩（React #130）。
@@ -58,3 +62,6 @@ npm run build      # 产物在 dist/
 4. **随机内容用 `useDeckSeed()` + `seededShuffle()`**：同一个房间号必须算出同一份题库/卡包，不能各自 `Math.random()`。
 5. **计时用截止时间戳 + 本地 tick**，共享状态只写 `deadline`；到点由**权威端**推进阶段，不要每秒写共享状态。
 6. **破坏性操作先确认**：删玩法、删数据、批量改文件前先列清单等确认；每次改完跑 `typecheck` / `lint` / `build`。
+7. **一次性内容用 `pickFresh`**：抽任务 / 抽题 / 抽剧本不要直接 `Math.random`，否则同一局会反复抽到同一条（见 conventions 第 9 节）。
+8. **长对局存档立即写**：剧本杀这类长状态用 `saveToStorageNow`，不要走延迟队列——延迟队列只有一个待写槽，会被主状态覆盖。
+9. **双方同时操作的状态拆成按座位独立键**：Ready / 选角不要用一个 `[bool, bool]` 数组，两台设备同时写会互相覆盖，导致「两个人都准备了却不开局」。

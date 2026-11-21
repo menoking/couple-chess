@@ -10,7 +10,7 @@ src/
     useGameState.ts   单机全部状态：players/themes/turn/board/bingo/mine/taskData…
                       以及 canStartGameMode（开局前校验双方题库是否够用）
   rules/
-    registry.ts       玩法注册表（22 条）、免卡包玩法、回合锁前缀、玩法→turn 键映射
+    registry.ts       玩法注册表（23 条）、免卡包玩法、回合锁前缀、玩法→turn 键映射
     room.ts           唯一对局 reducer：patch / 抽卡 / 大厅 / 回合 / 重开
     cards.ts          抽卡四阶段、extractCard（识别各玩法内嵌任务卡）、viewFor 裁剪
     ModeRuntime.tsx   useModeState / useMyTurn / useModeAuthority / useDeckSeed
