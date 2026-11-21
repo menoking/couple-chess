@@ -14,8 +14,8 @@
 
 | 项 | 值 |
 |---|---|
-| 最新代码提交 | `38f6a5c`（`chore: bump build tag to rules-20261121-1`） |
-| 当前分支 | `master`（本文件的更新会作为其后的 docs 提交） |
+| 最近功能/构建提交 | `38f6a5c`（`chore: bump build tag to rules-20261121-1`） |
+| 当前分支 | `master`（HEAD 是本文档所在的 docs 提交，代码与 `38f6a5c` 一致） |
 | 功能提交 | `bfb00fc`（剧本杀 + 不可重复抽取 + 赌局轮盘动画） |
 | 构建标识 | `rules-20261121-1`（`src/cloud/diagnostics.ts`） |
 | 远端 | `origin/master` 已同步，推送命令 `git push origin master` |
