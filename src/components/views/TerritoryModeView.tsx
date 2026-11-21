@@ -3,6 +3,7 @@ import { useMemo, useRef } from 'react';
 import { ArrowLeft, Check, Flag, RefreshCw, Swords, User, UserRound, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, collectThemeTasks, pickRandom } from '../../utils/modeKit';
+import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
 interface TerritoryModeViewProps {
   players: Player[];
@@ -127,7 +128,8 @@ function TerritoryGame({
 
     setNotice(null);
     resolvingRef.current = false;
-    setAction({ kind, index, text: entry.task.text, themeName: entry.themeName });
+    const rule = resolveTaskRule(entry.task, activePlayer?.id ?? 0);
+    setAction({ kind, index, text: formatTaskInstruction(entry.task.text, rule), themeName: entry.themeName });
   };
 
   const resolve = (accepted: boolean) => {
@@ -274,7 +276,7 @@ function TerritoryGame({
         <div className="rounded-3xl border border-white/10 bg-[#1C1C1E] p-5">
           <div className="flex items-center justify-between text-[10px] font-bold text-gray-500">
             <span>
-              {action.kind === 'attack' ? '攻城任务' : '占领任务'} · {activePlayer?.name} 执行
+              {action.kind === 'attack' ? '攻城任务' : '占领任务'} · 执行关系见卡面
             </span>
             <span className="truncate">来自「{action.themeName}」</span>
           </div>

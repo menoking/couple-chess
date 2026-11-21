@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Lock, RefreshCw, Sparkles, User, UserRound, Users, Wifi, WifiOff } from 'lucide-react';
+import { ArrowLeft, Check, Lock, RefreshCw, Shuffle, Sparkles, User, UserRound, Users, Wifi, WifiOff } from 'lucide-react';
 import type {
   BingoBoard,
   BingoCellResult,
@@ -16,6 +16,7 @@ import type {
 } from '../types';
 import { MineBombChoiceModal } from '../components/modals/MineBombChoiceModal';
 import { ThemeTags } from '../components/ThemeTags';
+import { TaskDirectionTags } from '../components/TaskDirectionTags';
 import { OnlineBoardView } from '../components/views/OnlineBoardView';
 import { CardModeView } from '../components/views/CardModeView';
 import { MineModeView } from '../components/views/MineModeView';
@@ -44,7 +45,7 @@ import type { RoomAction, RoomSnapshot, Role, Seat } from '../rules/types';
 import { cardFor, extractCard } from '../rules/cards';
 import { buildMergedTheme, buildOnlinePlayers, MERGED_THEME_ID, PLAYER_NAME } from '../rules/identity';
 import { mergePools, picksToPool } from '../rules/lobby';
-import { ALL_THEME_MODES, MODE_LABEL, MODE_REGISTRY, THEME_FREE_MODES, turnKeyOfMode } from '../rules/registry';
+import { ALL_THEME_MODES, MODE_LABEL, MODE_REGISTRY, THEME_FREE_MODES, themeModeOfGame, turnKeyOfMode } from '../rules/registry';
 import { createRoom } from '../rules/room';
 import { ModeRuntimeProvider } from '../rules/ModeRuntime';
 import {
@@ -54,7 +55,8 @@ import {
   generateMineBoard,
   generateSpiralPath
 } from '../utils/gameLogic';
-import { completeBingoCellOnBoard, createMineTaskEvent, resolveBoardTile } from '../rules/modeRules';
+import { completeBingoCellOnBoard, createMineTaskEvent, isThemeAllowed, resolveBoardTile } from '../rules/modeRules';
+import { formatTaskInstruction, resolveTaskRule } from '../rules/taskRules';
 import { loadRoomSnapshot, useSharedRoom } from './useSharedRoom';
 import type { TransportKind } from './transport';
 
@@ -92,15 +94,18 @@ function poolTask(
   const remaining = snap.cardPool.filter(card => !excludeKeys.includes(`${card.task}:0`));
   const pool = remaining.length > 0 ? remaining : snap.cardPool;
   const card = cardFor(pool, snap.cardSeq + 1);
+  const rule = resolveTaskRule({ text: card.task, executor: card.executor ?? 'both' }, executorSeat);
   return {
     type: 'card',
     initiatorPlayerId: other(executorSeat),
-    executorPlayerId: executorSeat,
+    executorPlayerId: rule.executorPlayerId,
+    targetPlayerId: rule.targetPlayerId,
+    executionMode: rule.executionMode,
     title: reason,
     subtitle: `来自「${card.themeName}」`,
     icon: 'sparkles',
-    color: executorSeat === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
-    task: card.task,
+    color: rule.executorPlayerId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
+    task: formatTaskInstruction(card.task, rule),
     taskSourceId: 'online',
     themeName: card.themeName,
     moveDelta: 0
@@ -142,11 +147,13 @@ function CardGateBody({
   peerGone: boolean;
 }) {
   const isDrawer = card.drawerSeat === mySeat;
-  const isExecutor = card.executorSeat === mySeat;
+  const isExecutor = card.executionMode === 'together' || card.executorSeat === mySeat;
   const drawer = players.find(player => player.id === card.drawerSeat);
   const executor = players.find(player => player.id === card.executorSeat);
+  const target = card.targetSeat === null ? null : players.find(player => player.id === card.targetSeat);
   const drawerName = drawer?.name ?? '对方';
   const executorName = executor?.name ?? '对方';
+  const targetName = target?.name ?? '对方';
   const face = card.card;
   const canDraw = card.phase === 'locked' && isDrawer;
   // 仅兼容旧快照留下的 drawn 阶段；新版不会再停在这里。
@@ -244,20 +251,27 @@ function CardGateBody({
       : `等 ${drawerName} 翻卡`;
 
   const assignmentStrip = (
-    <div className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-bold">
+    <div className="flex w-full flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2 text-[11px] font-bold">
       <span
         className="rounded-full px-2 py-0.5"
         style={{ backgroundColor: `${drawer?.color ?? '#0A84FF'}22`, color: drawer?.color ?? '#0A84FF' }}
       >
         抽卡 · {drawerName}
       </span>
-      <span className="text-gray-500">→</span>
-      <span
-        className="rounded-full px-2 py-0.5"
-        style={{ backgroundColor: `${executor?.color ?? '#FF375F'}22`, color: executor?.color ?? '#FF375F' }}
-      >
-        执行 · {executorName}
-      </span>
+      <span className="text-gray-600">｜</span>
+      {card.executionMode === 'together' ? (
+        <span className="rounded-full bg-[#BF5AF2]/20 px-2 py-0.5 text-[#D08BFF]">双方一起执行</span>
+      ) : (
+        <>
+          <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${executor?.color ?? '#0A84FF'}22`, color: executor?.color ?? '#0A84FF' }}>
+            执行 · {executorName}
+          </span>
+          <span className="text-gray-500">→</span>
+          <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${target?.color ?? '#FF375F'}22`, color: target?.color ?? '#FF375F' }}>
+            对象 · {targetName}
+          </span>
+        </>
+      )}
     </div>
   );
 
@@ -323,7 +337,9 @@ function CardGateBody({
                   {face?.task ?? '卡面加载中…'}
                 </div>
                 {face && <div className="mt-2 text-[11px] text-gray-500">来自「{face.themeName}」</div>}
-                <div className="mt-3 text-[11px] font-bold text-gray-400">由 {executorName} 执行</div>
+                <div className="mt-3 text-[11px] font-bold text-gray-400">
+                  {card.executionMode === 'together' ? '双方共同完成' : `${executorName} 对 ${targetName} 执行`}
+                </div>
               </div>
             </div>
           </div>
@@ -507,7 +523,12 @@ export function OnlineStage(props: OnlineStageProps) {
     return snap?.turn === 1 ? 1 : 0;
   }, [snap?.data, snap?.turn, mode]);
 
-  const myPool = useMemo(() => picksToPool(themes, selected), [themes, selected]);
+  const selectableThemes = useMemo(() => {
+    const themeMode = themeModeOfGame(mode);
+    if (!themeMode) return [];
+    return themes.filter(theme => isThemeAllowed(theme, roles[mySeat], themeMode) && theme.tasks.length > 0);
+  }, [themes, mode, roles, mySeat]);
+  const myPool = useMemo(() => picksToPool(selectableThemes, selected), [selectableThemes, selected]);
   const myLocked = Boolean(snap?.picks[mySeat]?.locked);
   const [lockPending, setLockPending] = useState(false);
   const lockTries = useRef(0);
@@ -554,7 +575,11 @@ export function OnlineStage(props: OnlineStageProps) {
     if (data['stage.pathCoords'] === undefined) shared.runtime.patch('stage.pathCoords', generateSpiralPath());
     if (data['stage.mineBoard'] === undefined) shared.runtime.patch('stage.mineBoard', generateMineBoard());
     if (snap.lobbyLocked && data['stage.bingoBoard'] === undefined) {
-      const tasks: TaskCard[] = resolvedCardPool.map(card => ({ text: card.task, executor: 'both', moveDelta: 0 }));
+      const tasks: TaskCard[] = resolvedCardPool.map(card => ({
+        text: card.task,
+        executor: card.executor ?? 'both',
+        moveDelta: 0
+      }));
       shared.runtime.patch('stage.bingoBoard', generateBingoBoard([{ themeId: MERGED_THEME_ID, tasks }], BINGO_BOARD_SIZE));
     }
   }, [isHost, snap, shared.status, shared.runtime, resolvedCardPool]);
@@ -562,7 +587,7 @@ export function OnlineStage(props: OnlineStageProps) {
   const onlineThemes = useMemo<Theme[]>(() => {
     const tasks: TaskCard[] = resolvedCardPool.map(card => ({
       text: card.task,
-      executor: 'both',
+      executor: card.executor ?? 'both',
       moveDelta: 0
     }));
     return [buildMergedTheme(tasks, ALL_THEME_MODES), ...themes];
@@ -688,9 +713,27 @@ export function OnlineStage(props: OnlineStageProps) {
 
           {!myPick.locked ? (
             <>
-              <div className="mb-2 text-[11px] font-bold text-gray-300">勾选卡包（可多选）</div>
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="text-[11px] font-bold text-gray-300">勾选卡包（可多选）</div>
+                <button
+                  type="button"
+                  disabled={selectableThemes.length === 0}
+                  onClick={() => {
+                    const picked = selectableThemes[Math.floor(Math.random() * selectableThemes.length)];
+                    if (picked) setSelected([picked.id]);
+                  }}
+                  className="ios-btn flex items-center gap-1 rounded-full border border-[#FFD60A]/30 bg-[#FFD60A]/10 px-3 py-1.5 text-[10px] font-bold text-[#FFD60A] disabled:opacity-40"
+                >
+                  <Shuffle size={11} /> 随机选 1 个
+                </button>
+              </div>
               <div className="space-y-2">
-                {themes.map(theme => {
+                {selectableThemes.length === 0 && (
+                  <div className="rounded-xl border border-white/5 bg-white/[0.04] p-4 text-[11px] leading-relaxed text-gray-500">
+                    当前没有适合你的卡包，请退出后在题库中添加对应玩法和适用对象的任务卡。
+                  </div>
+                )}
+                {selectableThemes.map(theme => {
                   const active = selected.includes(theme.id);
                   return (
                     <button
@@ -716,6 +759,7 @@ export function OnlineStage(props: OnlineStageProps) {
                               {theme.tasks.length} 张任务
                             </span>
                           </div>
+                          <div className="mt-1.5"><TaskDirectionTags tasks={theme.tasks} compact /></div>
                         </div>
                         <div className="flex shrink-0 items-start gap-1">
                           <ThemeTags tags={theme.tags} />
@@ -728,7 +772,7 @@ export function OnlineStage(props: OnlineStageProps) {
               </div>
               <button
                 type="button"
-                disabled={lockPending}
+                disabled={lockPending || myPool.length === 0}
                 onClick={lockDeck}
                 className="ios-btn mt-4 h-12 w-full rounded-full bg-white text-sm font-bold text-black disabled:opacity-60"
               >
@@ -795,6 +839,8 @@ export function OnlineStage(props: OnlineStageProps) {
       seat: mySeat,
       drawerSeat: found?.drawerSeat ?? other(mySeat),
       executorSeat: found?.executorSeat ?? mySeat,
+      executionMode: found?.executionMode,
+      targetSeat: found?.targetSeat,
       reason: found?.reason ?? '抽到一张任务卡',
       card: found?.card,
       moveDelta: found?.moveDelta ?? 0,

@@ -118,13 +118,27 @@ export function normalizeRoomSnapshot(snapshot: RoomSnapshot): RoomSnapshot {
       locked: pick?.locked === true
     };
   }) as RoomSnapshot['picks'];
+  const cards: PendingCard[] = Array.isArray(snapshot.cards)
+    ? snapshot.cards.map(card => {
+        const executionMode = card.executionMode === 'together' ? 'together' : 'directed';
+        return {
+          ...card,
+          executionMode,
+          targetSeat: executionMode === 'together'
+            ? null
+            : card.targetSeat === 0 || card.targetSeat === 1
+              ? card.targetSeat
+              : card.executorSeat === 0 ? 1 : 0
+        };
+      })
+    : [];
   return {
     ...snapshot,
     cardPool: Array.isArray(snapshot.cardPool) ? snapshot.cardPool : [],
     draftPools: Array.isArray(snapshot.draftPools) && snapshot.draftPools.length === 2
       ? snapshot.draftPools
       : [[], []],
-    cards: Array.isArray(snapshot.cards) ? snapshot.cards : [],
+    cards,
     picks,
     data: snapshot.data && typeof snapshot.data === 'object' ? snapshot.data : {},
     dataSeq: snapshot.dataSeq && typeof snapshot.dataSeq === 'object' ? snapshot.dataSeq : {},

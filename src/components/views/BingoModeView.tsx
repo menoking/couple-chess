@@ -4,6 +4,7 @@ import { ArrowLeft, Check, Grid3x3, PackageOpen, Sparkles, Trophy, User, UserRou
 import { BingoBoard, BingoCellResult, Player, TaskCard, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, seededShuffle } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
+import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
 interface BingoModeViewProps {
   players: Player[];
@@ -38,6 +39,8 @@ export function BingoModeView({
     themeName: string;
     initiatorPlayerId: number;
     executorPlayerId: number;
+    targetPlayerId: number | null;
+    executionMode: TaskEventData['executionMode'];
     continuation?: TaskEventData['continuation'];
   } | null>('BingoModeView.reward', null);
   // 一次连成多条线就抽多张，用队列逐张弹（卡包容量共用 drawnCount）
@@ -46,6 +49,8 @@ export function BingoModeView({
     themeName: string;
     initiatorPlayerId: number;
     executorPlayerId: number;
+    targetPlayerId: number | null;
+    executionMode: TaskEventData['executionMode'];
     continuation?: TaskEventData['continuation'];
   }>>('BingoModeView.rewardQueue', []);
   const [finished, setFinished] = useModeState('BingoModeView.finished', false);
@@ -70,6 +75,10 @@ export function BingoModeView({
   }));
 
   const opponentPlayer = players.find(player => player.id !== activePlayer?.id);
+  const rewardExecutor = reward ? players.find(player => player.id === reward.executorPlayerId) : null;
+  const rewardTarget = reward?.targetPlayerId === null
+    ? null
+    : players.find(player => player.id === reward?.targetPlayerId);
 
   const completedLineCellIndices = useMemo(() => {
     const indices = new Set<number>();
@@ -81,16 +90,19 @@ export function BingoModeView({
 
   const pendingCell = pendingIndex !== null ? bingoBoard.cells[pendingIndex] ?? null : null;
   const pendingTheme = pendingCell ? themes.find(theme => theme.id === pendingCell.themeId) : undefined;
+  const pendingRule = pendingCell ? resolveTaskRule(pendingCell.task, activePlayer.id) : null;
   const taskData: TaskEventData | null = pendingCell
-    ? {
+    && pendingRule ? {
         type: 'card',
         initiatorPlayerId: activePlayer.id,
-        executorPlayerId: activePlayer.id,
+        executorPlayerId: pendingRule.executorPlayerId,
+        targetPlayerId: pendingRule.targetPlayerId,
+        executionMode: pendingRule.executionMode,
         title: 'Bingo 任务',
         subtitle: `任务来自「${pendingTheme?.name || '情侣任务'}」`,
         icon: 'sparkles',
         color: activePlayer.id === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
-        task: pendingCell.task.text,
+        task: formatTaskInstruction(pendingCell.task.text, pendingRule),
         taskSourceId: pendingCell.themeId,
         moveDelta: 0
       }
@@ -117,13 +129,19 @@ export function BingoModeView({
       setDrawnCount(value => value + count);
       setRewardQueue(prev => [
         ...prev,
-        ...picks.map((entry, index) => ({
-          task: entry.task,
-          themeName: entry.themeName,
-          initiatorPlayerId: activePlayer.id,
-          executorPlayerId: opponentPlayer?.id ?? (activePlayer.id === 0 ? 1 : 0),
-          continuation: index === picks.length - 1 ? { kind: 'endTurn' as const } : undefined
-        }))
+        ...picks.map((entry, index) => {
+          const fallbackExecutor = opponentPlayer?.id ?? (activePlayer.id === 0 ? 1 : 0);
+          const rule = resolveTaskRule(entry.task, fallbackExecutor);
+          return {
+            task: { ...entry.task, text: formatTaskInstruction(entry.task.text, rule) },
+            themeName: entry.themeName,
+            initiatorPlayerId: activePlayer.id,
+            executorPlayerId: rule.executorPlayerId,
+            targetPlayerId: rule.targetPlayerId,
+            executionMode: rule.executionMode,
+            continuation: index === picks.length - 1 ? { kind: 'endTurn' as const } : undefined
+          };
+        })
       ]);
       return;
     }
@@ -282,14 +300,18 @@ export function BingoModeView({
                 <Sparkles size={15} />
                 连线抽卡 · {reward.themeName}{rewardQueue.length > 0 ? ` · 还有 ${rewardQueue.length} 张` : ''}
               </div>
-              <div className="mt-3 flex items-center justify-center gap-2 text-[11px] font-bold">
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-[11px] font-bold">
                 <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${activePlayer?.color}22`, color: activePlayer?.color }}>
                   抽卡 · {activePlayer?.name}
                 </span>
-                <span className="text-gray-500">→</span>
-                <span className="rounded-full px-2 py-0.5" style={{ backgroundColor: `${opponentPlayer?.color}22`, color: opponentPlayer?.color }}>
-                  执行 · {opponentPlayer?.name}
-                </span>
+                <span className="text-gray-600">｜</span>
+                {reward.executionMode === 'together' ? (
+                  <span className="rounded-full bg-[#BF5AF2]/20 px-2 py-0.5 text-[#D08BFF]">双方一起执行</span>
+                ) : (
+                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-gray-200">
+                    {rewardExecutor?.name} → {rewardTarget?.name}
+                  </span>
+                )}
               </div>
               <div className="mt-3 text-sm leading-relaxed text-white">{reward.task.text}</div>
               <button
@@ -297,7 +319,7 @@ export function BingoModeView({
                 onClick={handleRewardDone}
                 className="ios-btn mt-4 flex h-12 w-full items-center justify-center rounded-full bg-white text-base font-bold text-black shadow-lg"
               >
-                收下这张卡，交给 {opponentPlayer?.name} 执行
+                收下这张卡
               </button>
             </div>
           )}

@@ -44,15 +44,21 @@ export function AiImportModal({ isOpen, themeName, onClose, onImport }: AiImport
  2. **行动导向**：指令必须是具体的行动，避免抽象概念。 
  3. **字数限制**：每条指令必须是中文，长度严格控制在 6 ~ 22 字之不能过长。 
  4. **语气风格**：轻松、撩人、幽默或温馨，适合情侣互动。 
- 5. **禁忌**：禁止出现编号、Emoji 表情、Markdown 格式、解释性文字。 
+ 5. **执行关系**：每条任务必须指定 executor，且只能是以下四种之一：
+    - "male"：男方对女方执行；
+    - "female"：女方对男方执行；
+    - "together"：双方一起执行；
+    - "both"：由游戏当回合的实际执行方对另一方执行。
+ 6. **内容清晰**：text 必须与 executor 一致，不得使用无法判断指向的“对方来做”“任意一方”等模糊表达。
+ 7. **禁忌**：禁止出现编号、Emoji 表情、Markdown 格式、解释性文字。
  
  # Output Format 
  你必须且只能输出纯 JSON 字符串，不要包含 "\`\`\`json" 或 "\`\`\`" 包裹。 
  格式严格如下： 
  { 
    "tasks": [ 
-     "任务内容1", 
-     "任务内容2" 
+     { "text": "男方为女方轻揉肩膀", "executor": "male" },
+     { "text": "两人牵手对视十秒", "executor": "together" }
    ] 
  } 
  
@@ -112,7 +118,7 @@ export function AiImportModal({ isOpen, themeName, onClose, onImport }: AiImport
               value={jsonText}
               onChange={e => setJsonText(e.target.value)}
               className="w-full h-40 p-4 rounded-xl bg-[#2C2C2E] text-white outline-none border border-white/5 focus:border-[#FF375F]/50 transition-colors resize-none"
-              placeholder='例如：{"tasks":["一起拥抱30秒","互相说一句情话"]}'
+              placeholder='例如：{"tasks":[{"text":"两人拥抱30秒","executor":"together"}]}'
             />
           </div>
 

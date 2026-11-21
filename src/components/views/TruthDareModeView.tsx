@@ -5,6 +5,7 @@ import { Player, Theme } from '../../types';
 import { buildTaskPool, pickRandom } from '../../utils/modeKit';
 import { pickFresh, taskKeyOf } from '../../utils/freshPick';
 import { SPICY_DARE_CHALLENGES, SPICY_PENALTIES, SPICY_TRUTH_QUESTIONS } from '../../data/spicyContent';
+import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
 interface TruthDareModeViewProps {
   players: Player[];
@@ -107,11 +108,20 @@ function TruthDareGame({
         content = fallback?.item ?? SPICY_TRUTH_QUESTIONS[0];
         if (fallback) nextUsed.truth = fallback.used;
       } else {
-        content = picked.item.task.text;
+        const rule = resolveTaskRule(picked.item.task, activePlayer?.id ?? 0);
+        content = formatTaskInstruction(picked.item.task.text, rule);
         themeName = picked.item.themeName;
         nextUsed.task = picked.used;
         if (picked.reset) resetPool = '主题任务';
       }
+    }
+
+    if (kind !== 'task') {
+      const rule = resolveTaskRule(
+        { text: content, executor: activePlayer?.id === 1 ? 'female' : 'male' },
+        activePlayer?.id ?? 0
+      );
+      content = formatTaskInstruction(content, rule);
     }
 
     setUsed(previous => ({ ...previous, ...nextUsed }));
@@ -131,11 +141,17 @@ function TruthDareGame({
     }
     // 失败 → 对方指定惩罚（文案此时抽一次并固定；同一局不重复）
     const picked = pickFresh(SPICY_PENALTIES, used.penalty, item => item);
+    const rawPenalty = picked?.item ?? pickRandom(SPICY_PENALTIES) ?? SPICY_PENALTIES[0];
+    const penaltyRule = resolveTaskRule(
+      { text: rawPenalty, executor: activePlayer?.id === 1 ? 'female' : 'male' },
+      activePlayer?.id ?? 0
+    );
+    const explicitPenalty = formatTaskInstruction(rawPenalty, penaltyRule);
     if (picked) {
-      setPenalty(picked.item);
+      setPenalty(explicitPenalty);
       setUsed(previous => ({ ...previous, penalty: picked.used }));
     } else {
-      setPenalty(pickRandom(SPICY_PENALTIES) ?? SPICY_PENALTIES[0]);
+      setPenalty(explicitPenalty);
     }
     setNotice(picked?.reset ? '惩罚池已经全部抽过，重新洗好了' : null);
     setPenaltyTarget(activePlayer.id);

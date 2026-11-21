@@ -4,6 +4,7 @@ import { ArrowLeft, CheckCircle2, Disc3, RotateCw, ShieldAlert, Sparkles, User, 
 import { Player, TaskCard, Theme } from '../../types';
 import { loadFromStorage, saveToStorage } from '../../utils/localStorage';
 import { pickFresh } from '../../utils/freshPick';
+import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
 interface RouletteModeViewProps {
   players: Player[];
@@ -179,6 +180,7 @@ export function RouletteModeView({
     () => (result.target ? findGroupLabel(targetGroups, result.target) : null),
     [result.target]
   );
+  const bonusRule = bonusTask ? resolveTaskRule(bonusTask, activePlayer?.id ?? 0) : null;
 
   useEffect(() => {
     saveToStorage(INTENSITY_STORAGE_KEY, intensity);
@@ -349,7 +351,9 @@ export function RouletteModeView({
               {bonusTask && (
                 <div className="rounded-3xl border border-[#BF5AF2]/25 bg-[#BF5AF2]/10 p-5">
                   <div className="flex items-center gap-2 text-xs font-bold text-[#D08BFF]"><Sparkles size={15} />主题加码 · {bonusThemeName || selectedTheme?.name}</div>
-                  <div className="mt-3 text-sm leading-relaxed text-white">{bonusTask.text}</div>
+                  <div className="mt-3 text-sm leading-relaxed text-white">
+                    {bonusRule ? formatTaskInstruction(bonusTask.text, bonusRule) : bonusTask.text}
+                  </div>
                 </div>
               )}
             </div>

@@ -1,4 +1,5 @@
 import { Player, TaskCard, TaskEventData, Theme } from '../types';
+import { formatTaskInstruction, resolveTaskRule } from '../rules/taskRules';
 
 export function shuffle<T>(items: T[]): T[] {
   const result = [...items];
@@ -84,21 +85,24 @@ export function createViewTaskEvent(input: {
   continuation?: TaskEventData['continuation'];
 }): TaskEventData {
   const { entry } = input;
-  const playerId = input.executorPlayerId ?? entry.playerId;
-  const initiatorId = input.initiatorPlayerId ?? playerId;
+  const fallbackPlayerId = input.executorPlayerId ?? entry.playerId;
+  const initiatorId = input.initiatorPlayerId ?? fallbackPlayerId;
+  const rule = resolveTaskRule(entry.task, fallbackPlayerId);
   return {
     type: 'card',
     initiatorPlayerId: initiatorId,
-    executorPlayerId: playerId,
+    executorPlayerId: rule.executorPlayerId,
+    targetPlayerId: rule.targetPlayerId,
+    executionMode: rule.executionMode,
     title: input.title ?? '任务',
     subtitle: `任务来自「${entry.themeName}」`,
     icon: 'sparkles',
-    color: playerId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
-    task: entry.task.text,
+    color: rule.executorPlayerId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
+    task: formatTaskInstruction(entry.task.text, rule),
     taskSourceId: entry.themeId,
     themeName: entry.themeName,
-      moveDelta: 0,
-      continuation: input.continuation
+    moveDelta: 0,
+    continuation: input.continuation
   };
 }
 

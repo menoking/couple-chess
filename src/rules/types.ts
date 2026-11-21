@@ -1,29 +1,29 @@
-import type { GameMode, TaskContinuation } from '../types';
+import type { GameMode, TaskContinuation, TaskExecutionMode, TaskExecutor } from '../types';
 
 export type Seat = 0 | 1;
 export type Role = 'male' | 'female';
-export const ROOM_PROTOCOL_VERSION = 3;
+export const ROOM_PROTOCOL_VERSION = 4;
 
 export interface OnlineCard {
   task: string;
   themeName: string;
+  /** 题库中的原始执行规则，合并卡池时也必须保留。 */
+  executor?: TaskExecutor;
 }
 
-/**
- * 抽卡四阶段（全部玩法共用）：
- * - locked   胜方尚未抽卡，败方显示锁定态，任何人都拿不到卡面
- * - drawn    胜方已抽取并看到卡面，败方解锁「翻卡查看」
- * - revealed 败方已翻卡，卡面双方可见
- */
+/** drawn 仅用于兼容旧房间；新流程点击卡面会原子完成抽取和公开。 */
 export type CardPhase = 'locked' | 'drawn' | 'revealed';
 
 export interface PendingCard {
   id: number;
   cardIndex: number;
-  /** 抽卡人：胜方 */
+  /** 触发并抽取这张卡的人。 */
   drawerSeat: Seat;
-  /** 执行人：败方 */
+  /** 有向任务的执行人；共同任务中作为确认动作的默认座位。 */
   executorSeat: Seat;
+  executionMode: TaskExecutionMode;
+  /** directed 时的被执行人；together 时为 null。 */
+  targetSeat: Seat | null;
   reason: string;
   phase: CardPhase;
   /** 明文卡面；locked 时为 null，drawn 时只下发给抽卡方 */
@@ -71,7 +71,7 @@ export type RoomAction =
   | { type: 'patchBatch'; entries: Array<{ key: string; value: unknown }>; baseSeq: number; seat: Seat }
   | { type: 'endTurn'; seat: Seat; expectedTurn: number }
   | { type: 'setTurn'; seat: Seat; turn: number }
-  | { type: 'enqueueCard'; seat: Seat; drawerSeat: Seat; executorSeat: Seat; reason: string; card?: OnlineCard; moveDelta?: number; continuation?: TaskContinuation }
+  | { type: 'enqueueCard'; seat: Seat; drawerSeat: Seat; executorSeat: Seat; executionMode?: TaskExecutionMode; targetSeat?: Seat | null; reason: string; card?: OnlineCard; moveDelta?: number; continuation?: TaskContinuation }
   /** reveal=true 时在同一个权威动作里完成抽取和翻开。 */
   | { type: 'drawCard'; seat: Seat; cardId: number; reveal?: boolean }
   | { type: 'revealCard'; seat: Seat; cardId: number }

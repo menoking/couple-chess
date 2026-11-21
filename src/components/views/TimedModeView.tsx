@@ -4,6 +4,7 @@ import { ArrowLeft, Check, RefreshCw, Timer, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, seededShuffle } from '../../utils/modeKit';
 import { themeIntensity } from '../../utils/modeKit';
+import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
 interface TimedModeViewProps {
   players: Player[];
@@ -115,6 +116,7 @@ function TimedGame({ players, themes, onExit }: { players: Player[]; themes: The
   const theme = current ? themes.find(t => t.id === current.themeId) : undefined;
   const level = themeIntensity(theme);
   const urgent = timeLeft <= 10;
+  const currentRule = current ? resolveTaskRule(current.task, current.playerId) : null;
 
   return (
     <div className="space-y-4">
@@ -139,7 +141,9 @@ function TimedGame({ players, themes, onExit }: { players: Player[]; themes: The
               难度 {'★'.repeat(level)}{'☆'.repeat(5 - level)}
             </div>
           </div>
-          <div className="mt-3 text-lg font-bold leading-relaxed text-white">{current.task.text}</div>
+          <div className="mt-3 text-lg font-bold leading-relaxed text-white">
+            {currentRule ? formatTaskInstruction(current.task.text, currentRule) : current.task.text}
+          </div>
         </div>
       )}
 

@@ -72,8 +72,8 @@ export function TaskCardModal({
 
   const executorLabel = nameOf(visibleTaskData.executorPlayerId);
   const executorClassName = visibleTaskData.executorPlayerId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]';
+  const targetLabel = visibleTaskData.targetPlayerId === null ? null : nameOf(visibleTaskData.targetPlayerId);
   const initiatorLabel = nameOf(visibleTaskData.initiatorPlayerId);
-  const isSelfDraw = visibleTaskData.initiatorPlayerId === visibleTaskData.executorPlayerId;
 
   const moveLabel =
     visibleTaskData.moveDelta === 0
@@ -83,20 +83,33 @@ export function TaskCardModal({
         : `完成后后退 ${Math.abs(visibleTaskData.moveDelta)} 格`;
 
   const assignmentStrip = (
-    <div className="flex w-full items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
+    <div className="flex w-full flex-wrap items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/[0.04] px-3 py-2">
       <span
         className="rounded-full px-2 py-0.5 text-[11px] font-bold"
         style={{ backgroundColor: `${colorOf(visibleTaskData.initiatorPlayerId)}22`, color: colorOf(visibleTaskData.initiatorPlayerId) }}
       >
         抽卡 · {initiatorLabel}
       </span>
-      <ArrowRight size={12} className="text-gray-500" />
-      <span
-        className="rounded-full px-2 py-0.5 text-[11px] font-bold"
-        style={{ backgroundColor: `${colorOf(visibleTaskData.executorPlayerId)}22`, color: colorOf(visibleTaskData.executorPlayerId) }}
-      >
-        执行 · {executorLabel}
-      </span>
+      <span className="text-gray-600">｜</span>
+      {visibleTaskData.executionMode === 'together' ? (
+        <span className="rounded-full bg-[#BF5AF2]/20 px-2 py-0.5 text-[11px] font-bold text-[#D08BFF]">双方一起执行</span>
+      ) : (
+        <>
+          <span
+            className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+            style={{ backgroundColor: `${colorOf(visibleTaskData.executorPlayerId)}22`, color: colorOf(visibleTaskData.executorPlayerId) }}
+          >
+            执行 · {executorLabel}
+          </span>
+          <ArrowRight size={12} className="text-gray-500" />
+          <span
+            className="rounded-full px-2 py-0.5 text-[11px] font-bold"
+            style={{ backgroundColor: `${colorOf(visibleTaskData.targetPlayerId ?? 1)}22`, color: colorOf(visibleTaskData.targetPlayerId ?? 1) }}
+          >
+            对象 · {targetLabel}
+          </span>
+        </>
+      )}
     </div>
   );
 
@@ -148,8 +161,11 @@ export function TaskCardModal({
               <div className="text-xs text-gray-400 text-center leading-relaxed mt-3 mb-3">
                 <div>{visibleTaskData.subtitle}</div>
                 <div className="mt-1">
-                  由 <span className={executorClassName}>{executorLabel}</span> 执行
-                  {isSelfDraw ? '（自己抽到自己做）' : `，${initiatorLabel} 旁观`}
+                  {visibleTaskData.executionMode === 'together' ? (
+                    '双方共同完成'
+                  ) : (
+                    <>由 <span className={executorClassName}>{executorLabel}</span> 对 {targetLabel} 执行</>
+                  )}
                 </div>
                 {moveLabel && <div className="mt-1 text-gray-300">{moveLabel}</div>}
               </div>

@@ -5,6 +5,7 @@ import { Player, Theme } from '../../types';
 import { buildTaskPool, seededShuffle } from '../../utils/modeKit';
 import { pickFresh, taskKeyOf } from '../../utils/freshPick';
 import { EDGE_LADDER } from '../../data/spicyContent';
+import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
 interface EdgeModeViewProps {
   players: Player[];
@@ -78,14 +79,15 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
     setPhase('running');
   };
 
-  const rollResultTask = () => {
+  const rollResultTask = (loserId: number) => {
     const picked = pickFresh(pool, usedResultTasks, entry => taskKeyOf(entry.task));
     if (!picked) {
       setResultTask(null);
       return;
     }
     setUsedResultTasks(picked.used);
-    setResultTask({ text: picked.item.task.text, themeName: picked.item.themeName });
+    const rule = resolveTaskRule(picked.item.task, loserId);
+    setResultTask({ text: formatTaskInstruction(picked.item.task.text, rule), themeName: picked.item.themeName });
   };
 
   const holdOn = () => {
@@ -94,7 +96,7 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
     if (levelIndex + 1 >= EDGE_LADDER.length) {
       setBreakerId(attackerId);
       setForcedLoss(true);
-      rollResultTask();
+      rollResultTask(attackerId);
       setPhase('result');
       return;
     }
@@ -106,7 +108,7 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
     if (!defenderCanAct) return;
     setBreakerId(defender.id);
     setForcedLoss(false);
-    rollResultTask();
+    rollResultTask(defender.id);
     setPhase('result');
   };
 
@@ -146,7 +148,7 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
 
         {task && (
           <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-5">
-            <div className="text-xs font-bold text-gray-500">{loser?.name} 要完成的任务</div>
+            <div className="text-xs font-bold text-gray-500">执行关系以卡面标注为准</div>
             <div className="mt-2 text-base font-semibold leading-relaxed text-white">{task.text}</div>
             <div className="mt-1 text-[11px] text-gray-500">来自「{task.themeName}」</div>
           </div>

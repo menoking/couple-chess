@@ -4,6 +4,7 @@ import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { Player, Theme } from '../../types';
 import { GAMBLE_TIERS, GambleTier, GambleEntry } from '../../data/spicyContent';
 import { pickFresh } from '../../utils/freshPick';
+import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
 interface GambleModeViewProps {
   players: Player[];
@@ -206,6 +207,10 @@ function GambleGame({ players }: { players: Player[] }) {
     // 赌局自己决定谁做任务：一半概率砸回坐庄的人
     const loserId = Math.random() < 0.5 ? spinnerId : spinnerId === 0 ? 1 : 0;
     const winnerId = loserId === 0 ? 1 : 0;
+    const taskRule = resolveTaskRule(
+      { text: entry.task, executor: loserId === 0 ? 'male' : 'female' },
+      loserId
+    );
     // 目标是「基准格之后多转两圈」的位置：快速滑动 → 缓慢停下 → 正好压在选择线上
     const targetIndex = BASE_INDEX + LOOP_CELLS + Math.max(0, entryIndex);
 
@@ -218,7 +223,7 @@ function GambleGame({ players }: { players: Player[] }) {
     setPendingTier(nextTier);
     setResult({
       tier: nextTier,
-      task: entry.task,
+      task: formatTaskInstruction(entry.task, taskRule),
       label: entry.label,
       loserId,
       winnerId,

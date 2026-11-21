@@ -33,6 +33,7 @@ import { loadFromStorage, saveToStorage } from '../utils/localStorage';
 import { taskKeyOf } from '../utils/freshPick';
 import { generateSpiralPath, generateBoardMap, calculateNewPosition, generateMineBoard, generateBingoBoard, BINGO_BOARD_SIZE } from '../utils/gameLogic';
 import { DEFAULT_THEMES } from '../data/defaultThemes';
+import { normalizeLegacyTaskExecutor } from '../rules/taskRules';
 
 const STORAGE_KEY = 'couples-ludo-game-state';
 const DEFAULT_THEME_IDS = new Set(DEFAULT_THEMES.map(theme => theme.id));
@@ -175,7 +176,7 @@ function normalizeExecutor(value: unknown): TaskExecutor {
   if (value === 1 || value === '1') return 'female';
   if (value === 2 || value === '2') return 'male';
   if (value === 3 || value === '3') return 'both';
-  return value === 'female' || value === 'male' || value === 'both' ? value : 'both';
+  return value === 'female' || value === 'male' || value === 'both' || value === 'together' ? value : 'both';
 }
 
 function clampMoveDelta(value: unknown) {
@@ -211,7 +212,8 @@ function parseTaskText(input: string): TaskCard | null {
 
 function normalizeTask(input: unknown): TaskCard | null {
   if (typeof input === 'string') {
-    return parseTaskText(input);
+    const task = parseTaskText(input);
+    return task ? normalizeLegacyTaskExecutor(task) : null;
   }
 
   if (Array.isArray(input)) {
@@ -219,11 +221,11 @@ function normalizeTask(input: unknown): TaskCard | null {
     const text = typeof textValue === 'string' ? textValue.trim() : '';
     if (!text) return null;
 
-    return {
+    return normalizeLegacyTaskExecutor({
       text,
       executor: normalizeExecutor(executorValue),
       moveDelta: clampMoveDelta(moveValue)
-    };
+    });
   }
 
   if (!isRecord(input)) return null;
@@ -232,11 +234,11 @@ function normalizeTask(input: unknown): TaskCard | null {
   const text = typeof textValue === 'string' ? textValue.trim() : '';
   if (!text) return null;
 
-  return {
+  return normalizeLegacyTaskExecutor({
     text,
     executor: normalizeExecutor(input.executor),
     moveDelta: clampMoveDelta(input.moveDelta)
-  };
+  });
 }
 
 function normalizeThemeTag(input: unknown): ThemeTag | null {
@@ -647,8 +649,8 @@ export function useGameState() {
     }));
   }, []);
 
-  const addThemeTask = useCallback((themeId: string, taskText: string) => {
-    const task = normalizeTask(taskText);
+  const addThemeTask = useCallback((themeId: string, taskText: string, executor: TaskExecutor = 'both') => {
+    const task = normalizeTask({ text: taskText, executor, moveDelta: 0 });
     if (!task) return;
 
     setState(prev => ({

@@ -9,6 +9,7 @@ import type {
 } from '../types';
 import { calculateNewPosition, type BingoDeck } from '../utils/gameLogic';
 import { taskKeyOf } from '../utils/freshPick';
+import { formatTaskInstruction, resolveTaskRule } from './taskRules';
 
 /**
  * 同屏与联机共用的玩法规则纯函数。
@@ -56,12 +57,6 @@ export function chooseRandomTheme(
   return available[Math.floor(Math.random() * available.length)];
 }
 
-export function getExecutorPlayerId(task: TaskCard, fallbackPlayerId: number) {
-  if (task.executor === 'female') return 1;
-  if (task.executor === 'male') return 0;
-  return fallbackPlayerId;
-}
-
 export function formatMoveDelta(moveDelta: number) {
   if (moveDelta === 0) return '';
   return moveDelta > 0 ? `，完成后前进${moveDelta}格` : `，完成后后退${Math.abs(moveDelta)}格`;
@@ -78,15 +73,18 @@ export function buildTaskEvent(input: {
   task: TaskCard;
   taskSourceId: string;
 }): TaskEventData {
+  const rule = resolveTaskRule(input.task, input.fallbackExecutorPlayerId);
   return {
     type: input.type,
     initiatorPlayerId: input.initiatorPlayerId,
-    executorPlayerId: getExecutorPlayerId(input.task, input.fallbackExecutorPlayerId),
+    executorPlayerId: rule.executorPlayerId,
+    targetPlayerId: rule.targetPlayerId,
+    executionMode: rule.executionMode,
     title: input.title,
     subtitle: `${input.subtitle}${formatMoveDelta(input.task.moveDelta)}`,
     icon: input.icon,
     color: input.color,
-    task: input.task.text,
+    task: formatTaskInstruction(input.task.text, rule),
     taskSourceId: input.taskSourceId,
     moveDelta: input.task.moveDelta
   };

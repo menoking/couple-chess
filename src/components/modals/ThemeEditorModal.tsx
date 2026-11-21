@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, Trash2, Wand2 } from 'lucide-react';
 import { TaskExecutor, Theme, ThemeMode } from '../../types';
+import { describeStoredTaskRule } from '../../rules/taskRules';
 
 interface ThemeEditorModalProps {
   isOpen: boolean;
   theme: Theme | null;
   onClose: () => void;
   onSaveMeta: (themeId: string, patch: Partial<Pick<Theme, 'name' | 'desc' | 'audience' | 'modes'>>) => void;
-  onAddTask: (themeId: string, taskText: string) => void;
+  onAddTask: (themeId: string, taskText: string, executor: TaskExecutor) => void;
   onUpdateTask: (themeId: string, index: number, patch: Partial<Theme['tasks'][number]>) => void;
   onRemoveTask: (themeId: string, index: number) => void;
   onOpenAiImport: (themeId: string) => void;
@@ -19,10 +20,11 @@ const audienceOptions: Array<{ value: Theme['audience']; label: string }> = [
   { value: 'female', label: '仅限女方' }
 ];
 
-const taskExecutorOptions: Array<{ value: TaskExecutor; label: string }> = [
-  { value: 'male', label: '男' },
-  { value: 'female', label: '女' },
-  { value: 'both', label: '通' }
+const taskExecutorOptions: Array<{ value: TaskExecutor; label: string; hint: string }> = [
+  { value: 'male', label: '男 → 女', hint: '男方执行，女方接受' },
+  { value: 'female', label: '女 → 男', hint: '女方执行，男方接受' },
+  { value: 'together', label: '双方一起', hint: '两人共同完成' },
+  { value: 'both', label: '随回合', hint: '实际执行方对另一方完成' }
 ];
 
 const modeOptions: Array<{ value: ThemeMode; label: string }> = [
@@ -50,6 +52,7 @@ export function ThemeEditorModal({
   const [audience, setAudience] = useState<Theme['audience']>('common');
   const [modes, setModes] = useState<ThemeMode[]>([]);
   const [taskText, setTaskText] = useState('');
+  const [newTaskExecutor, setNewTaskExecutor] = useState<TaskExecutor>('both');
 
   useEffect(() => {
     if (!isOpen || !theme) return;
@@ -58,6 +61,7 @@ export function ThemeEditorModal({
     setAudience(theme.audience);
     setModes(theme.modes);
     setTaskText('');
+    setNewTaskExecutor('both');
   }, [isOpen, theme]);
 
   useEffect(() => {
@@ -174,6 +178,26 @@ export function ThemeEditorModal({
 
           <div className="space-y-2">
             <div className="text-xs text-gray-400">新增任务卡</div>
+            <div className="grid grid-cols-2 gap-2">
+              {taskExecutorOptions.map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  title={opt.hint}
+                  className={`rounded-xl border px-3 py-2 text-left ios-btn ${
+                    newTaskExecutor === opt.value
+                      ? 'border-white bg-white text-black'
+                      : 'border-white/5 bg-[#2C2C2E] text-gray-200'
+                  }`}
+                  onClick={() => setNewTaskExecutor(opt.value)}
+                >
+                  <div className="text-xs font-bold">{opt.label}</div>
+                  <div className={`mt-0.5 text-[9px] ${newTaskExecutor === opt.value ? 'text-black/60' : 'text-gray-500'}`}>
+                    {opt.hint}
+                  </div>
+                </button>
+              ))}
+            </div>
             <div className="flex gap-2">
               <input
                 value={taskText}
@@ -186,7 +210,7 @@ export function ThemeEditorModal({
                 className="h-11 px-4 rounded-xl bg-white text-black font-bold ios-btn disabled:opacity-40 flex items-center justify-center gap-1"
                 disabled={!taskText.trim()}
                 onClick={() => {
-                  onAddTask(theme.id, taskText);
+                  onAddTask(theme.id, taskText, newTaskExecutor);
                   setTaskText('');
                 }}
               >
@@ -205,17 +229,23 @@ export function ThemeEditorModal({
               {theme.tasks.map((t, idx) => (
                 <div
                   key={`${theme.id}_${idx}`}
-                  className="p-3 bg-[#2C2C2E] rounded-xl flex gap-3 items-center border border-white/5"
+                  className="p-3 bg-[#2C2C2E] rounded-xl border border-white/5"
                 >
-                  <div className="text-[11px] text-gray-500">{idx + 1}</div>
-                  <div className="flex-1 min-w-0 text-sm text-white leading-relaxed">{t.text}</div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <div className="flex rounded-lg overflow-hidden border border-white/5 bg-black/20">
+                  <div className="flex items-start gap-3">
+                    <div className="pt-0.5 text-[11px] text-gray-500">{idx + 1}</div>
+                    <div className="min-w-0 flex-1 text-sm leading-relaxed text-white">{t.text}</div>
+                    <span className="shrink-0 rounded-full bg-white/10 px-2 py-1 text-[9px] font-bold text-gray-300">
+                      {describeStoredTaskRule(t)}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 pl-5">
+                    <div className="grid min-w-[210px] flex-1 grid-cols-2 overflow-hidden rounded-lg border border-white/5 bg-black/20">
                       {taskExecutorOptions.map(opt => (
                         <button
                           key={opt.value}
                           type="button"
-                          className={`h-8 w-8 text-xs font-bold ios-btn ${
+                          title={opt.hint}
+                          className={`h-8 px-2 text-[10px] font-bold ios-btn ${
                             t.executor === opt.value ? 'bg-white text-black' : 'text-gray-300'
                           }`}
                           onClick={() => onUpdateTask(theme.id, idx, { executor: opt.value })}

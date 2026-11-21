@@ -39,6 +39,8 @@ describe('room snapshot privacy', () => {
         cardIndex: 1,
         drawerSeat: 0 as const,
         executorSeat: 1 as const,
+        executionMode: 'directed' as const,
+        targetSeat: 0 as const,
         reason: 'secret',
         phase: 'revealed' as const,
         card: { task: 'face', themeName: 'secret' },

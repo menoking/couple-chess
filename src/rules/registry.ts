@@ -27,6 +27,31 @@ export function needsThemeDecks(mode: GameMode): boolean {
   return !THEME_FREE_MODES.has(mode);
 }
 
+/** 各玩法选择卡包时需要匹配的主题类型，单机和联机共用。 */
+export const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
+  board: 'board',
+  mine: 'mineTheme',
+  card: 'card',
+  roulette: 'card',
+  bingo: 'card',
+  memory: 'card',
+  timed: 'card',
+  survival: 'card',
+  territory: 'card',
+  auction: 'card',
+  gridchess: 'card',
+  trutndare: 'card',
+  edge: 'card',
+  sudoku: 'card',
+  go: 'card',
+  bluff: 'card',
+  jungle: 'card'
+};
+
+export function themeModeOfGame(mode: GameMode): ThemeMode | null {
+  return MODE_THEME_MODE[mode] ?? null;
+}
+
 export interface ModeDef {
   key: GameMode;
   label: string;

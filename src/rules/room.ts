@@ -233,6 +233,8 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
         return bump(enqueueCard(state, {
           drawerSeat: found.drawerSeat,
           executorSeat: found.executorSeat,
+          executionMode: found.executionMode,
+          targetSeat: found.targetSeat,
           reason: found.reason,
           card: found.card,
           moveDelta: found.moveDelta,
@@ -296,6 +298,8 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
           next = enqueueCard(next, {
             drawerSeat: found.drawerSeat,
             executorSeat: found.executorSeat,
+            executionMode: found.executionMode,
+            targetSeat: found.targetSeat,
             reason: found.reason,
             card: found.card,
             moveDelta: found.moveDelta,
@@ -422,6 +426,8 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       return bump(enqueueCard(state, {
         drawerSeat: action.drawerSeat,
         executorSeat: action.executorSeat,
+        executionMode: action.executionMode,
+        targetSeat: action.targetSeat,
         reason: action.reason,
         card: action.card,
         moveDelta: action.moveDelta,

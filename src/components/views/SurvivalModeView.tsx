@@ -5,6 +5,7 @@ import { Player, Theme } from '../../types';
 import { SURVIVAL_EVENTS, SURVIVAL_MAX_HEARTS, SURVIVAL_TOTAL_ROUNDS, SurvivalEvent } from '../../data/survivalEvents';
 import { ThemeTaskEntry, collectThemeTasks, seededShuffle } from '../../utils/modeKit';
 import { pickFresh, taskKeyOf } from '../../utils/freshPick';
+import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
 interface SurvivalModeViewProps {
   players: Player[];
@@ -139,7 +140,11 @@ function SurvivalGame({
     setUsedTasks(picked.used);
     setNotice(picked.reset ? '任务已经全部做过，牌堆重新洗好了' : null);
     resolvingRef.current = false;
-    setCurrentTask({ text: picked.item.task.text, themeName: picked.item.themeName });
+    const rule = resolveTaskRule(picked.item.task, activePlayer?.id ?? 0);
+    setCurrentTask({
+      text: formatTaskInstruction(picked.item.task.text, rule),
+      themeName: picked.item.themeName
+    });
     const limit = activeEvent && activeEvent.timeLimit > 0 ? activeEvent.timeLimit : 0;
     setDeadline(limit > 0 ? Date.now() + limit * 1000 : 0);
     setNow(Date.now());
@@ -244,7 +249,7 @@ function SurvivalGame({
           {currentTask && (
             <div className="rounded-3xl border border-white/10 bg-[#1C1C1E] p-5">
               <div className="flex items-center justify-between text-[10px] font-bold text-gray-500">
-                <span>本轮任务 · {activePlayer?.name} 执行</span>
+                <span>本轮任务 · 执行关系见卡面</span>
                 <span className="truncate">来自「{currentTask.themeName}」</span>
               </div>
               <div className="mt-3 text-base font-bold leading-relaxed text-white">{currentTask.text}</div>

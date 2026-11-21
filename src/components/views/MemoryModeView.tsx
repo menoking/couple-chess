@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Brain, Check, Crown, Flame, Gift, Heart, RefreshCw, Star, Sun, User, UserRound, Zap } from 'lucide-react';
 import { Player, TaskCard, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, seededShuffle } from '../../utils/modeKit';
+import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
 interface MemoryModeViewProps {
   players: Player[];
@@ -112,7 +113,8 @@ function MemoryGame({
       setPairCounts(prev => ({ ...prev, [byId]: (prev[byId] ?? 0) + 1 }));
       setFlips([]);
       // 配对成功后弹出真正的任务卡
-      setMatchTask({ text: matched.task.text, themeName: matched.themeName });
+      const rule = resolveTaskRule(matched.task, byId === 0 ? 1 : 0);
+      setMatchTask({ text: formatTaskInstruction(matched.task.text, rule), themeName: matched.themeName });
       return;
     }
 
@@ -227,7 +229,7 @@ function MemoryGame({
         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/85 px-5 backdrop-blur-md">
           <div className="w-full max-w-sm rounded-3xl border border-white/10 bg-[#1C1C1E] p-5 shadow-2xl">
             <div className="flex items-center justify-between text-[10px] font-bold text-gray-500">
-              <span>配对成功 · 对方执行</span>
+              <span>配对成功 · 执行关系见卡面</span>
               <span className="truncate">来自「{matchTask.themeName}」</span>
             </div>
             <div className="mt-3 text-base font-bold leading-relaxed text-white">{matchTask.text}</div>

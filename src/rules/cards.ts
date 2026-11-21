@@ -1,4 +1,4 @@
-import type { TaskContinuation } from '../types';
+import type { TaskContinuation, TaskEventData } from '../types';
 import type { OnlineCard, PendingCard, RoomAction, RoomSnapshot, Seat } from './types';
 import { applyMoveDelta } from './modeRules';
 import { DEFAULT_THEMES } from '../data/defaultThemes';
@@ -44,7 +44,13 @@ export const FALLBACK_CARD: OnlineCard = {
 export function normalizeCardPool(pool?: OnlineCard[]): OnlineCard[] {
   const cleaned = (pool ?? [])
     .filter(item => typeof item?.task === 'string' && item.task.trim().length > 0)
-    .map(item => ({ task: item.task.trim(), themeName: item.themeName?.trim() || '任务包' }));
+    .map(item => ({
+      task: item.task.trim(),
+      themeName: item.themeName?.trim() || '任务包',
+      executor: item.executor === 'male' || item.executor === 'female' || item.executor === 'both' || item.executor === 'together'
+        ? item.executor
+        : 'both'
+    }));
   return cleaned.length > 0 ? cleaned : [FALLBACK_CARD];
 }
 
@@ -61,6 +67,8 @@ export function cardFor(pool: OnlineCard[], id: number): OnlineCard {
 export function enqueueCard(state: RoomSnapshot, spec: {
   drawerSeat: Seat;
   executorSeat: Seat;
+  executionMode?: TaskEventData['executionMode'];
+  targetSeat?: Seat | null;
   reason: string;
   /** 玩法视图自己抽出的具体任务；不给时由公共卡池按序号确定性取卡 */
   card?: OnlineCard;
@@ -73,6 +81,10 @@ export function enqueueCard(state: RoomSnapshot, spec: {
     cardIndex: cardSeq,
     drawerSeat: spec.drawerSeat,
     executorSeat: spec.executorSeat,
+    executionMode: spec.executionMode ?? 'directed',
+    targetSeat: spec.executionMode === 'together'
+      ? null
+      : spec.targetSeat ?? (spec.executorSeat === 0 ? 1 : 0),
     reason: spec.reason,
     // 入队时没有任何一方拿到卡面；抽卡方点击后才生成卡面。
     phase: 'locked',
@@ -217,6 +229,8 @@ export interface ExtractedCard {
   card: OnlineCard;
   drawerSeat: Seat;
   executorSeat: Seat;
+  executionMode: TaskEventData['executionMode'];
+  targetSeat: Seat | null;
   reason: string;
   moveDelta: number;
   continuation?: TaskContinuation;
@@ -269,6 +283,12 @@ export function extractCard(value: unknown): ExtractedCard | null {
       ? 0
       : executorSeat;
   const themeName = resolveThemeName(record);
+  const executionMode = record.executionMode === 'together' ? 'together' : 'directed';
+  const targetSeat: Seat | null = executionMode === 'together'
+    ? null
+    : record.targetPlayerId === 0 || record.targetPlayerId === 1
+      ? record.targetPlayerId
+      : executorSeat === 0 ? 1 : 0;
   const reason = typeof record.title === 'string' && record.title.trim() ? record.title.trim() : '抽到一张任务卡';
 
   const moveDelta = typeof record.moveDelta === 'number' && Number.isFinite(record.moveDelta)
@@ -276,5 +296,14 @@ export function extractCard(value: unknown): ExtractedCard | null {
     : 0;
 
   const continuation = parseContinuation(record.continuation);
-  return { card: { task: text.trim(), themeName }, drawerSeat, executorSeat, reason, moveDelta, continuation };
+  return {
+    card: { task: text.trim(), themeName },
+    drawerSeat,
+    executorSeat,
+    executionMode,
+    targetSeat,
+    reason,
+    moveDelta,
+    continuation
+  };
 }

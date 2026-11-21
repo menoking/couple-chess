@@ -107,7 +107,11 @@ export interface Player {
 
 export type ThemeAudience = 'common' | 'male' | 'female';
 
-export type TaskExecutor = 'female' | 'male' | 'both';
+/** both=按玩法指定的实际执行方（兼容旧题库），together=双方共同执行。 */
+export type TaskExecutor = 'female' | 'male' | 'both' | 'together';
+
+/** 卡片最终展示的明确执行关系；不允许把“谁对谁做”留给玩家猜。 */
+export type TaskExecutionMode = 'directed' | 'together';
 
 export interface TaskCard {
   text: string;
@@ -165,6 +169,9 @@ export interface TaskEventData {
   type: 'collision' | 'lucky' | 'trap' | 'card' | 'mineTruth' | 'mineDare' | 'mineTheme';
   initiatorPlayerId: number;
   executorPlayerId: number;
+  /** directed 时为被执行人；together 时为 null。 */
+  targetPlayerId: number | null;
+  executionMode: TaskExecutionMode;
   title: string;
   subtitle: string;
   icon: string;

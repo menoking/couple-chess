@@ -1,4 +1,5 @@
 import { Theme, ThemeMode, ThemeTag } from '../types';
+import { normalizeLegacyTaskExecutor } from '../rules/taskRules';
 import { REVIEW_THEME_DATA } from './reviewThemes';
 
 const intensityLabels = ['甜蜜', '暧昧', '激情', '诱惑', '深入'] as const;
@@ -7319,5 +7320,12 @@ const REVIEW_THEMES: Theme[] = REVIEW_THEME_DATA.map(theme => ({
   tags: [plainTag('混合'), ...(REVIEW_THEME_TAGS[theme.id] || []).map(plainTag)]
 })) as Theme[];
 
-export const DEFAULT_THEMES: Theme[] = [...REVIEW_THEMES, ...BUILT_IN_THEMES];
+/**
+ * 旧题库用 both 同时表达“双方一起”和“按当前执行方”。加载时先把含有
+ * 明确共同语义的任务升级成 together，避免编辑器与卡包标签继续含糊展示。
+ */
+export const DEFAULT_THEMES: Theme[] = [...REVIEW_THEMES, ...BUILT_IN_THEMES].map(theme => ({
+  ...theme,
+  tasks: theme.tasks.map(normalizeLegacyTaskExecutor)
+}));
 

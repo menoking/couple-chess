@@ -12,7 +12,7 @@ export function picksToPool(themes: Theme[], themeIds: string[]): OnlineCard[] {
       const text = task.text.trim();
       if (!text || seen.has(text)) continue;
       seen.add(text);
-      pool.push({ task: text, themeName: theme.name });
+      pool.push({ task: text, themeName: theme.name, executor: task.executor });
     }
   }
   return pool;
@@ -26,7 +26,7 @@ export function mergePools(a: OnlineCard[], b: OnlineCard[]): OnlineCard[] {
     const text = item.task.trim();
     if (!text || seen.has(text)) continue;
     seen.add(text);
-    pool.push({ task: text, themeName: item.themeName });
+    pool.push({ task: text, themeName: item.themeName, executor: item.executor });
   }
   return normalizeCardPool(pool);
 }

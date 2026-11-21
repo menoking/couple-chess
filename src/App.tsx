@@ -45,7 +45,7 @@ import { enterOnlineRoom, leaveOnlineRoom, roomIdOf, startRoomHeartbeat, subscri
 import { clearRoomSnapshot } from './cloud/useSharedRoom';
 import type { Role, Seat } from './rules/types';
 import { roleOfSeat } from './rules/identity';
-import { MODE_LABEL } from './rules/registry';
+import { MODE_LABEL, themeModeOfGame } from './rules/registry';
 import { setDiagnosticContext, diagLog } from './cloud/diagnostics';
 import { getDeviceId } from './cloud/device';
 import { isSandbox } from './utils/localStorage';
@@ -78,25 +78,6 @@ const CARD_THEME_MODES = new Set<GameMode>([
   'bluff',
   'jungle'
 ]);
-
-const MODE_THEME_MODE: Partial<Record<GameMode, ThemeMode>> = {
-  board: 'board',
-  card: 'card',
-  roulette: 'card',
-  bingo: 'card',
-  memory: 'card',
-  timed: 'card',
-  survival: 'card',
-  territory: 'card',
-  auction: 'card',
-  gridchess: 'card',
-  trutndare: 'card',
-  sudoku: 'card',
-  go: 'card',
-  bluff: 'card',
-  jungle: 'card',
-  mine: 'mineTheme'
-};
 
 /** 无文字的 ♂ / ♀ 滑动开关，靠颜色和滑块表达当前性别 */
 function RoleSwitch({
@@ -248,11 +229,12 @@ function App() {
   };
 
   const selectedPlayer = state.players.find(p => p.id === selectedPlayerId) || state.players[0];
-  const selectedModeForTheme: ThemeMode = MODE_THEME_MODE[state.gameMode] ?? 'board';
+  const selectedModeForTheme: ThemeMode = themeModeOfGame(state.gameMode) ?? 'board';
   const selectableThemes = state.themes.filter(
     t =>
       (t.audience === 'common' || t.audience === selectedPlayer.role) &&
-      t.modes.includes(selectedModeForTheme)
+      t.modes.includes(selectedModeForTheme) &&
+      t.tasks.length > 0
   );
 
   const startLocalGame = () => {
@@ -683,7 +665,7 @@ function App() {
           setAiImportThemeId(null);
         }}
         onSaveMeta={(themeId, patch) => updateThemeMeta(themeId, patch)}
-        onAddTask={(themeId, taskText) => addThemeTask(themeId, taskText)}
+        onAddTask={(themeId, taskText, executor) => addThemeTask(themeId, taskText, executor)}
         onUpdateTask={updateThemeTask}
         onRemoveTask={(themeId, index) => removeThemeTask(themeId, index)}
         onOpenAiImport={themeId => setAiImportThemeId(themeId)}

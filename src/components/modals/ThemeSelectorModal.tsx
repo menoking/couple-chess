@@ -1,8 +1,9 @@
 import { Theme } from '../../types';
-import { Check } from 'lucide-react';
+import { Check, Shuffle } from 'lucide-react';
 import { useEffect, useMemo } from 'react';
 import { ThemeTags } from '../ThemeTags';
 import { themePriority } from '../../utils/themeTags';
+import { TaskDirectionTags } from '../TaskDirectionTags';
 
 interface ThemeSelectorModalProps {
   isOpen: boolean;
@@ -73,6 +74,19 @@ export function ThemeSelectorModal({
           <h3 className="text-xl font-bold text-white">选择主题</h3>
         </div>
         <div className="space-y-2 max-h-[55dvh] overflow-y-auto no-scrollbar pb-8">
+          <button
+            type="button"
+            disabled={sortedThemes.length === 0}
+            onClick={() => {
+              const picked = sortedThemes[Math.floor(Math.random() * sortedThemes.length)];
+              if (!picked) return;
+              onSelect(picked.id);
+              onClose();
+            }}
+            className="ios-btn mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#FFD60A]/35 bg-[#FFD60A]/10 p-4 text-sm font-bold text-[#FFD60A] disabled:opacity-40"
+          >
+            <Shuffle size={17} /> 随机选择一个卡包
+          </button>
           {themes.length === 0 && (
             <div className="text-sm text-gray-500 bg-[#2C2C2E] rounded-xl p-4 border border-white/5">
               当前没有可选主题，请到题库中新建或编辑主题的适用模式
@@ -104,6 +118,7 @@ export function ThemeSelectorModal({
                       </span>
                     ))}
                   </div>
+                  <div className="mt-2"><TaskDirectionTags tasks={theme.tasks} compact /></div>
                 </div>
                 <div className="flex shrink-0 items-start gap-2">
                   <ThemeTags tags={theme.tags} />

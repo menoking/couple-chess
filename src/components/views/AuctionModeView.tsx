@@ -1,9 +1,10 @@
 import { useDeckSeed, useModeRuntime, useModeState } from '../../rules/ModeRuntime';
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Coins, Gavel, Lock, RefreshCw, User, UserRound } from 'lucide-react';
-import { Player, TaskEventData, Theme } from '../../types';
+import { Player, TaskCard, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, seededShuffle, themeIntensity } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
+import { describeStoredTaskRule, formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
 interface AuctionModeViewProps {
   players: Player[];
@@ -16,6 +17,13 @@ interface AuctionModeViewProps {
 const TOTAL_ROUNDS = 10;
 const STARTING_COINS = 100;
 const BID_STEP = 5;
+
+function formatAuctionPreview(task: TaskCard): string {
+  if (describeStoredTaskRule(task) === '随回合：当前执行方 → 另一方') {
+    return `【男方拍得：女方 → 男方；女方拍得：男方 → 女方】${task.text}`;
+  }
+  return formatTaskInstruction(task.text, resolveTaskRule(task, 0));
+}
 
 interface AuctionReveal {
   bids: [number, number];
@@ -126,7 +134,7 @@ function AuctionGame({
     setTaskData(
       createViewTaskEvent({
         entry,
-        title: '拍得 · 对方执行',
+        title: '拍得任务 · 按卡面执行',
         executorPlayerId: revealed.winner === 0 ? 1 : 0,
         initiatorPlayerId: revealed.winner,
         continuation: { kind: 'auction', round }
@@ -237,9 +245,11 @@ function AuctionGame({
             难度 {'★'.repeat(currentLevel)}{'☆'.repeat(5 - currentLevel)}
           </div>
         </div>
-        <div className="mt-3 text-lg font-bold leading-relaxed text-white">{current?.task.text || '拍品已售罄'}</div>
+        <div className="mt-3 text-lg font-bold leading-relaxed text-white">
+          {current ? formatAuctionPreview(current.task) : '拍品已售罄'}
+        </div>
         <div className="mt-2 text-[11px] text-gray-500">
-          拍得者抽卡，任务由<span className="text-white">对方执行</span>；积分 = 难度 + 出价 ÷ 10
+          卡面固定规则优先；“随回合”卡由<span className="text-white">拍得者的对方执行</span>；积分 = 难度 + 出价 ÷ 10
         </div>
       </div>
 
