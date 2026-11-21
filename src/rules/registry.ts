@@ -103,6 +103,7 @@ export function turnBoundPrefixOf(key: string): string | null {
  * 按固定映射取才不会被旧值带偏（表现为「一直男方回合」「操作权错位」）。
  */
 export const MODE_TURN_KEY: Partial<Record<GameMode, string>> = {
+  board: 'OnlineBoard.turn',
   gridchess: 'GridChessModeView.turn',
   go: 'GoModeView.turn',
   jungle: 'JungleModeView.turn',

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Sparkles, User, UserRound } from 'lucide-react';
 import { PathCoord, Player, TaskEventData, TileType } from '../../types';
+import type { Seat } from '../../rules/types';
 import { useModeState } from '../../rules/ModeRuntime';
 import { calculateNewPosition, rollDice } from '../../utils/gameLogic';
 import { GameBoard } from '../GameBoard';
@@ -17,7 +18,8 @@ interface OnlineBoardViewProps {
   currentTurn: number;
   /** 队列里还有几张卡没确认；卡片确认后房主才交回合 */
   pendingCards: number;
-  onCheckTile: (landing: number) => TaskEventData | 'win' | null;
+  /** 落点与实际移动座位一起传递，不能从可能滞后的房间回合重新推断。 */
+  onCheckTile: (landing: number, seat: Seat) => TaskEventData | 'win' | null;
   onTaskTrigger: (task: TaskEventData) => void;
   onBack: () => void;
 }
@@ -90,8 +92,8 @@ export function OnlineBoardView({
 
   const resolveLanding = (landing: number) => {
     setMoving(false);
-    const seat = turnRef.current;
-    const tile = checkTileRef.current(landing);
+    const seat: Seat = turnRef.current === 1 ? 1 : 0;
+    const tile = checkTileRef.current(landing, seat);
     diagLog('board-landing', {
       landing,
       seat,

@@ -258,8 +258,12 @@ export function extractCard(value: unknown): ExtractedCard | null {
   if (!text || !text.trim()) return null;
 
   const executorSeat: Seat = record.executorPlayerId === 1 ? 1 : 0;
-  // 抽卡人严格取 initiator：之前在自己抽自己做时翻成对方，导致「男方的回合女方抽卡」
-  const drawerSeat: Seat = record.initiatorPlayerId === 1 ? 1 : 0;
+  // 抽卡人严格取 initiator；旧玩法数据缺失 initiator 时跟随执行人，不能静默默认成男方。
+  const drawerSeat: Seat = record.initiatorPlayerId === 1
+    ? 1
+    : record.initiatorPlayerId === 0
+      ? 0
+      : executorSeat;
   const themeName = resolveThemeName(record);
   const reason = typeof record.title === 'string' && record.title.trim() ? record.title.trim() : '抽到一张任务卡';
 

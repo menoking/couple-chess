@@ -817,8 +817,8 @@ export function OnlineStage(props: OnlineStageProps) {
     else endTurn();
   };
   const onPoseTrigger = (src: string) => patch('stage.poseImage', src);
-  const onCheckTile = (landingStep: number): TaskEventData | 'win' | null =>
-    resolveBoardTile({ landingStep, players, themes: onlineThemes, turn: currentTurn, boardMap, usedTasks: drawnTasks });
+  const onCheckTile = (landingStep: number, turnSeat: Seat): TaskEventData | 'win' | null =>
+    resolveBoardTile({ landingStep, players, themes: onlineThemes, turn: turnSeat, boardMap, usedTasks: drawnTasks });
   const onRevealTile = (index: number): MineRevealResult | null => {
     const board = [...mineBoard];
     if (!board[index] || board[index].revealed) return null;

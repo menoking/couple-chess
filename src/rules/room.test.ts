@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { enqueueCard } from './cards';
+import { enqueueCard, extractCard } from './cards';
 import { createRoom, reduceRoom, viewFor } from './room';
 import { seatScopedKey } from './registry';
 import type { RoomSnapshot, Seat } from './types';
@@ -24,6 +24,20 @@ function readyCard(
 }
 
 describe('room card reducer', () => {
+  it('does not default a legacy card without an initiator to the male seat', () => {
+    expect(extractCard({
+      task: '兼容旧任务',
+      executorPlayerId: 1,
+      title: '旧任务'
+    })).toMatchObject({ drawerSeat: 1, executorSeat: 1 });
+
+    expect(extractCard({
+      task: '明确由男方抽取',
+      initiatorPlayerId: 0,
+      executorPlayerId: 1
+    })).toMatchObject({ drawerSeat: 0, executorSeat: 1 });
+  });
+
   it('accept applies movement while skip does not', () => {
     const base = { ...createRoom('board', ['male', 'female'], 0), data: { 'stage.steps': [4, 7] } };
     const accepted = readyCard(base, { moveDelta: 3 });
