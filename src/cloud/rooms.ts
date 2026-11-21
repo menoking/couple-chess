@@ -25,6 +25,7 @@ export interface RoomAnnounce {
   mode: GameMode;
   hostRole?: Role;
   fromDevice?: string;
+  closed?: boolean;
 }
 
 export function roomIdOf(spaceId: string, mode: GameMode): string {
@@ -32,12 +33,21 @@ export function roomIdOf(spaceId: string, mode: GameMode): string {
 }
 
 const SPACE_ROOM_TOPIC = (spaceId: string) => `cfc-space-rooms-${spaceId}`;
-const ELECTION_TOPIC = (roomId: string) => `cfc-ele-${roomId}`;
 
 type RoomRole = 'host' | 'guest' | 'peer';
 
+interface RoomPresenceTrack {
+  roomId: string;
+  mode: GameMode;
+  role: RoomRole;
+  at: number;
+  gender: Role;
+  seat?: Seat;
+}
+
 export interface RoomPresence {
   deviceId: string;
+  roomId: string;
   role: RoomRole;
   at: number;
   gender?: Role;
@@ -45,16 +55,32 @@ export interface RoomPresence {
   seat?: Seat;
 }
 
-/** 每台设备在整局期间都保持自己的选举频道，房主离开后房间状态仍然可读。 */
-const activeChannels = new Map<string, RealtimeChannel>();
+const presenceListeners = new Set<() => void>();
+const sharedReadyWaiters = new Set<() => void>();
+let activeRoomId: string | null = null;
+let activePresenceMeta: RoomPresenceTrack | null = null;
 
-function readPresence(channel: RealtimeChannel): RoomPresence[] {
-  const state = channel.presenceState() as Record<string, Array<{ role?: string; at?: number; gender?: string; seat?: number }>>;
+async function trackRoomPresence(channel: RealtimeChannel, meta: RoomPresenceTrack): Promise<void> {
+  activePresenceMeta = meta;
+  activeRoomId = meta.roomId;
+  await channel.track(meta);
+}
+
+function readPresence(channel: RealtimeChannel, roomId: string): RoomPresence[] {
+  const state = channel.presenceState() as Record<string, Array<{
+    roomId?: string;
+    role?: string;
+    at?: number;
+    gender?: string;
+    seat?: number;
+  }>>;
   const result: RoomPresence[] = [];
   Object.entries(state ?? {}).forEach(([deviceId, metas]) => {
     const meta = metas?.[0] ?? {};
+    if (meta.roomId !== roomId) return;
     result.push({
       deviceId,
+      roomId,
       role: meta.role === 'host' || meta.role === 'guest' ? meta.role : 'peer',
       at: typeof meta.at === 'number' ? meta.at : 0,
       gender: meta.gender === 'male' || meta.gender === 'female' ? meta.gender : undefined,
@@ -70,7 +96,7 @@ const rankOf = (entry: RoomPresence) => `${String(entry.at).padStart(16, '0')}#$
 export function decideHost(peers: RoomPresence[], myId: string, at: number): boolean {
   const everyone = [...peers];
   if (!everyone.some(entry => entry.deviceId === myId)) {
-    everyone.push({ deviceId: myId, role: 'peer', at });
+    everyone.push({ deviceId: myId, roomId: peers[0]?.roomId ?? '', role: 'peer', at });
   }
   const earliest = everyone.slice().sort((a, b) => rankOf(a).localeCompare(rankOf(b)))[0];
   const others = peers.filter(entry => entry.deviceId !== myId);
@@ -84,11 +110,12 @@ export function decideHost(peers: RoomPresence[], myId: string, at: number): boo
 /** Presence 事件驱动等待：看到对方立即返回；无人时只留一个很短的稳定窗口。 */
 async function waitForPresence(
   channel: RealtimeChannel,
+  roomId: string,
   minPeers: number,
   timeoutMs: number,
   settleMs = 120
 ): Promise<RoomPresence[]> {
-  const initial = readPresence(channel);
+  const initial = readPresence(channel, roomId);
   if (initial.length >= minPeers) return initial;
   return new Promise(resolve => {
     let done = false;
@@ -97,16 +124,18 @@ async function waitForPresence(
       if (done) return;
       done = true;
       if (settleTimer !== null) window.clearTimeout(settleTimer);
-      resolve(readPresence(channel));
+      presenceListeners.delete(onPresence);
+      resolve(readPresence(channel, roomId));
     };
     const scheduleSettle = () => {
       if (settleTimer !== null) window.clearTimeout(settleTimer);
       settleTimer = window.setTimeout(finish, settleMs);
     };
-    channel.on('presence', { event: 'sync' }, () => {
-      if (readPresence(channel).length >= minPeers) finish();
+    const onPresence = () => {
+      if (readPresence(channel, roomId).length >= minPeers) finish();
       else scheduleSettle();
-    });
+    };
+    presenceListeners.add(onPresence);
     // 如果 track 的 sync 在注册监听前已经到达，也不会退回过去的 600ms 轮询。
     scheduleSettle();
     window.setTimeout(finish, timeoutMs);
@@ -134,31 +163,15 @@ export async function enterOnlineRoom(
   const at = Date.now();
   diagLog('room:begin', { room: roomId.slice(-8), device: myId.slice(0, 8), gender: myRole });
 
-  await leaveOnlineRoom(roomId);
+  if (activeRoomId && activeRoomId !== roomId) await leaveOnlineRoom(activeRoomId);
 
-  const channel = client.channel(ELECTION_TOPIC(roomId), {
-    config: { presence: { key: myId } }
-  });
+  // 大厅发现与房主选举复用同一个常驻小屋频道，不再为每次进房额外握手。
+  const channel = getRoomChannel(client, space.id);
+  await waitForSharedChannel();
+  await trackRoomPresence(channel, { roomId, mode, role: 'peer', at, gender: myRole });
+  diagLog('room:presence-ready', { ms: Date.now() - at });
 
-  await new Promise<void>(resolve => {
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true;
-      resolve();
-    };
-    channel.subscribe(async status => {
-      diagLog('room:subscribe', { status, ms: Date.now() - at });
-      if (status === 'SUBSCRIBED') {
-        await channel.track({ role: 'peer', at, gender: myRole });
-        finish();
-      }
-    });
-    window.setTimeout(finish, 1500);
-  });
-
-  activeChannels.set(roomId, channel);
-  const peers = await waitForPresence(channel, 2, 600, 140);
+  const peers = await waitForPresence(channel, roomId, 2, 600, 140);
   // forceHost：对方已离线时由本机接管，避免永远停在「正在连接房间」
   let isHost = forceHost || decideHost(peers, myId, at);
 
@@ -176,7 +189,9 @@ export async function enterOnlineRoom(
   let hostSeat: Seat = isHost ? preferred : hostSeatOf(hostMeta, otherSeat(preferred));
   let seats = assignSeats({ myRole, hostSeat, isHost });
 
-  await channel.track({
+  await trackRoomPresence(channel, {
+    roomId,
+    mode,
     role: isHost ? 'host' : 'guest',
     at,
     gender: seats.effectiveRole,
@@ -187,16 +202,18 @@ export async function enterOnlineRoom(
   // 只有「自认房主」才需要再确认一轮；访客直接返回，省掉一次等待。
   let settledPeers = peers;
   if (isHost) {
-    settledPeers = await waitForPresence(channel, 2, 450, 100);
+    settledPeers = await waitForPresence(channel, roomId, 2, 450, 100);
   }
   const rivalHost = settledPeers
     .filter(entry => entry.role === 'host' && entry.deviceId !== myId)
     .sort((a, b) => rankOf(a).localeCompare(rankOf(b)))[0];
-  if (isHost && rivalHost && rankOf(rivalHost) < rankOf({ deviceId: myId, role: 'host', at })) {
+  if (isHost && rivalHost && rankOf(rivalHost) < rankOf({ deviceId: myId, roomId, role: 'host', at })) {
     isHost = false;
     hostSeat = hostSeatOf(rivalHost, otherSeat(preferred));
     seats = assignSeats({ myRole, hostSeat, isHost });
-    await channel.track({
+    await trackRoomPresence(channel, {
+      roomId,
+      mode,
       role: 'guest',
       at,
       gender: seats.effectiveRole,
@@ -227,11 +244,10 @@ export async function enterOnlineRoom(
 }
 
 export async function leaveOnlineRoom(roomId: string): Promise<void> {
-  const client = supabase;
-  const channel = activeChannels.get(roomId);
-  if (!channel) return;
-  activeChannels.delete(roomId);
-  if (client) await client.removeChannel(channel);
+  if (activeRoomId !== roomId || !sharedChannel) return;
+  activeRoomId = null;
+  activePresenceMeta = null;
+  await sharedChannel.untrack();
 }
 
 /** 同一间屋子只开一个频道：房主用它广播，另一方用它接收。 */
@@ -246,16 +262,34 @@ function getRoomChannel(client: NonNullable<typeof supabase>, spaceId: string): 
   if (sharedChannel) void client.removeChannel(sharedChannel);
 
   sharedSubscribed = false;
+  activeRoomId = null;
+  activePresenceMeta = null;
   pendingRoomAnnouncements.clear();
-  const channel = client.channel(SPACE_ROOM_TOPIC(spaceId));
+  const channel = client.channel(SPACE_ROOM_TOPIC(spaceId), {
+    config: { presence: { key: getDeviceId() } }
+  });
+  sharedChannel = channel;
+  sharedSpaceId = spaceId;
   channel.on('broadcast', { event: 'room-open' }, payload => {
+    if (sharedChannel !== channel) return;
     const data = payload.payload as RoomAnnounce | undefined;
     if (!data || data.fromDevice === getDeviceId()) return;
     roomListeners.forEach(listener => listener(data));
   });
+  channel.on('presence', { event: 'sync' }, () => {
+    if (sharedChannel !== channel) return;
+    presenceListeners.forEach(listener => listener());
+  });
   channel.subscribe(status => {
-    if (status !== 'SUBSCRIBED') return;
+    if (sharedChannel !== channel) return;
+    if (status !== 'SUBSCRIBED') {
+      sharedSubscribed = false;
+      return;
+    }
     sharedSubscribed = true;
+    if (activePresenceMeta) void channel.track(activePresenceMeta);
+    sharedReadyWaiters.forEach(resolve => resolve());
+    sharedReadyWaiters.clear();
     // startRoomHeartbeat 可能早于 SUBSCRIBED；订阅成功后立即补发，不再等下一次心跳。
     pendingRoomAnnouncements.forEach(announce => {
       channel.send({
@@ -266,9 +300,22 @@ function getRoomChannel(client: NonNullable<typeof supabase>, spaceId: string): 
     });
     pendingRoomAnnouncements.clear();
   });
-  sharedChannel = channel;
-  sharedSpaceId = spaceId;
   return channel;
+}
+
+function waitForSharedChannel(timeoutMs = 1500): Promise<void> {
+  if (sharedSubscribed) return Promise.resolve();
+  return new Promise(resolve => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      sharedReadyWaiters.delete(finish);
+      resolve();
+    };
+    sharedReadyWaiters.add(finish);
+    window.setTimeout(finish, timeoutMs);
+  });
 }
 
 function broadcastRoom(channel: RealtimeChannel, announce: RoomAnnounce): void {
@@ -295,11 +342,12 @@ export function startRoomHeartbeat(
   const channel = getRoomChannel(client, space.id);
   const send = () => broadcastRoom(channel, { roomId, mode, hostRole });
   send();
-  const timer = window.setInterval(send, 1500);
+  const timer = window.setInterval(send, 5000);
 
   return () => {
     window.clearInterval(timer);
     pendingRoomAnnouncements.delete(roomId);
+    broadcastRoom(channel, { roomId, mode, hostRole, closed: true });
   };
 }
 

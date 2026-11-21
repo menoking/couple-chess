@@ -292,6 +292,7 @@ function App() {
     // 主动点「开始」= 新一局，清掉上次的快照；重连/让位时保留
     if (!keepSnapshot) clearRoomSnapshot(roomIdOf(cloud.space.id, mode));
     diagLog('enter:begin', { mode, spaceId: cloud.space.id.slice(0, 8), myRole });
+    showOnlineNotice('正在连接房间…', true);
     try {
       const ticket = await enterOnlineRoom(cloud.space, mode, myRole);
       if (!ticket) {
@@ -400,17 +401,21 @@ function App() {
       return;
     }
     return subscribeSpaceRooms(cloud.space, announce => {
+      if (announce.closed) {
+        setRemoteRoom(current => current?.roomId === announce.roomId ? null : current);
+        return;
+      }
       setRemoteRoom(announce);
       remoteRoomAt.current = Date.now();
     });
   }, [cloud.space]);
 
-  // 房主每隔 2.5 秒广播一次；超过 6 秒没再收到就当他退房了，提示必须消失
+  // 房主低频广播，正常退出会主动发 close；异常断线超过 12 秒再清理提示。
   useEffect(() => {
     if (!remoteRoom) return;
     const timer = window.setInterval(() => {
-      if (Date.now() - remoteRoomAt.current > 6000) setRemoteRoom(null);
-    }, 1500);
+      if (Date.now() - remoteRoomAt.current > 12000) setRemoteRoom(null);
+    }, 2000);
     return () => window.clearInterval(timer);
   }, [remoteRoom]);
 

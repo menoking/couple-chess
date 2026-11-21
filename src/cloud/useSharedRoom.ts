@@ -289,8 +289,14 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
   const actionIds = useRef(new WeakMap<object, string>());
   const queuedActions = useRef<Array<{ envelope: RoomActionEnvelope; expiresAt: number }>>([]);
   const actionReceipts = useRef(new Map<string, { accepted: boolean; seq: number; seat: Seat }>());
-  const pendingActions = useRef(new Map<string, { envelope: RoomActionEnvelope; attempts: number; timer: number | null }>());
+  const pendingActions = useRef(new Map<string, {
+    envelope: RoomActionEnvelope;
+    attempts: number;
+    timer: number | null;
+    sentAt: number;
+  }>());
   const lastSentViews = useRef(new Map<Seat, RoomSnapshot>());
+  const syncStats = useRef({ full: 0, delta: 0, bytes: 0 });
   const initialRef = useRef(input.createInitial);
   initialRef.current = input.createInitial;
 
@@ -310,44 +316,57 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
     if (!transport) return;
     const next = viewFor(state, seat);
     const previous = lastSentViews.current.get(seat);
+    let kind = 'view';
+    let payload: RoomSnapshot | RoomViewDelta = next;
     if (!forceFull && previous && next.seq > previous.seq) {
-      transport.sendTo(seat, 'view-delta', createViewDelta(previous, next));
-    } else {
-      transport.sendTo(seat, 'view', next);
+      kind = 'view-delta';
+      payload = createViewDelta(previous, next);
+    }
+    transport.sendTo(seat, kind, payload);
+    const stats = syncStats.current;
+    if (kind === 'view-delta') stats.delta += 1;
+    else stats.full += 1;
+    stats.bytes += JSON.stringify(payload).length;
+    if ((stats.full + stats.delta) % 20 === 0) {
+      diagLog('room:sync-stats', { ...stats });
     }
     lastSentViews.current.set(seat, next);
   }, []);
 
+  const flushPublish = useCallback(() => {
+    publishTimer.current = null;
+    const target = pendingPublish.current;
+    pendingPublish.current = null;
+    if (!target) return;
+    if (roomId) saveRoomSnapshot(roomId, target);
+    ([0, 1] as Seat[]).forEach(seat => {
+      if (seat === mySeat) return;
+      try {
+        sendView(target, seat);
+      } catch (error) {
+        diagLog('room:send-error', {
+          seat,
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
+    });
+  }, [mySeat, roomId, sendView]);
+
   const publish = useCallback(
-    (state: RoomSnapshot) => {
+    (state: RoomSnapshot, immediate = false) => {
       // 本机立刻落地：操作手感不能等广播
       applySnapshot(viewFor(state, mySeat));
       pendingPublish.current = state;
+      if (immediate) {
+        if (publishTimer.current !== null) window.clearTimeout(publishTimer.current);
+        flushPublish();
+        return;
+      }
       if (publishTimer.current !== null) return;
-      // 一次操作会连发多个 patch（斗兽棋吃子 = 棋盘 / 选中 / 计数 / 队列 / 回合），
-      // 逐条广播很快撞上 Supabase 每秒条数上限，被限流后就「对面同步不出来」。
-      // 合并到同一个 32ms 窗口里只发最后一次。
-      publishTimer.current = window.setTimeout(() => {
-        publishTimer.current = null;
-        const target = pendingPublish.current;
-        pendingPublish.current = null;
-        if (!target) return;
-        if (roomId) saveRoomSnapshot(roomId, target);
-        ([0, 1] as Seat[]).forEach(seat => {
-          if (seat === mySeat) return;
-          try {
-            sendView(target, seat);
-          } catch (error) {
-            // 单个座位发送失败不能拖累另一个座位
-            diagLog('room:send-error', {
-              seat,
-              message: error instanceof Error ? error.message : String(error)
-            });
-          }
-        });
-      }, 16);
+      // 高频玩法 patch 保留一帧内合并；回合、卡片和大厅动作直接发出。
+      publishTimer.current = window.setTimeout(flushPublish, 16);
     },
-    [applySnapshot, mySeat, roomId, sendView]
+    [applySnapshot, flushPublish, mySeat]
   );
 
   // 卸载前把最后一帧补发出去，避免「刚操作完就退房」把末态丢掉
@@ -363,7 +382,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         // 卸载途中发送失败可忽略
       }
     });
-  }, [sendView]);
+  }, [mySeat, sendView]);
 
   const applyAction = useCallback(
     (action: RoomAction) => {
@@ -385,11 +404,12 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         // 关键：写入方本地做过乐观更新，被拒后必须用权威快照把它冲掉。
         // 否则那台设备会一直显示「自己已经操作成功」，两端回合彻底分叉——
         // 表现就是双方都能操作、谁也等不到对方。
-        publish(current);
+        publish(current, true);
         return false;
       }
       authoritativeRef.current = next;
-      publish(next);
+      const immediate = action.type !== 'patch' && action.type !== 'patchBatch';
+      publish(next, immediate);
       return true;
     },
     [isHost, publish]
@@ -406,7 +426,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
       transportRef.current?.sendTo(envelope.actorSeat, 'protocol-error', { reason, actionId: envelope.actionId });
     }
     const current = authoritativeRef.current;
-    if (current) publish(current);
+    if (current) publish(current, true);
   }, [publish]);
 
   const acceptEnvelope = useCallback((value: unknown, allowQueue = true) => {
@@ -488,6 +508,13 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
 
     let cancelled = false;
     const pendingActionMap = pendingActions.current;
+    const transportStartedAt = Date.now();
+    let firstViewLogged = false;
+    const markFirstView = (source: string, seq: number) => {
+      if (firstViewLogged) return;
+      firstViewLogged = true;
+      diagLog('room:first-view', { source, seq, ms: Date.now() - transportStartedAt });
+    };
     setStatus('connecting');
     setError(null);
     setSnapshot(null);
@@ -499,6 +526,8 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
     queuedActions.current = [];
     actionReceipts.current.clear();
     lastSentViews.current.clear();
+    syncStats.current = { full: 0, delta: 0, bytes: 0 };
+    const connectionSyncStats = syncStats.current;
     pendingActions.current.forEach(item => {
       if (item.timer !== null) window.clearTimeout(item.timer);
     });
@@ -522,6 +551,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
           const current = viewRef.current;
           if (current && incoming.seq <= current.seq) return;
           applySnapshot(mergeSnapshot(current, incoming, mySeat));
+          markFirstView('public-fallback', incoming.seq);
           viewReady.current = true;
           setStatus('playing');
           setDiagnosticContext({ roomStatus: 'playing', viewReady: true });
@@ -552,7 +582,13 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
             const pending = pendingActions.current.get(ack.actionId);
             if (pending && pending.timer !== null) window.clearTimeout(pending.timer);
             pendingActions.current.delete(ack.actionId);
-            diagLog('room:action-ack', { actionId: ack.actionId, accepted: ack.accepted, seq: ack.seq });
+            diagLog('room:action-ack', {
+              actionId: ack.actionId,
+              accepted: ack.accepted,
+              seq: ack.seq,
+              rttMs: pending ? Date.now() - pending.sentAt : null,
+              attempts: pending?.attempts ?? null
+            });
           }
           return;
         }
@@ -586,6 +622,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
           }
           viewReady.current = true;
           applySnapshot(next);
+          markFirstView('delta', next.seq);
           setStatus('playing');
           setDiagnosticContext({ roomStatus: 'playing', viewReady: true });
           diagLog('room:view-delta', { seat: mySeat, seq: next.seq });
@@ -609,6 +646,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         }
         viewReady.current = true;
         applySnapshot(next);
+        markFirstView('full', next.seq);
         setStatus('playing');
         setDiagnosticContext({ roomStatus: 'playing', viewReady: true });
         diagLog('room:view', { seat: mySeat, seq: next.seq });
@@ -655,7 +693,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
         const key = [...seats].sort().join(',');
         if (isHost && key !== lastPresence.current && authoritativeRef.current) {
           lastPresence.current = key;
-          publish(authoritativeRef.current);
+          publish(authoritativeRef.current, true);
         }
         // Presence 兜底：对方已声明锁定但动作没到房主时，房主替它锁定。
         // 这条通道就是头像亮起用的通道，实测最稳。
@@ -671,7 +709,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
               pool: current.draftPools[peerSeat]
             });
             authoritativeRef.current = next;
-            publish(next);
+            publish(next, true);
             diagLog('room:lock-from-presence', { seat: peerSeat });
           }
         }
@@ -684,6 +722,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
       try {
         await transport.connect();
         if (cancelled) return;
+        diagLog('room:transport-ready', { ms: Date.now() - transportStartedAt, kind, isHost });
         if (isHost) {
           const initial = normalizeRoomSnapshot(initialRef.current());
           authoritativeRef.current = initial;
@@ -691,7 +730,7 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
           setStatus('playing');
           setDiagnosticContext({ roomStatus: 'playing', viewReady: true });
           diagLog('room:host-ready', { seat: mySeat });
-          publish(initial);
+          publish(initial, true);
         } else {
           transport.send('request-view', { seat: mySeat, deviceId: getDeviceId() });
           diagLog('room:guest-waiting', { seat: mySeat });
@@ -709,6 +748,9 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
     return () => {
       cancelled = true;
       transport.close();
+      if (connectionSyncStats.full + connectionSyncStats.delta > 0) {
+        diagLog('room:sync-summary', { ...connectionSyncStats });
+      }
       pendingActionMap.forEach(item => {
         if (item.timer !== null) window.clearTimeout(item.timer);
       });
@@ -758,7 +800,12 @@ export function useSharedRoom(input: SharedRoomInput): SharedRoomResult {
 
   const sendActionWithRetry = useCallback((envelope: RoomActionEnvelope) => {
     if (pendingActions.current.has(envelope.actionId)) return;
-    pendingActions.current.set(envelope.actionId, { envelope, attempts: 0, timer: null });
+    pendingActions.current.set(envelope.actionId, {
+      envelope,
+      attempts: 0,
+      timer: null,
+      sentAt: Date.now()
+    });
 
     const transmit = () => {
       const pending = pendingActions.current.get(envelope.actionId);
