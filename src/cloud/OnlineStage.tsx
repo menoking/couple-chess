@@ -695,15 +695,15 @@ export function OnlineStage(props: OnlineStageProps) {
     return (
       <div className="mobile-game-screen fixed inset-0 z-50 flex flex-col bg-black">
         {header}
-        <div className="flex-1 overflow-y-auto px-5 py-5 no-scrollbar">
-          <div className="mb-1 text-base font-bold text-white">各自选卡包</div>
-          <div className="mb-4 text-[11px] leading-relaxed text-gray-500">
-            两台设备各选自己想玩的任务包，双方都点「锁定」后自动合并成公共题库，再一起开局。
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 no-scrollbar">
+          <div className="mb-1 text-base font-bold text-white">选择本局卡包</div>
+          <div className="mb-3 text-[11px] leading-relaxed text-gray-500">
+            可多选，双方锁定后自动合并题库。
           </div>
 
-          <div className="mb-4 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-4">
+          <div className="mb-3 rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3">
             <SeatAvatars roles={roles} presence={shared.presence} mySeat={mySeat} />
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[10px] text-gray-500">
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-x-5 gap-y-1 text-[10px] text-gray-500">
               <span>我 {myPick.locked ? '已锁定' : `已选 ${selected.length} 个包`} · {myPool.length} 张</span>
               <span>
                 对方 {oppPick.locked ? '已锁定' : shared.presence.includes(other(mySeat)) ? `已选 ${oppPick.themeIds.length} 个包` : '还没进入'}
@@ -714,18 +714,16 @@ export function OnlineStage(props: OnlineStageProps) {
           {!myPick.locked ? (
             <>
               <div className="mb-2 flex items-center justify-between gap-3">
-                <div className="text-[11px] font-bold text-gray-300">勾选卡包（可多选）</div>
-                <button
-                  type="button"
-                  disabled={selectableThemes.length === 0}
-                  onClick={() => {
-                    const picked = selectableThemes[Math.floor(Math.random() * selectableThemes.length)];
-                    if (picked) setSelected([picked.id]);
-                  }}
-                  className="ios-btn flex items-center gap-1 rounded-full border border-[#FFD60A]/30 bg-[#FFD60A]/10 px-3 py-1.5 text-[10px] font-bold text-[#FFD60A] disabled:opacity-40"
-                >
-                  <Shuffle size={11} /> 随机选 1 个
-                </button>
+                <div className="text-[11px] font-bold text-gray-300">卡包列表</div>
+                {selected.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelected([])}
+                    className="ios-btn px-1 py-1 text-[10px] font-bold text-gray-500"
+                  >
+                    清空选择
+                  </button>
+                )}
               </div>
               <div className="space-y-2">
                 {selectableThemes.length === 0 && (
@@ -740,7 +738,8 @@ export function OnlineStage(props: OnlineStageProps) {
                       key={theme.id}
                       type="button"
                       onClick={() => setSelected(current => active ? current.filter(id => id !== theme.id) : [...current, theme.id])}
-                      className={`ios-btn w-full rounded-xl border px-3 py-3 text-left ${active ? 'border-[#30D158]/50 bg-[#30D158]/10' : 'border-white/10 bg-white/[0.04]'}`}
+                      aria-pressed={active}
+                      className={`ios-btn w-full rounded-xl border px-3 py-2.5 text-left ${active ? 'border-[#30D158]/50 bg-[#30D158]/10' : 'border-white/10 bg-white/[0.04]'}`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
@@ -748,43 +747,27 @@ export function OnlineStage(props: OnlineStageProps) {
                             <span className="truncate text-xs font-bold text-white">{theme.name}</span>
                             <span className="shrink-0 text-[10px] text-gray-500">{theme.tasks.length}卡</span>
                           </div>
-                          <div className="mt-0.5 line-clamp-2 text-[10px] leading-relaxed text-gray-500">
+                          <div className="mt-0.5 truncate text-[10px] leading-relaxed text-gray-500">
                             {theme.desc || '无描述'}
                           </div>
                           <div className="mt-1.5 flex flex-wrap items-center gap-1">
                             <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] text-gray-300">
                               {AUDIENCE_LABEL[theme.audience]}
                             </span>
-                            <span className="rounded bg-white/10 px-1.5 py-0.5 text-[9px] text-gray-300">
-                              {theme.tasks.length} 张任务
-                            </span>
+                            {active && <TaskDirectionTags tasks={theme.tasks} compact />}
                           </div>
-                          <div className="mt-1.5"><TaskDirectionTags tasks={theme.tasks} compact /></div>
                         </div>
                         <div className="flex shrink-0 items-start gap-1">
                           <ThemeTags tags={theme.tags} />
-                          {active && <Check size={15} className="mt-0.5 text-[#30D158]" />}
+                          <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${active ? 'border-[#30D158] bg-[#30D158] text-black' : 'border-white/15 text-transparent'}`}>
+                            <Check size={12} strokeWidth={3} />
+                          </span>
                         </div>
                       </div>
                     </button>
                   );
                 })}
               </div>
-              <button
-                type="button"
-                disabled={lockPending || myPool.length === 0}
-                onClick={lockDeck}
-                className="ios-btn mt-4 h-12 w-full rounded-full bg-white text-sm font-bold text-black disabled:opacity-60"
-              >
-                {lockPending ? '锁定中…' : '锁定我的卡包'}
-              </button>
-              <button
-                type="button"
-                onClick={() => dispatch({ type: 'forceLobby', seat: mySeat, pool: myPool.length ? myPool : resolvedCardPool })}
-                className="ios-btn mt-2 h-10 w-full rounded-full border border-white/10 text-[11px] font-bold text-gray-400"
-              >
-                对方还没上线 · 先用我的卡包开局
-              </button>
             </>
           ) : (
             <div className="rounded-2xl border border-[#30D158]/30 bg-[#30D158]/10 p-4 text-center">
@@ -809,6 +792,38 @@ export function OnlineStage(props: OnlineStageProps) {
             </div>
           )}
         </div>
+        {!myPick.locked && (
+          <div className="z-10 shrink-0 border-t border-white/10 bg-[#111113]/95 px-5 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-xl">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={selectableThemes.length === 0}
+                onClick={() => {
+                  const picked = selectableThemes[Math.floor(Math.random() * selectableThemes.length)];
+                  if (picked) setSelected([picked.id]);
+                }}
+                className="ios-btn flex h-12 shrink-0 items-center gap-1.5 rounded-full border border-white/10 px-4 text-xs font-bold text-gray-200 disabled:opacity-40"
+              >
+                <Shuffle size={14} /> 随机
+              </button>
+              <button
+                type="button"
+                disabled={lockPending || myPool.length === 0}
+                onClick={lockDeck}
+                className="ios-btn h-12 min-w-0 flex-1 rounded-full bg-white px-4 text-sm font-bold text-black disabled:opacity-50"
+              >
+                {lockPending ? '锁定中…' : selected.length > 0 ? `锁定 ${selected.length} 个卡包` : '请先选择卡包'}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: 'forceLobby', seat: mySeat, pool: myPool.length ? myPool : resolvedCardPool })}
+              className="ios-btn mt-2 h-7 w-full text-[10px] font-bold text-gray-500"
+            >
+              对方未上线？直接用当前卡包开局
+            </button>
+          </div>
+        )}
       </div>
     );
   }

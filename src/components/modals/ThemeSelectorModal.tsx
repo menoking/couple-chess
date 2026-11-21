@@ -68,12 +68,13 @@ export function ThemeSelectorModal({
         className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
-      <div className="mobile-bottom-sheet absolute bottom-0 left-0 right-0 bg-[#1C1C1E] rounded-t-[32px] p-6 transform transition-transform duration-300">
-        <div className="w-12 h-1 bg-gray-600 rounded-full mx-auto mb-6" />
-        <div className="flex justify-between items-center mb-6">
-          <h3 className="text-xl font-bold text-white">选择主题</h3>
-        </div>
-        <div className="space-y-2 max-h-[55dvh] overflow-y-auto no-scrollbar pb-8">
+      <div className="mobile-bottom-sheet absolute bottom-0 left-0 right-0 mx-auto flex max-h-[82dvh] w-full max-w-[430px] flex-col overflow-hidden rounded-t-[32px] bg-[#1C1C1E] transform transition-transform duration-300">
+        <div className="mx-auto mb-4 mt-3 h-1 w-12 shrink-0 rounded-full bg-gray-600" />
+        <div className="flex shrink-0 items-center justify-between px-6 pb-3">
+          <div>
+            <h3 className="text-xl font-bold text-white">选择卡包</h3>
+            <div className="mt-0.5 text-[11px] text-gray-500">点选后立即返回，无需额外确认</div>
+          </div>
           <button
             type="button"
             disabled={sortedThemes.length === 0}
@@ -83,23 +84,27 @@ export function ThemeSelectorModal({
               onSelect(picked.id);
               onClose();
             }}
-            className="ios-btn mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-[#FFD60A]/35 bg-[#FFD60A]/10 p-4 text-sm font-bold text-[#FFD60A] disabled:opacity-40"
+            className="ios-btn flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-white/10 px-3 text-xs font-bold text-[#FFD60A] disabled:opacity-40"
           >
-            <Shuffle size={17} /> 随机选择一个卡包
+            <Shuffle size={14} /> 随机
           </button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] no-scrollbar">
           {themes.length === 0 && (
             <div className="text-sm text-gray-500 bg-[#2C2C2E] rounded-xl p-4 border border-white/5">
               当前没有可选主题，请到题库中新建或编辑主题的适用模式
             </div>
           )}
           {sortedThemes.map(theme => (
-            <div
+            <button
               key={theme.id}
+              type="button"
               onClick={() => {
                 onSelect(theme.id);
                 onClose();
               }}
-              className="p-4 bg-[#2C2C2E] rounded-xl active:bg-[#3A3A3C] transition-colors cursor-pointer border border-white/5"
+              aria-pressed={selectedThemeId === theme.id}
+              className={`ios-btn w-full rounded-xl border p-3 text-left ${selectedThemeId === theme.id ? 'border-[#0A84FF]/50 bg-[#0A84FF]/10' : 'border-white/5 bg-[#2C2C2E]'}`}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
@@ -107,18 +112,16 @@ export function ThemeSelectorModal({
                     <span className="text-white font-medium truncate">{theme.name}</span>
                     <span className="shrink-0 text-[10px] text-gray-500">{theme.tasks.length}卡</span>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1 line-clamp-2">{theme.desc || '无描述'}</div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <div className="mt-0.5 truncate text-[11px] text-gray-500">{theme.desc || '无描述'}</div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                     <span className="bg-white/10 px-2 py-1 rounded text-[10px] text-gray-300">
                       {audienceLabel[theme.audience]}
                     </span>
-                    {theme.modes.map(mode => (
-                      <span key={mode} className="bg-white/10 px-2 py-1 rounded text-[10px] text-gray-300">
-                        {modeLabel[mode]}
-                      </span>
-                    ))}
+                    <span className="bg-white/10 px-2 py-1 rounded text-[10px] text-gray-300">
+                      {theme.modes.map(mode => modeLabel[mode]).join(' / ')}
+                    </span>
+                    {selectedThemeId === theme.id && <TaskDirectionTags tasks={theme.tasks} compact />}
                   </div>
-                  <div className="mt-2"><TaskDirectionTags tasks={theme.tasks} compact /></div>
                 </div>
                 <div className="flex shrink-0 items-start gap-2">
                   <ThemeTags tags={theme.tags} />
@@ -127,7 +130,7 @@ export function ThemeSelectorModal({
                   )}
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
