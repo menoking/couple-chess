@@ -202,6 +202,51 @@ describe('authoritative minesweeper reducer', () => {
   });
 });
 
+describe('turn ownership for shared modes', () => {
+  it('completes a roulette round atomically and rejects the waiting seat', () => {
+    const base: RoomSnapshot = {
+      ...createRoom('roulette', ['male', 'female'], 0, 0),
+      lobbyLocked: true,
+      data: {
+        'RouletteModeView.result': { executor: '男方', action: '亲吻', target: '脸颊', duration: '30 秒' },
+        'RouletteModeView.bonusTask': { text: '加码', executor: 'both', moveDelta: 0 },
+        'RouletteModeView.bonusThemeName': '测试',
+        'RouletteModeView.isSpinning': false
+      }
+    };
+    expect(reduceRoom(base, { type: 'rouletteComplete', seat: 1, expectedTurn: 0 })).toBe(base);
+
+    const next = reduceRoom(base, { type: 'rouletteComplete', seat: 0, expectedTurn: 0 });
+    expect(next.turn).toBe(1);
+    expect(next.data['RouletteModeView.result']).toEqual({ executor: '', action: '', target: '', duration: '' });
+    expect(next.data['RouletteModeView.bonusTask']).toBeNull();
+    expect(reduceRoom(next, { type: 'rouletteComplete', seat: 0, expectedTurn: 0 })).toBe(next);
+  });
+
+  it('rejects roulette state patches from the waiting seat', () => {
+    const base: RoomSnapshot = {
+      ...createRoom('roulette', ['male', 'female'], 0, 0),
+      lobbyLocked: true,
+      data: { 'RouletteModeView.result': { executor: '', action: '', target: '', duration: '' } }
+    };
+    const rejected = reduceRoom(base, {
+      type: 'patch',
+      key: 'RouletteModeView.result',
+      value: { executor: '女方' },
+      baseSeq: 0,
+      seat: 1
+    });
+    expect(rejected).toBe(base);
+  });
+
+  it('lets only the host advance an expired timed turn on behalf of the active seat', () => {
+    const base = createRoom('survival', ['male', 'female'], 0, 1);
+    expect(reduceRoom(base, { type: 'authorityEndTurn', seat: 1, expectedTurn: 1 })).toBe(base);
+    const next = reduceRoom(base, { type: 'authorityEndTurn', seat: 0, expectedTurn: 1 });
+    expect(next.turn).toBe(0);
+  });
+});
+
 describe('optimistic concurrency', () => {
   it('merges stale writes to different keys but rejects a stale write to the same key', () => {
     const base = createRoom('story', ['male', 'female'], 0);

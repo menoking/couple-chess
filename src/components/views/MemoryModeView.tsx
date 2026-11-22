@@ -128,6 +128,7 @@ function MemoryGame({
   };
 
   const handleMatchTaskDone = () => {
+    if (!canAct) return;
     setMatchTask(null);
     const nextFound = board.filter(tile => tile.matchedBy !== null).length / 2;
     if (nextFound >= totalPairs) {

@@ -1,4 +1,4 @@
-import { useDeckSeed, useModeAuthority, useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useDeckSeed, useModeAuthority, useModeRuntime, useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, Heart, HeartPulse, RefreshCw, Timer, User, UserRound, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
@@ -36,6 +36,7 @@ function SurvivalGame({
 }) {
   const canAct = useMyTurn(currentTurn);
   const authority = useModeAuthority();
+  const runtime = useModeRuntime();
   const activePlayer = players[currentTurn] || players[0];
   // 同一房间 = 同一事件顺序
   const deckSeed = useDeckSeed();
@@ -71,7 +72,8 @@ function SurvivalGame({
 
   const remaining = deadline > 0 && currentTask ? Math.max(0, Math.ceil((deadline - now) / 1000)) : 0;
 
-  const resolveTask = (accepted: boolean) => {
+  const resolveTask = (accepted: boolean, automatic = false) => {
+    if (automatic ? !authority : !canAct) return;
     if (resolvingRef.current) return;
     if (!activeEvent) return;
     resolvingRef.current = true;
@@ -104,14 +106,18 @@ function SurvivalGame({
       return;
     }
     setRound(value => value + 1);
-    onEndTurn();
+    if (automatic && runtime) {
+      runtime.dispatch({ type: 'authorityEndTurn', seat: runtime.seat, expectedTurn: currentTurn });
+    } else {
+      onEndTurn();
+    }
   };
 
   // 超时按跳过处理；只让权威端执行一次，避免两端各算一次
   useEffect(() => {
     if (!authority || !currentTask || deadline <= 0 || over) return;
     if (remaining > 0) return;
-    resolveTask(false);
+    resolveTask(false, true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authority, currentTask, deadline, remaining, over]);
 

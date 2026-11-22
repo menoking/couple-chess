@@ -109,7 +109,7 @@ export function BingoModeView({
     : null;
 
   const handleAccept = () => {
-    if (pendingIndex === null) return;
+    if (!canAct || pendingIndex === null) return;
     const result = onCompleteCell(pendingIndex);
     setPendingIndex(null);
     if (!result) {
@@ -151,11 +151,13 @@ export function BingoModeView({
   };
 
   const handleReject = () => {
+    if (!canAct) return;
     setPendingIndex(null);
     onEndTurn();
   };
 
   const handleClose = () => {
+    if (!canAct) return;
     setPendingIndex(null);
   };
 
@@ -168,6 +170,7 @@ export function BingoModeView({
   }, [reward, rewardQueue, setReward, setRewardQueue]);
 
   const handleRewardDone = () => {
+    if (!canAct) return;
     setReward(null);
     // 队列里还有卡就继续弹，全部抽完才交回合
     if (rewardQueue.length === 0) onEndTurn();
@@ -316,8 +319,9 @@ export function BingoModeView({
               <div className="mt-3 text-sm leading-relaxed text-white">{reward.task.text}</div>
               <button
                 type="button"
+                disabled={!canAct}
                 onClick={handleRewardDone}
-                className="ios-btn mt-4 flex h-12 w-full items-center justify-center rounded-full bg-white text-base font-bold text-black shadow-lg"
+                className="ios-btn mt-4 flex h-12 w-full items-center justify-center rounded-full bg-white text-base font-bold text-black shadow-lg disabled:opacity-40"
               >
                 收下这张卡
               </button>
@@ -360,6 +364,8 @@ export function BingoModeView({
         onAccept={handleAccept}
         onReject={handleReject}
         onClose={handleClose}
+        readOnly={!canAct}
+        readOnlyNote={`等待 ${activePlayer?.name || '对方'} 确认本轮任务`}
       />
     </div>
   );

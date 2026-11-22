@@ -116,6 +116,7 @@ export const TURN_BOUND_PREFIXES = [
   'JungleModeView.',
   'SudokuModeView.',
   'BluffDiceModeView.',
+  'RouletteModeView.',
 ];
 
 /** 该状态键属于哪个严格轮流玩法；不属于返回 null。 */

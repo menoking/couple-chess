@@ -156,6 +156,7 @@ export function RouletteModeView({
 }: RouletteModeViewProps) {
   const runtime = useModeRuntime();
   const mySeat = runtime?.seat ?? null;
+  const canAct = mySeat === null || currentTurn === mySeat;
   const activePlayer = players[currentTurn] || players[0];
   const [isSpinning, setIsSpinning] = useModeState('RouletteModeView.isSpinning', false);
   const [result, setResult] = useModeState('RouletteModeView.result', { executor: '', action: '', target: '', duration: '' });
@@ -256,6 +257,18 @@ export function RouletteModeView({
     }, SPIN_DURATION);
   };
 
+  const completeRound = () => {
+    if (!canAct || !hasResult || isSpinning) return;
+    if (runtime && mySeat !== null) {
+      runtime.dispatch({ type: 'rouletteComplete', seat: mySeat, expectedTurn: currentTurn });
+      return;
+    }
+    setResult({ executor: '', action: '', target: '', duration: '' });
+    setBonusTask(null);
+    setBonusThemeName(null);
+    onEndTurn();
+  };
+
   return (
     <div className="mobile-game-screen fixed inset-x-0 top-0 bottom-0 z-50 flex flex-col bg-black">
       <div className="absolute inset-0 z-0 bg-gradient-to-br from-[#24131f] via-black to-[#0d1724] opacity-90" />
@@ -300,8 +313,9 @@ export function RouletteModeView({
               <div className="flex shrink-0 rounded-full border border-white/10 bg-white/5 p-0.5">
                 <button
                   type="button"
-                  onClick={() => setIntensity('gentle')}
-                  className={`ios-btn rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
+                  disabled={!canAct || isSpinning}
+                  onClick={() => { if (canAct && !isSpinning) setIntensity('gentle'); }}
+                  className={`ios-btn rounded-full px-4 py-1.5 text-xs font-bold transition-colors disabled:opacity-40 ${
                     isWild ? 'text-gray-400' : 'bg-white text-black'
                   }`}
                 >
@@ -309,8 +323,9 @@ export function RouletteModeView({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setIntensity('wild')}
-                  className={`ios-btn rounded-full px-4 py-1.5 text-xs font-bold transition-colors ${
+                  disabled={!canAct || isSpinning}
+                  onClick={() => { if (canAct && !isSpinning) setIntensity('wild'); }}
+                  className={`ios-btn rounded-full px-4 py-1.5 text-xs font-bold transition-colors disabled:opacity-40 ${
                     isWild ? 'bg-gradient-to-r from-[#FF9F0A] to-[#FF375F] text-white' : 'text-gray-400'
                   }`}
                 >
@@ -328,12 +343,12 @@ export function RouletteModeView({
 
             <button
               type="button"
-              disabled={isSpinning}
+              disabled={isSpinning || !canAct}
               onClick={spin}
               className="ios-btn mt-6 flex h-14 w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#FF9F0A] to-[#FF375F] text-base font-bold text-white shadow-lg shadow-orange-950/30 disabled:opacity-50"
             >
               <RotateCw size={20} className={isSpinning ? 'animate-spin' : ''} />
-              {isSpinning ? '转盘进行中…' : hasResult ? '再转一次' : '开始转盘'}
+              {isSpinning ? '转盘进行中…' : !canAct ? `等待 ${activePlayer?.name || '对方'} 操作` : hasResult ? '再转一次' : '开始转盘'}
             </button>
           </div>
 
@@ -363,12 +378,8 @@ export function RouletteModeView({
         <div className="shrink-0 bg-gradient-to-t from-black via-black/95 to-transparent px-5 pb-4 pt-3">
           <button
             type="button"
-            disabled={!hasResult || isSpinning}
-            onClick={() => {
-              setResult({ executor: '', action: '', target: '', duration: '' });
-              setBonusTask(null);
-              onEndTurn();
-            }}
+            disabled={!hasResult || isSpinning || !canAct}
+            onClick={completeRound}
             className="ios-btn flex h-14 w-full items-center justify-center gap-2 rounded-full bg-white text-lg font-semibold text-black shadow-lg disabled:opacity-40"
           >
             <CheckCircle2 size={20} /> 完成并交给下一位

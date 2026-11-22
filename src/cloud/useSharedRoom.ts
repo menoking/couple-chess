@@ -268,7 +268,7 @@ function rejectionReason(state: RoomSnapshot, action: RoomAction): string {
     if (action.entries.some(entry => (state.dataSeq[entry.key] ?? 0) > action.baseSeq)) return 'data-key-conflict';
   }
   if ('cardId' in action && state.cards[0]?.id !== action.cardId) return 'stale-card';
-  if (action.type === 'endTurn' && action.expectedTurn !== state.turn) return 'stale-turn';
+  if ((action.type === 'endTurn' || action.type === 'authorityEndTurn' || action.type === 'rouletteComplete') && action.expectedTurn !== state.turn) return 'stale-turn';
   if ((action.type === 'mineReveal' || action.type === 'mineToggleFlag') && action.expectedTurn !== state.turn) return 'stale-turn';
   if (action.type === 'sealBid' && state.data['AuctionModeView.round'] !== action.round) return 'stale-round';
   if ((action.type === 'bluffReady' || action.type === 'bluffChallenge' || action.type === 'bluffNextRound')

@@ -133,7 +133,7 @@ function TerritoryGame({
   };
 
   const resolve = (accepted: boolean) => {
-    if (!action || resolvingRef.current) return;
+    if (!canAct || !action || resolvingRef.current) return;
     resolvingRef.current = true;
     const target = action.index;
     if (accepted) {

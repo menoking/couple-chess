@@ -2,7 +2,7 @@ import type { GameMode, TaskContinuation, TaskExecutionMode, TaskExecutor } from
 
 export type Seat = 0 | 1;
 export type Role = 'male' | 'female';
-export const ROOM_PROTOCOL_VERSION = 6;
+export const ROOM_PROTOCOL_VERSION = 7;
 
 export interface OnlineCard {
   task: string;
@@ -70,7 +70,9 @@ export type RoomAction =
   /** 同一帧内的多个 patch 合并上报：一回合只发一条消息，避免限流丢包 */
   | { type: 'patchBatch'; entries: Array<{ key: string; value: unknown }>; baseSeq: number; seat: Seat }
   | { type: 'endTurn'; seat: Seat; expectedTurn: number }
+  | { type: 'authorityEndTurn'; seat: Seat; expectedTurn: number }
   | { type: 'setTurn'; seat: Seat; turn: number }
+  | { type: 'rouletteComplete'; seat: Seat; expectedTurn: number }
   /** 扫雷翻格和标记必须由房主基于权威棋盘计算，客户端只提交目标格。 */
   | { type: 'mineReveal'; seat: Seat; index: number; expectedTurn: number }
   | { type: 'mineToggleFlag'; seat: Seat; index: number; expectedTurn: number }

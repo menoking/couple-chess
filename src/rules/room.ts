@@ -36,6 +36,7 @@ function isCardInternalKey(key: string): boolean {
  * 误判成对局中，导致女方赢先手时 started / turn 的写入被拒、永远进不去游戏。
  */
 function isGameStarted(state: RoomSnapshot, prefix: string): boolean {
+  if (prefix === 'RouletteModeView.' && state.mode === 'roulette') return state.lobbyLocked;
   const started = state.data[`${prefix}started`];
   if (typeof started === 'boolean') return started;
   const phase = state.data[`${prefix}phase`];
@@ -419,6 +420,31 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
     case 'endTurn':
       if (action.expectedTurn !== state.turn || action.seat !== state.turn) return state;
       return bump({ ...state, turn: state.turn === 0 ? 1 : 0 });
+
+    case 'authorityEndTurn':
+      if (action.expectedTurn !== state.turn || action.seat !== state.hostSeat) return state;
+      return bump({ ...state, turn: state.turn === 0 ? 1 : 0 });
+
+    case 'rouletteComplete': {
+      if (state.mode !== 'roulette' || action.expectedTurn !== state.turn || action.seat !== state.turn) return state;
+      const nextSeq = state.seq + 1;
+      const changed = [
+        'RouletteModeView.result',
+        'RouletteModeView.bonusTask',
+        'RouletteModeView.bonusThemeName',
+        'RouletteModeView.isSpinning'
+      ];
+      const data = {
+        ...state.data,
+        'RouletteModeView.result': { executor: '', action: '', target: '', duration: '' },
+        'RouletteModeView.bonusTask': null,
+        'RouletteModeView.bonusThemeName': null,
+        'RouletteModeView.isSpinning': false
+      };
+      const dataSeq = { ...state.dataSeq };
+      changed.forEach(key => { dataSeq[key] = nextSeq; });
+      return { ...state, seq: nextSeq, turn: state.turn === 0 ? 1 : 0, data, dataSeq };
+    }
 
     case 'setTurn':
       return bump({ ...state, turn: action.turn === 1 ? 1 : 0 });
