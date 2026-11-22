@@ -5,6 +5,7 @@ const TILES_COUNT = 49;
 export const MINE_BOARD_SIDE = 6;
 export const MINE_TILES_COUNT = MINE_BOARD_SIDE * MINE_BOARD_SIDE;
 export const MINE_BOMB_COUNT = 7;
+export const MINE_TASK_PROGRESS_TARGET = 4;
 export const BINGO_BOARD_SIZE = 4;
 
 export interface BingoDeck {
@@ -98,10 +99,7 @@ export function hydrateMineBoard(board: readonly MineTile[]): MineTile[] {
 export function generateMineBoard(random: () => number = Math.random): MineTile[] {
   const tileTypes: MineTileType[] = [
     ...new Array<MineTileType>(MINE_BOMB_COUNT).fill('bomb'),
-    ...new Array<MineTileType>(8).fill('truth'),
-    ...new Array<MineTileType>(8).fill('dare'),
-    ...new Array<MineTileType>(5).fill('blank'),
-    ...new Array<MineTileType>(8).fill('theme')
+    ...new Array<MineTileType>(MINE_TILES_COUNT - MINE_BOMB_COUNT).fill('blank')
   ];
 
   for (let i = tileTypes.length - 1; i > 0; i--) {

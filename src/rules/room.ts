@@ -1,5 +1,5 @@
 import type { GameMode, MineTile } from '../types';
-import { revealMineBoard, toggleMineFlag } from '../utils/gameLogic';
+import { MINE_TASK_PROGRESS_TARGET, revealMineBoard, toggleMineFlag } from '../utils/gameLogic';
 import type { RoomAction, RoomSnapshot, Role, Seat } from './types';
 import { enqueueCard, extractCard, projectCards, reduceCard } from './cards';
 import { bothLocked, mergePools } from './lobby';
@@ -432,22 +432,45 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       const result = revealMineBoard(board as MineTile[], action.index, action.seat);
       if (!result) return state;
       const nextSeq = state.seq + 1;
+      const rawProgress = state.data['stage.mineProgress'];
+      const progress: [number, number] = Array.isArray(rawProgress)
+        ? [Number(rawProgress[0]) || 0, Number(rawProgress[1]) || 0]
+        : [0, 0];
+      let taskCount = typeof state.data['stage.mineTaskCount'] === 'number'
+        ? Math.max(0, Math.floor(state.data['stage.mineTaskCount'] as number))
+        : 0;
+      let eventType: MineTile['type'] = 'blank';
+      if (result.type === 'bomb') {
+        progress[action.seat] = 0;
+        eventType = 'bomb';
+      } else {
+        progress[action.seat] += 1;
+        if (progress[action.seat] >= MINE_TASK_PROGRESS_TARGET) {
+          progress[action.seat] = 0;
+          eventType = (['truth', 'dare', 'theme'] as const)[taskCount % 3];
+          taskCount += 1;
+        }
+      }
       return {
         ...state,
         seq: nextSeq,
         data: {
           ...state.data,
           'stage.mineBoard': result.board,
+          'stage.mineProgress': progress,
+          'stage.mineTaskCount': taskCount,
           'stage.mineEvent': {
             id: nextSeq,
             seat: action.seat,
-            type: result.type,
+            type: eventType,
             completed: result.completed
           }
         },
         dataSeq: {
           ...state.dataSeq,
           'stage.mineBoard': nextSeq,
+          'stage.mineProgress': nextSeq,
+          'stage.mineTaskCount': nextSeq,
           'stage.mineEvent': nextSeq
         }
       };

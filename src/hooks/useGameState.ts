@@ -31,7 +31,7 @@ import {
 } from '../rules/modeRules';
 import { loadFromStorage, saveToStorage } from '../utils/localStorage';
 import { taskKeyOf } from '../utils/freshPick';
-import { generateSpiralPath, generateBoardMap, calculateNewPosition, generateMineBoard, generateBingoBoard, hydrateMineBoard, revealMineBoard, toggleMineFlag, BINGO_BOARD_SIZE } from '../utils/gameLogic';
+import { generateSpiralPath, generateBoardMap, calculateNewPosition, generateMineBoard, generateBingoBoard, hydrateMineBoard, revealMineBoard, toggleMineFlag, BINGO_BOARD_SIZE, MINE_TASK_PROGRESS_TARGET } from '../utils/gameLogic';
 import { DEFAULT_THEMES } from '../data/defaultThemes';
 import { normalizeLegacyTaskExecutor } from '../rules/taskRules';
 
@@ -453,6 +453,10 @@ function normalizeGameState(saved: unknown): GameState | null {
     boardMap: Array.isArray(s.boardMap) ? s.boardMap : generateBoardMap(),
     pathCoords: Array.isArray(s.pathCoords) ? s.pathCoords : generateSpiralPath(),
     mineBoard: normalizeMineBoard(s.mineBoard),
+    mineSafeProgress: Array.isArray(s.mineSafeProgress)
+      ? [Number(s.mineSafeProgress[0]) || 0, Number(s.mineSafeProgress[1]) || 0]
+      : [0, 0],
+    mineTaskCount: typeof s.mineTaskCount === 'number' ? Math.max(0, Math.floor(s.mineTaskCount)) : 0,
     bingoBoard,
     isRolling: false,
     usedCardKeys: Array.isArray(s.usedCardKeys)
@@ -554,6 +558,8 @@ export function useGameState() {
       boardMap: generateBoardMap(),
       pathCoords: generateSpiralPath(),
       mineBoard: generateMineBoard(),
+      mineSafeProgress: [0, 0],
+      mineTaskCount: 0,
       bingoBoard: null,
       isRolling: false,
       usedCardKeys: []
@@ -747,6 +753,8 @@ export function useGameState() {
       boardMap: generateBoardMap(),
       pathCoords: generateSpiralPath(),
       mineBoard: generateMineBoard(),
+      mineSafeProgress: [0, 0],
+      mineTaskCount: 0,
       bingoBoard,
       isRolling: false,
       usedCardKeys: []
@@ -775,19 +783,38 @@ export function useGameState() {
   const revealMineTile = useCallback((index: number): MineRevealResult | null => {
     const activePlayer = state.players[state.turn];
     if (!activePlayer) return null;
-    const revealed = revealMineBoard(state.mineBoard, index, state.turn === 1 ? 1 : 0);
+    const seat = state.turn === 1 ? 1 : 0;
+    const revealed = revealMineBoard(state.mineBoard, index, seat);
     if (!revealed) return null;
-    setState(prev => ({ ...prev, mineBoard: revealed.board }));
+    const progress: [number, number] = [...(state.mineSafeProgress ?? [0, 0])] as [number, number];
 
-    if (revealed.type === 'bomb') return { type: 'bomb', completed: revealed.completed };
-    if (revealed.type === 'blank') return { type: 'blank', completed: revealed.completed };
+    if (revealed.type === 'bomb') {
+      progress[seat] = 0;
+      setState(prev => ({ ...prev, mineBoard: revealed.board, mineSafeProgress: progress }));
+      return { type: 'bomb', completed: revealed.completed };
+    }
 
-    const choice: MineTaskChoice =
-      revealed.type === 'truth' ? 'truth' : revealed.type === 'dare' ? 'dare' : 'theme';
+    progress[seat] += 1;
+    if (progress[seat] < MINE_TASK_PROGRESS_TARGET) {
+      setState(prev => ({ ...prev, mineBoard: revealed.board, mineSafeProgress: progress }));
+      return { type: 'blank', completed: revealed.completed };
+    }
+
+    progress[seat] = 0;
+    const taskCount = state.mineTaskCount ?? 0;
+    const choices: MineTaskChoice[] = ['truth', 'dare', 'theme'];
+    const choice = choices[taskCount % choices.length];
+    setState(prev => ({
+      ...prev,
+      mineBoard: revealed.board,
+      mineSafeProgress: progress,
+      mineTaskCount: taskCount + 1
+    }));
+
     const task = createMineTaskEvent(state.players, state.themes, activePlayer.id, choice, undefined, state.usedCardKeys);
 
     return task ? { type: 'task', task, completed: revealed.completed } : { type: 'blank', completed: revealed.completed };
-  }, [state.mineBoard, state.players, state.themes, state.turn, state.usedCardKeys]);
+  }, [state.mineBoard, state.mineSafeProgress, state.mineTaskCount, state.players, state.themes, state.turn, state.usedCardKeys]);
 
   const toggleMineTileFlag = useCallback((index: number) => {
     setState(prev => {
@@ -1004,6 +1031,8 @@ export function useGameState() {
       boardMap: generateBoardMap(),
       pathCoords: generateSpiralPath(),
       mineBoard: generateMineBoard(),
+      mineSafeProgress: [0, 0],
+      mineTaskCount: 0,
       bingoBoard: null,
       isRolling: false,
       usedCardKeys: []

@@ -67,7 +67,7 @@ export interface ModeDef {
 export const MODE_REGISTRY: ModeDef[] = [
   { key: 'board', label: '飞行棋模式', category: 'public', cardRule: '落格触发：踩对方 / 幸运 / 陷阱各抽 1 张，48 格判胜' },
   { key: 'card', label: '任务卡牌', category: 'public', cardRule: '每回合抽 1 张，抽卡方先翻，对方随后自动看到' },
-  { key: 'mine', label: '扫雷模式', category: 'hidden', cardRule: '按八邻域数字推雷；安全任务格本人执行，踩雷由对方三选一' },
+  { key: 'mine', label: '扫雷模式', category: 'hidden', cardRule: '每主动翻开 4 个安全格抽 1 张；踩雷清空进度并由对方三选一' },
   { key: 'roulette', label: '情侣转盘', category: 'timed', cardRule: '四个转盘直接给出「谁 / 做什么 / 哪里 / 多久」，不额外抽卡' },
   { key: 'pose', label: '姿势模式', category: 'public', cardRule: '每回合抽 1 张姿势卡' },
   { key: 'bingo', label: '情侣 Bingo', category: 'public', cardRule: '每连成 1 条线抽 1 张，多条线抽多张（卡包 10 张）' },

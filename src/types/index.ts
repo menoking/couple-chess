@@ -161,6 +161,10 @@ export interface GameState {
   boardMap: TileType[];
   pathCoords: PathCoord[];
   mineBoard: MineTile[];
+  /** 双方距离下一张扫雷任务卡还差多少次主动安全翻格。 */
+  mineSafeProgress?: [number, number];
+  /** 已触发的常规扫雷任务数，用于真心话 / 大冒险 / 主题任务轮换。 */
+  mineTaskCount?: number;
   bingoBoard: BingoBoard | null;
   isRolling: boolean;
   /**

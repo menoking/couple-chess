@@ -717,6 +717,7 @@ function App() {
           players={state.players}
           themes={state.themes}
           mineBoard={state.mineBoard}
+          mineProgress={state.mineSafeProgress ?? [0, 0]}
           currentTurn={state.turn}
           onRevealTile={revealMineTile}
           onToggleFlag={toggleMineTileFlag}

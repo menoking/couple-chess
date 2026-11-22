@@ -1,15 +1,12 @@
 import { useRef, useState } from 'react';
 import { useModeRuntime } from '../../rules/ModeRuntime';
-import { MINE_BOMB_COUNT, mineScores } from '../../utils/gameLogic';
+import { MINE_BOMB_COUNT, MINE_TASK_PROGRESS_TARGET, mineScores } from '../../utils/gameLogic';
 import {
   ArrowLeft,
   Bomb,
   CheckCircle2,
   Circle,
   Flag,
-  Flame,
-  MessageCircleQuestion,
-  Sparkles,
   User,
   UserRound
 } from 'lucide-react';
@@ -19,6 +16,7 @@ interface MineModeViewProps {
   players: Player[];
   themes: Theme[];
   mineBoard: MineTile[];
+  mineProgress: [number, number];
   currentTurn: number;
   onRevealTile: (index: number) => MineRevealResult | null;
   onToggleFlag: (index: number) => void;
@@ -38,25 +36,10 @@ const mineTileMeta = {
     icon: Bomb,
     className: 'bg-[#3A1F1F] text-[#FF453A] border-[#FF453A]/30'
   },
-  truth: {
-    label: '真心话',
-    icon: MessageCircleQuestion,
-    className: 'bg-[#102B3A] text-[#64D2FF] border-[#64D2FF]/30'
-  },
-  dare: {
-    label: '大冒险',
-    icon: Flame,
-    className: 'bg-[#35230A] text-[#FF9F0A] border-[#FF9F0A]/30'
-  },
   blank: {
-    label: '空白',
+    label: '安全',
     icon: CheckCircle2,
     className: 'bg-[#1C1C1E] text-gray-500 border-white/5'
-  },
-  theme: {
-    label: '主题',
-    icon: Sparkles,
-    className: 'bg-[#221634] text-[#BF5AF2] border-[#BF5AF2]/30'
   }
 };
 
@@ -64,6 +47,7 @@ export function MineModeView({
   players,
   themes,
   mineBoard,
+  mineProgress,
   currentTurn,
   onRevealTile,
   onToggleFlag,
@@ -185,7 +169,7 @@ export function MineModeView({
                   {activePlayer.name}回合
                 </div>
                 <div className="mine-active-theme text-xs text-gray-500 mt-1 truncate">
-                  {activeTheme?.name || '未选择主题'}
+                  {activeTheme?.name || '未选择主题'} · 任务进度 {mineProgress[currentTurn] ?? 0}/{MINE_TASK_PROGRESS_TARGET}
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-3">
@@ -209,7 +193,7 @@ export function MineModeView({
         <div className="mine-board-space flex-1 min-h-0 px-4 py-2 flex items-center justify-center">
           <div className="mine-board-grid grid grid-cols-6 grid-rows-6 gap-[clamp(0.25rem,1.2vh,0.5rem)]">
             {mineBoard.map((tile, index) => {
-              const meta = mineTileMeta[tile.type];
+              const meta = tile.type === 'bomb' ? mineTileMeta.bomb : mineTileMeta.blank;
               const Icon = tile.revealed ? meta.icon : tile.flaggedBy !== null ? Flag : Circle;
               const numberColor = ['', 'text-[#64D2FF]', 'text-[#30D158]', 'text-[#FF9F0A]', 'text-[#FF453A]', 'text-[#BF5AF2]', 'text-[#FF375F]', 'text-white', 'text-white'][tile.adjacentMines] ?? 'text-white';
 
@@ -255,20 +239,20 @@ export function MineModeView({
             <span>已翻开 {revealedCount}</span>
             <span className="mine-summary-hint">标记 {flags}/{MINE_BOMB_COUNT} · 炸弹由对方指定</span>
           </div>
-          <div className="mine-summary-grid grid grid-cols-4 gap-2">
-            {(['truth', 'dare', 'theme', 'blank'] as const).map(type => {
-              const meta = mineTileMeta[type];
-              const Icon = meta.icon;
-              const count = mineBoard.filter(tile => tile.revealed && tile.type === type).length;
-
-              return (
-                <div key={type} className="mine-summary-item rounded-xl bg-white/[0.04] border border-white/5 px-1 py-1.5 text-center">
-                  <Icon className="mine-summary-icon mx-auto mb-1 text-gray-400" size={14} />
-                  <div className="mine-summary-label text-[10px] text-gray-500 leading-tight">{meta.label}</div>
-                  <div className="mine-summary-count text-xs font-bold text-white mt-1">{count}</div>
+          <div className="grid grid-cols-2 gap-2">
+            {players.slice(0, 2).map((player, seat) => (
+              <div key={player.id} className="rounded-xl border border-white/5 bg-white/[0.04] px-3 py-2">
+                <div className="flex items-center justify-between text-[10px]">
+                  <span className="text-gray-400">{player.name}</span>
+                  <span className="font-bold text-white">{mineProgress[seat] ?? 0}/{MINE_TASK_PROGRESS_TARGET}</span>
                 </div>
-              );
-            })}
+                <div className="mt-1.5 grid grid-cols-4 gap-1">
+                  {Array.from({ length: MINE_TASK_PROGRESS_TARGET }, (_, step) => (
+                    <span key={step} className={`h-1.5 rounded-full ${step < (mineProgress[seat] ?? 0) ? 'bg-[#FFD60A]' : 'bg-white/10'}`} />
+                  ))}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
         {completed && pendingCards === 0 && (

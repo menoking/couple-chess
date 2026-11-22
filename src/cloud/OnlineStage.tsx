@@ -609,6 +609,7 @@ export function OnlineStage(props: OnlineStageProps) {
     [snap?.data]
   );
   const mineEvent = data['stage.mineEvent'] as { id: number; seat: Seat; type: MineTile['type']; completed: boolean } | null | undefined;
+  const mineProgress = (data['stage.mineProgress'] as [number, number] | undefined) ?? [0, 0];
   const bingoBoard = data['stage.bingoBoard'] as BingoBoard | undefined;
   const patch = shared.runtime.patch;
   const drawnTasks = useMemo(
@@ -951,7 +952,7 @@ export function OnlineStage(props: OnlineStageProps) {
         return <CardModeView {...common} onDrawTask={onDrawTask} onTaskTrigger={onTaskTrigger} pendingCards={pendingCount} />;
       case 'mine': {
         if (mineBoard.length === 0) return <StagePreparing />;
-        return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onToggleFlag={onToggleMineFlag} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} pendingCards={pendingCount} resolveEventsExternally />;
+        return <MineModeView {...common} mineBoard={mineBoard} mineProgress={mineProgress} onRevealTile={onRevealTile} onToggleFlag={onToggleMineFlag} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} pendingCards={pendingCount} resolveEventsExternally />;
       }
       case 'pose':
         return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onEndTurn={endTurn} pendingCards={pendingCount} onBack={onBack} />;

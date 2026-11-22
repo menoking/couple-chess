@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MineTile, MineTileType } from '../types';
 import {
   MINE_TILES_COUNT,
+  generateMineBoard,
   hydrateMineBoard,
   mineScores,
   revealMineBoard,
@@ -20,6 +21,12 @@ function boardWith(bombs: number[], overrides: Partial<Record<number, MineTileTy
 }
 
 describe('minesweeper rules', () => {
+  it('generates only bombs and ordinary safe cells so cards are progress-driven', () => {
+    const board = generateMineBoard(() => 0.42);
+    expect(board.filter(tile => tile.type === 'bomb')).toHaveLength(7);
+    expect(board.filter(tile => tile.type !== 'bomb').every(tile => tile.type === 'blank')).toBe(true);
+  });
+
   it('calculates the bomb count from all eight neighboring cells', () => {
     const board = boardWith([0, 1, 6]);
     expect(board[7].adjacentMines).toBe(3);

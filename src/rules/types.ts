@@ -2,7 +2,7 @@ import type { GameMode, TaskContinuation, TaskExecutionMode, TaskExecutor } from
 
 export type Seat = 0 | 1;
 export type Role = 'male' | 'female';
-export const ROOM_PROTOCOL_VERSION = 5;
+export const ROOM_PROTOCOL_VERSION = 6;
 
 export interface OnlineCard {
   task: string;

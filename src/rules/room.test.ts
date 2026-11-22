@@ -173,6 +173,33 @@ describe('authoritative minesweeper reducer', () => {
     };
     expect(reduceRoom(finished, { type: 'mineFinishEvent', seat: 0, eventId: 9 }).turn).toBe(0);
   });
+
+  it('triggers one rotating task per four manual safe reveals and resets progress on a bomb', () => {
+    let state: RoomSnapshot = {
+      ...createRoom('mine', ['male', 'female'], 0, 0),
+      data: { 'stage.mineBoard': mineBoard }
+    };
+
+    for (const index of [7, 8, 9, 10]) {
+      state = reduceRoom({ ...state, turn: 0 }, { type: 'mineReveal', seat: 0, index, expectedTurn: 0 });
+      const event = state.data['stage.mineEvent'] as { id: number; type: string };
+      if (index < 10) expect(event.type).toBe('blank');
+      else expect(event.type).toBe('truth');
+      state = reduceRoom(state, { type: 'mineFinishEvent', seat: 0, eventId: event.id });
+    }
+
+    expect(state.data['stage.mineProgress']).toEqual([0, 0]);
+    expect(state.data['stage.mineTaskCount']).toBe(1);
+
+    state = {
+      ...state,
+      turn: 0,
+      data: { ...state.data, 'stage.mineProgress': [3, 0] }
+    };
+    state = reduceRoom(state, { type: 'mineReveal', seat: 0, index: 0, expectedTurn: 0 });
+    expect(state.data['stage.mineProgress']).toEqual([0, 0]);
+    expect(state.data['stage.mineEvent']).toMatchObject({ type: 'bomb' });
+  });
 });
 
 describe('optimistic concurrency', () => {
