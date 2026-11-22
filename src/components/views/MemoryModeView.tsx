@@ -1,5 +1,5 @@
 import { useDeckSeed, useModeRuntime, useModeState, useMyTurn } from '../../rules/ModeRuntime';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Brain, Check, Crown, Flame, Gift, Heart, RefreshCw, Star, Sun, User, UserRound, Zap } from 'lucide-react';
 import { Player, TaskCard, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, seededShuffle } from '../../utils/modeKit';
@@ -27,7 +27,6 @@ interface Tile {
   ownerId: number;
   /** 只存下标：组件不能进共享状态，否则序列化后变成 {}，渲染时报 React #130 */
   iconIndex: number;
-  flipped: boolean;
   matchedBy: number | null;
 }
 
@@ -60,15 +59,17 @@ function MemoryGame({
     const deck: Tile[] = [];
     pairs.forEach((entry, pairId) => {
       const iconIndex = pairId % PAIR_ICONS.length;
-      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, iconIndex, flipped: false, matchedBy: null });
-      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, iconIndex, flipped: false, matchedBy: null });
+      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, iconIndex, matchedBy: null });
+      deck.push({ pairId, task: entry.task, themeId: entry.themeId, themeName: entry.themeName, ownerId: entry.playerId, iconIndex, matchedBy: null });
     });
     return seededShuffle(deck, `${deckSeed}:memory-board`);
   }, [pool, deckSeed]);
 
   const [board, setBoard] = useModeState<Tile[]>('MemoryModeView.board', tiles);
-  const [flips, setFlips] = useModeState<number[]>('MemoryModeView.flips', []);
-  const [locked, setLocked] = useModeState('MemoryModeView.locked', false);
+  // 一次选两张是同一笔交互：若第一、二次点击分别写共享键，第二笔会因旧 baseSeq
+  // 被并发保护拒绝。临时翻面留在本机，配对成功后再一次性提交棋盘和任务卡。
+  const [flips, setFlips] = useState<number[]>([]);
+  const [locked, setLocked] = useState(false);
   const runtime = useModeRuntime();
   // 联机时 TaskEventData 会由房主 reducer 原子改写进公共 CardGate；同屏时则由本视图弹窗展示。
   const [matchTask, setMatchTask] = useModeState<TaskEventData | null>(
@@ -92,11 +93,10 @@ function MemoryGame({
     if (!canAct) return;
     if (locked || finished) return;
     const tile = board[index];
-    if (!tile || tile.flipped || tile.matchedBy !== null) return;
+    if (!tile || flips.includes(index) || tile.matchedBy !== null) return;
     if (flips.length >= 2) return;
 
     const nextFlips = [...flips, index];
-    setBoard(prev => prev.map((item, i) => (i === index ? { ...item, flipped: true } : item)));
     setFlips(nextFlips);
 
     if (nextFlips.length < 2) return;
@@ -132,7 +132,6 @@ function MemoryGame({
 
     setLocked(true);
     timerRef.current = window.setTimeout(() => {
-      setBoard(prev => prev.map((item, i) => (i === first || i === second ? { ...item, flipped: false } : item)));
       setFlips([]);
       setLocked(false);
       onEndTurn();
@@ -200,7 +199,7 @@ function MemoryGame({
 
       <div className="grid grid-cols-4 gap-2">
         {board.map((tile, index) => {
-          const isOpen = tile.flipped || tile.matchedBy !== null;
+          const isOpen = flips.includes(index) || tile.matchedBy !== null;
           const matchedPlayer = tile.matchedBy !== null ? players.find(p => p.id === tile.matchedBy) : undefined;
           return (
             <button
@@ -212,7 +211,7 @@ function MemoryGame({
               className={`relative flex aspect-[4/5] flex-col items-center justify-center gap-1 rounded-2xl border p-1.5 transition-all ios-btn disabled:cursor-default ${
                 tile.matchedBy !== null
                   ? 'border-white/10 bg-black/40'
-                  : tile.flipped
+                  : isOpen
                     ? 'border-white/30 bg-white/10'
                     : tile.ownerId === 0
                       ? 'border-[#0A84FF]/40 bg-[#0A84FF]/15'
