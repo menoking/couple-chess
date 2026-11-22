@@ -1,9 +1,9 @@
-import { useDeckSeed, useModeState, useMyTurn } from '../../rules/ModeRuntime';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useDeckSeed, useModeRuntime, useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Brain, Check, Crown, Flame, Gift, Heart, RefreshCw, Star, Sun, User, UserRound, Zap } from 'lucide-react';
-import { Player, TaskCard, Theme } from '../../types';
-import { ThemeTaskEntry, buildTaskPool, seededShuffle } from '../../utils/modeKit';
-import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
+import { Player, TaskCard, TaskEventData, Theme } from '../../types';
+import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, seededShuffle } from '../../utils/modeKit';
+import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface MemoryModeViewProps {
   players: Player[];
@@ -69,9 +69,9 @@ function MemoryGame({
   const [board, setBoard] = useModeState<Tile[]>('MemoryModeView.board', tiles);
   const [flips, setFlips] = useModeState<number[]>('MemoryModeView.flips', []);
   const [locked, setLocked] = useModeState('MemoryModeView.locked', false);
-  // 只存纯文本：TaskEventData 形状会被 extractCard 改写成公共卡片，
-  // 本地永远拿不到值，"配对成功→交回合"这条链就断了。
-  const [matchTask, setMatchTask] = useModeState<{ text: string; themeName: string } | null>(
+  const runtime = useModeRuntime();
+  // 联机时 TaskEventData 会由房主 reducer 原子改写进公共 CardGate；同屏时则由本视图弹窗展示。
+  const [matchTask, setMatchTask] = useModeState<TaskEventData | null>(
     'MemoryModeView.matchTask',
     null
   );
@@ -87,8 +87,6 @@ function MemoryGame({
   const foundPairs = board.filter(tile => tile.matchedBy !== null).length / 2;
   const canAct = useMyTurn(currentTurn);
   const activePlayer = players[currentTurn] || players[0];
-  const matchTaskIdentity = matchTask ? `${foundPairs}:${currentTurn}:${matchTask.themeName}:${matchTask.text}` : null;
-  const [dismissedMatchTask, setDismissedMatchTask] = useState<string | null>(null);
 
   const flipTile = (index: number) => {
     if (!canAct) return;
@@ -114,9 +112,21 @@ function MemoryGame({
       );
       setPairCounts(prev => ({ ...prev, [byId]: (prev[byId] ?? 0) + 1 }));
       setFlips([]);
-      // 配对成功后弹出真正的任务卡
-      const rule = resolveTaskRule(matched.task, byId === 0 ? 1 : 0);
-      setMatchTask({ text: formatTaskInstruction(matched.task.text, rule), themeName: matched.themeName });
+      // 标准任务事件会进入联机公共卡片队列；确认后再原子换回合，避免临时遮罩被快照覆盖。
+      setMatchTask(createViewTaskEvent({
+        entry: {
+          task: matched.task,
+          themeId: matched.themeId,
+          themeName: matched.themeName,
+          playerId: matched.ownerId
+        },
+        title: '记忆配对任务',
+        initiatorPlayerId: byId,
+        executorPlayerId: byId === 0 ? 1 : 0,
+        continuation: { kind: 'endTurn' }
+      }));
+      // 联机最终一对也要先把完成态落盘；CardGate 仍在外层显示，确认后按 continuation 换回合。
+      if (runtime && foundPairs + 1 >= totalPairs) setFinished(true);
       return;
     }
 
@@ -139,13 +149,6 @@ function MemoryGame({
     }
     // 配对完成就是一次回合，交给对方
     onEndTurn();
-  };
-
-  const dismissMatchTask = () => {
-    if (!matchTaskIdentity) return;
-    setDismissedMatchTask(matchTaskIdentity);
-    // 当前回合方收起即按完成处理；旁观方只收起本机遮罩，不篡改共享回合。
-    if (canAct) handleMatchTaskDone();
   };
 
   if (finished) {
@@ -235,39 +238,15 @@ function MemoryGame({
         })}
       </div>
 
-      {matchTask && dismissedMatchTask !== matchTaskIdentity && (
-        <div className="fixed inset-0 z-[140] flex items-center justify-center px-5">
-          <button
-            type="button"
-            aria-label="收起配对任务卡"
-            onClick={dismissMatchTask}
-            className="absolute inset-0 cursor-default bg-black/85 backdrop-blur-md"
-          />
-          <div className="relative z-10 w-full max-w-sm rounded-3xl border border-white/10 bg-[#1C1C1E] p-5 shadow-2xl">
-            <div className="flex items-center justify-between text-[10px] font-bold text-gray-500">
-              <span>配对成功 · 执行关系见卡面</span>
-              <span className="truncate">来自「{matchTask.themeName}」</span>
-            </div>
-            <div className="mt-3 text-base font-bold leading-relaxed text-white">{matchTask.text}</div>
-            <div className="mt-5">
-              {canAct ? (
-                <button
-                  type="button"
-                  onClick={handleMatchTaskDone}
-                  className="ios-btn h-13 w-full rounded-full bg-white py-3.5 text-sm font-bold text-black shadow-lg"
-                >
-                  <span className="flex items-center justify-center gap-1.5">
-                    <Check size={15} />完成任务，交给下一位
-                  </span>
-                </button>
-              ) : (
-                <div className="rounded-full border border-white/10 bg-white/[0.05] px-3 py-3 text-center text-[11px] font-bold text-gray-500">
-                  等 {activePlayer?.name || '对方'} 完成任务
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {!runtime && (
+        <TaskCardModal
+          players={players}
+          isOpen={!!matchTask}
+          taskData={matchTask}
+          onAccept={handleMatchTaskDone}
+          onReject={handleMatchTaskDone}
+          onClose={handleMatchTaskDone}
+        />
       )}
     </div>
   );

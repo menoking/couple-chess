@@ -23,6 +23,63 @@ function readyCard(
 }
 
 describe('room card reducer', () => {
+  it('turns a memory match into a durable public card and changes turn after acknowledgement', () => {
+    const base = createRoom('memory', ['male', 'female'], 0);
+    const matched = reduceRoom(base, {
+      type: 'patchBatch',
+      baseSeq: 0,
+      seat: 0,
+      entries: [
+        { key: 'MemoryModeView.board', value: [{ pairId: 0, matchedBy: 0 }] },
+        {
+          key: 'MemoryModeView.matchTask',
+          value: {
+            type: 'card',
+            initiatorPlayerId: 0,
+            executorPlayerId: 1,
+            targetPlayerId: 0,
+            executionMode: 'directed',
+            title: '记忆配对任务',
+            subtitle: '任务来自「测试」',
+            icon: 'sparkles',
+            color: 'text-[#FF375F]',
+            task: '女方拥抱男方十秒',
+            taskSourceId: 'memory-test',
+            themeName: '测试',
+            moveDelta: 0,
+            continuation: { kind: 'endTurn' }
+          }
+        }
+      ]
+    });
+
+    expect(matched.data['MemoryModeView.board']).toEqual([{ pairId: 0, matchedBy: 0 }]);
+    expect(matched.data['MemoryModeView.matchTask']).toBeUndefined();
+    expect(matched.cards).toHaveLength(1);
+    expect(matched.cards[0]).toMatchObject({
+      drawerSeat: 0,
+      executorSeat: 1,
+      phase: 'locked',
+      continuation: { kind: 'endTurn' },
+      card: { task: '女方拥抱男方十秒', themeName: '测试' }
+    });
+
+    const revealed = reduceRoom(matched, {
+      type: 'drawCard',
+      seat: 0,
+      cardId: matched.cards[0].id,
+      reveal: true
+    });
+    const settled = reduceRoom(revealed, {
+      type: 'ackCard',
+      seat: 1,
+      cardId: revealed.cards[0].id,
+      outcome: 'accept'
+    });
+    expect(settled.cards).toHaveLength(0);
+    expect(settled.turn).toBe(1);
+  });
+
   it('draws and reveals with one action while retaining legacy snapshots', () => {
     const base = enqueueCard(createRoom('card', ['male', 'female'], 0), {
       drawerSeat: 1,
