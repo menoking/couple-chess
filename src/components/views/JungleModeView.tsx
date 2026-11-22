@@ -27,6 +27,7 @@ interface PendingCard {
   drawerId: number;
   executorId: number;
   reason: string;
+  token?: string;
 }
 
 function JungleGame({
@@ -60,15 +61,16 @@ function JungleGame({
     [board, selected]
   );
 
-  // 同一队列长度只消费一次：消费成功后长度会减少，才会再次进入。
+  // 按卡片标识消费，避免未来再次出现相同队列长度时误判为已处理。
   // 万一那条 patch 没落地，也不会把同一张卡反复入队（那样卡片永远翻不完）。
-  const consumedLen = useRef(-1);
+  const consumedCard = useRef<string | null>(null);
 
   useEffect(() => {
     if (taskData || cardQueue.length === 0) return;
-    if (consumedLen.current === cardQueue.length) return;
-    consumedLen.current = cardQueue.length;
     const [next, ...rest] = cardQueue;
+    const token = next.token ?? `legacy:${cardQueue.length}:${next.drawerId}:${next.executorId}:${next.reason}`;
+    if (consumedCard.current === token) return;
+    consumedCard.current = token;
     const entry = pickRandom(pool);
     setCardQueue(rest);
     if (!entry) return;
@@ -83,9 +85,15 @@ function JungleGame({
   }, [cardQueue, taskData, pool]);
 
   const enqueueCards = (drawerId: number, executorId: number, count: number, reason: string) => {
+    const batchToken = `${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
     setCardQueue(prev => [
       ...prev,
-      ...Array.from({ length: count }, () => ({ drawerId, executorId, reason }))
+      ...Array.from({ length: count }, (_, index) => ({
+        drawerId,
+        executorId,
+        reason,
+        token: `${batchToken}:${index}`
+      }))
     ]);
   };
 

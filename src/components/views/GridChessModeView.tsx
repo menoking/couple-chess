@@ -6,44 +6,43 @@ import { Player, TaskEventData, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 import { DiceRollOff } from '../DiceRollOff';
+import {
+  GRID_DOTS,
+  GRID_HORIZONTAL_LINES,
+  GRID_TOTAL_BOXES,
+  GRID_VERTICAL_LINES,
+  applyGridLine,
+  type GridLineOwner
+} from '../../rules/gridChess';
 
 interface GridChessModeViewProps {
   players: Player[];
   themes: Theme[];
+  pendingCards?: number;
   onBack: () => void;
 }
 
-const DOTS = 5;
-const CELLS_PER_SIDE = DOTS - 1;
-const TOTAL_BOXES = CELLS_PER_SIDE * CELLS_PER_SIDE;
-
-// 横线总数：DOTS 行 × (DOTS-1) 条
-const H_LINES = DOTS * CELLS_PER_SIDE;
-// 竖线总数：DOTS 列 × (DOTS-1) 条
-const V_LINES = DOTS * CELLS_PER_SIDE;
-const TOTAL_LINES = H_LINES + V_LINES;
-
-interface LineOwner {
-  ownerId: number | null;
-}
+const TOTAL_LINES = GRID_HORIZONTAL_LINES + GRID_VERTICAL_LINES;
 
 function DotsAndBoxesGame({
   players,
   themes,
+  pendingCards,
   onExit
 }: {
   players: Player[];
   themes: Theme[];
+  pendingCards: number;
   onExit: () => void;
 }) {
   const [turn, setTurn] = useModeState('GridChessModeView.turn', 0);
   const canAct = useMyTurn(turn);
-  const [horizontal, setHorizontal] = useModeState<LineOwner[]>('GridChessModeView.horizontal', () => new Array(H_LINES).fill(null).map(() => ({ ownerId: null })));
-  const [vertical, setVertical] = useModeState<LineOwner[]>('GridChessModeView.vertical', () => new Array(V_LINES).fill(null).map(() => ({ ownerId: null })));
-  const [boxes, setBoxes] = useModeState<number[]>('GridChessModeView.boxes', () => new Array(TOTAL_BOXES).fill(-1));
+  const [horizontal, setHorizontal] = useModeState<GridLineOwner[]>('GridChessModeView.horizontal', () => new Array(GRID_HORIZONTAL_LINES).fill(null).map(() => ({ ownerId: null })));
+  const [vertical, setVertical] = useModeState<GridLineOwner[]>('GridChessModeView.vertical', () => new Array(GRID_VERTICAL_LINES).fill(null).map(() => ({ ownerId: null })));
+  const [boxes, setBoxes] = useModeState<number[]>('GridChessModeView.boxes', () => new Array(GRID_TOTAL_BOXES).fill(-1));
   const [taskData, setTaskData] = useModeState<TaskEventData | null>('GridChessModeView.taskData', null);
   // 一次闭合 N 格要抽 N 张，用队列逐张弹，和围棋一致
-  const [cardQueue, setCardQueue] = useModeState<Array<{ drawerId: number; executorId: number; reason: string }>>(
+  const [cardQueue, setCardQueue] = useModeState<Array<{ drawerId: number; executorId: number; reason: string; boxIndex?: number }>>(
     'GridChessModeView.cardQueue',
     []
   );
@@ -54,49 +53,19 @@ function DotsAndBoxesGame({
   const drawnLines = horizontal.filter(l => l.ownerId !== null).length + vertical.filter(l => l.ownerId !== null).length;
   const boxCounts = players.map(player => boxes.filter(owner => owner === player.id).length);
 
-  const horizontalBoxes = (lineIndex: number): number[] => {
-    const r = Math.floor(lineIndex / CELLS_PER_SIDE);
-    const c = lineIndex % CELLS_PER_SIDE;
-    const result: number[] = [];
-    if (r > 0) result.push((r - 1) * CELLS_PER_SIDE + c);
-    if (r < DOTS - 1) result.push(r * CELLS_PER_SIDE + c);
-    return result;
-  };
-
-  // 竖线索引 = c * CELLS_PER_SIDE + r（c 列，r 行间隔）
-  const verticalBoxes = (lineIndex: number): number[] => {
-    const c = Math.floor(lineIndex / CELLS_PER_SIDE);
-    const r = lineIndex % CELLS_PER_SIDE;
-    const result: number[] = [];
-    if (c > 0) result.push(r * CELLS_PER_SIDE + (c - 1));
-    if (c < DOTS - 1) result.push(r * CELLS_PER_SIDE + c);
-    return result;
-  };
-
-  const isBoxClosed = (boxIndex: number, h: LineOwner[], v: LineOwner[]): boolean => {
-    const r = Math.floor(boxIndex / CELLS_PER_SIDE);
-    const c = boxIndex % CELLS_PER_SIDE;
-    // 上边：横线 r*CELLS_PER_SIDE + c
-    const top = h[r * CELLS_PER_SIDE + c].ownerId !== null;
-    // 下边：横线 (r+1)*CELLS_PER_SIDE + c
-    const bottom = h[(r + 1) * CELLS_PER_SIDE + c].ownerId !== null;
-    // 左边：竖线 c*CELLS_PER_SIDE + r
-    const left = v[c * CELLS_PER_SIDE + r].ownerId !== null;
-    // 右边：竖线 (c+1)*CELLS_PER_SIDE + r
-    const right = v[(c + 1) * CELLS_PER_SIDE + r].ownerId !== null;
-    return top && bottom && left && right;
-  };
-
-  // 同一队列长度只消费一次：消费成功后长度会减少，才会再次进入。
+  // 按卡片来源标识消费，避免未来再次出现相同队列长度时误判为已处理。
   // 万一那条 patch 没落地，也不会把同一张卡反复入队（那样卡片永远翻不完）。
-  const consumedLen = useRef(-1);
+  const consumedCard = useRef<string | null>(null);
 
   // 依次弹出队列里的抽卡
   useEffect(() => {
     if (taskData || cardQueue.length === 0) return;
-    if (consumedLen.current === cardQueue.length) return;
-    consumedLen.current = cardQueue.length;
     const [next, ...rest] = cardQueue;
+    const token = next.boxIndex === undefined
+      ? `legacy:${cardQueue.length}:${next.drawerId}:${next.executorId}:${next.reason}`
+      : `box:${next.boxIndex}`;
+    if (consumedCard.current === token) return;
+    consumedCard.current = token;
     const pool = buildTaskPool(players, themes) ?? [];
     const entry = pickRandom(pool);
     setCardQueue(rest);
@@ -121,42 +90,31 @@ function DotsAndBoxesGame({
 
   const drawLine = (kind: 'h' | 'v', lineIndex: number) => {
     if (!canAct) return;
-    if (finished || taskData) return;
-    const isH = kind === 'h';
-    const currentLines = isH ? horizontal : vertical;
-    if (currentLines[lineIndex].ownerId !== null) return;
-
-    let nextH = horizontal;
-    let nextV = vertical;
-    if (isH) {
-      nextH = horizontal.map((l, i) => (i === lineIndex ? { ownerId: turn } : l));
-    } else {
-      nextV = vertical.map((l, i) => (i === lineIndex ? { ownerId: turn } : l));
-    }
-
-    const affectedBoxes = isH ? horizontalBoxes(lineIndex) : verticalBoxes(lineIndex);
-    const newlyClosed = affectedBoxes.filter(boxIdx => boxes[boxIdx] === -1 && isBoxClosed(boxIdx, nextH, nextV));
+    if (finished || taskData || cardQueue.length > 0 || pendingCards > 0) return;
+    const result = applyGridLine({ horizontal, vertical, boxes }, kind, lineIndex, turn);
+    if (!result) return;
+    const { state: next, newlyClosed } = result;
 
     if (newlyClosed.length > 0) {
-      const nextBoxes = boxes.map((owner, i) => (newlyClosed.includes(i) ? turn : owner));
-      setHorizontal(nextH);
-      setVertical(nextV);
-      setBoxes(nextBoxes);
+      if (kind === 'h') setHorizontal(next.horizontal);
+      else setVertical(next.vertical);
+      setBoxes(next.boxes);
 
       // 每闭合 1 格抽 1 张：闭合 3 格就入队 3 张，不再固定只抽 1 张
       setCardQueue(prev => [
         ...prev,
-        ...Array.from({ length: newlyClosed.length }, () => ({
+        ...newlyClosed.map(boxIndex => ({
           drawerId: turn,
           executorId: turn === 0 ? 1 : 0,
-          reason: `闭合 ${newlyClosed.length} 格 · 对方执行`
+          reason: `闭合 ${newlyClosed.length} 格 · 对方执行`,
+          boxIndex
         }))
       ]);
       return;
     }
 
-    setHorizontal(nextH);
-    setVertical(nextV);
+    if (kind === 'h') setHorizontal(next.horizontal);
+    else setVertical(next.vertical);
     setTurn(turn === 0 ? 1 : 0);
   };
 
@@ -241,13 +199,13 @@ function DotsAndBoxesGame({
       </div>
 
       <DotsBoard
-        dots={DOTS}
+        dots={GRID_DOTS}
         horizontal={horizontal}
         vertical={vertical}
         boxes={boxes}
         players={players}
         onDrawLine={drawLine}
-        disabled={!canAct}
+        disabled={!canAct || cardQueue.length > 0 || pendingCards > 0}
       />
 
       <div className="rounded-2xl border border-white/5 bg-white/[0.03] p-4 text-[11px] leading-relaxed text-gray-500">
@@ -276,8 +234,8 @@ function DotsBoard({
   disabled = false
 }: {
   dots: number;
-  horizontal: LineOwner[];
-  vertical: LineOwner[];
+  horizontal: GridLineOwner[];
+  vertical: GridLineOwner[];
   boxes: number[];
   players: Player[];
   onDrawLine: (kind: 'h' | 'v', index: number) => void;
@@ -300,7 +258,7 @@ function DotsBoard({
         boxesArr.push(
           <div
             key={`box-${index}`}
-            className="absolute flex items-center justify-center rounded-sm text-lg font-bold"
+            className="pointer-events-none absolute flex items-center justify-center rounded-sm text-lg font-bold"
             style={{
               left: c * cellSize + dotSize,
               top: r * cellSize + dotSize,
@@ -329,10 +287,10 @@ function DotsBoard({
           <button
             key={`h-${index}`}
             type="button"
-            disabled={disabled}
+            disabled={disabled || !!owner}
             onClick={() => onDrawLine('h', index)}
             aria-label={owner ? `${owner.name}已连接` : '连接横线'}
-            className="absolute rounded-full transition-all"
+            className="absolute z-10 rounded-full transition-all disabled:cursor-default"
             style={{
               left: c * cellSize + dotSize,
               top: r * cellSize,
@@ -358,10 +316,10 @@ function DotsBoard({
           <button
             key={`v-${index}`}
             type="button"
-            disabled={disabled}
+            disabled={disabled || !!owner}
             onClick={() => onDrawLine('v', index)}
             aria-label={owner ? `${owner.name}已连接` : '连接竖线'}
-            className="absolute rounded-full transition-all"
+            className="absolute z-10 rounded-full transition-all disabled:cursor-default"
             style={{
               left: c * cellSize,
               top: r * cellSize + dotSize,
@@ -383,7 +341,7 @@ function DotsBoard({
         dotsArr.push(
           <div
             key={`dot-${r}-${c}`}
-            className="absolute rounded-full bg-white"
+            className="pointer-events-none absolute z-20 rounded-full bg-white"
             style={{
               left: c * cellSize,
               top: r * cellSize,
@@ -412,7 +370,7 @@ function DotsBoard({
   );
 }
 
-export function GridChessModeView({ players, themes, onBack }: GridChessModeViewProps) {
+export function GridChessModeView({ players, themes, pendingCards = 0, onBack }: GridChessModeViewProps) {
   const [runId, setRunId] = useModeState('GridChessModeView.runId', 0);
 
   return (
@@ -438,7 +396,7 @@ export function GridChessModeView({ players, themes, onBack }: GridChessModeView
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 no-scrollbar">
-          <DotsAndBoxesGame key={runId} players={players} themes={themes} onExit={onBack} />
+          <DotsAndBoxesGame key={runId} players={players} themes={themes} pendingCards={pendingCards} onExit={onBack} />
 
           <button
             type="button"

@@ -975,7 +975,7 @@ export function OnlineStage(props: OnlineStageProps) {
       case 'auction':
         return <AuctionModeView {...withThemes} pendingCards={pendingCount} />;
       case 'gridchess':
-        return <GridChessModeView {...withThemes} />;
+        return <GridChessModeView {...withThemes} pendingCards={pendingCount} />;
       case 'trutndare':
         return <TruthDareModeView {...common} />;
       case 'gamble':
