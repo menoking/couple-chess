@@ -198,6 +198,7 @@ function App() {
     drawCardTask,
     noteDrawnTask,
     revealMineTile,
+    toggleMineTileFlag,
     chooseMineBombTask,
     completeBingoCell,
     restartBingo,
@@ -718,6 +719,7 @@ function App() {
           mineBoard={state.mineBoard}
           currentTurn={state.turn}
           onRevealTile={revealMineTile}
+          onToggleFlag={toggleMineTileFlag}
           onTaskTrigger={handleTaskTrigger}
           onBombTrigger={handleMineBombTrigger}
           onEndTurn={endTurn}

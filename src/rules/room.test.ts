@@ -121,6 +121,60 @@ describe('room card reducer', () => {
   });
 });
 
+describe('authoritative minesweeper reducer', () => {
+  const mineBoard = Array.from({ length: 36 }, (_, index) => ({
+    type: index < 7 ? 'bomb' as const : 'blank' as const,
+    revealed: false,
+    adjacentMines: 0,
+    revealedBy: null,
+    flaggedBy: null
+  }));
+
+  it('accepts only the current seat and computes first-click safety on the host', () => {
+    const room = {
+      ...createRoom('mine', ['male', 'female'], 0, 1),
+      data: { 'stage.mineBoard': mineBoard }
+    };
+    expect(reduceRoom(room, { type: 'mineReveal', seat: 0, index: 0, expectedTurn: 1 })).toBe(room);
+    const next = reduceRoom(room, { type: 'mineReveal', seat: 1, index: 0, expectedTurn: 1 });
+    const board = next.data['stage.mineBoard'] as typeof mineBoard;
+    expect(board[0].revealed).toBe(true);
+    expect(board[0].type).not.toBe('bomb');
+    expect(next.data['stage.mineEvent']).toMatchObject({ seat: 1 });
+  });
+
+  it('marks without changing turn and rejects moves while an event is unresolved', () => {
+    const room = {
+      ...createRoom('mine', ['male', 'female'], 0, 0),
+      data: { 'stage.mineBoard': mineBoard }
+    };
+    const flagged = reduceRoom(room, { type: 'mineToggleFlag', seat: 0, index: 8, expectedTurn: 0 });
+    expect((flagged.data['stage.mineBoard'] as typeof mineBoard)[8].flaggedBy).toBe(0);
+    expect(flagged.turn).toBe(0);
+    const revealed = reduceRoom(flagged, { type: 'mineReveal', seat: 0, index: 9, expectedTurn: 0 });
+    expect(reduceRoom(revealed, { type: 'mineToggleFlag', seat: 0, index: 10, expectedTurn: 0 })).toBe(revealed);
+  });
+
+  it('advances after a resolved safe event but keeps the final turn when the board is complete', () => {
+    const room = {
+      ...createRoom('mine', ['male', 'female'], 0, 0),
+      data: {
+        'stage.mineBoard': mineBoard,
+        'stage.mineEvent': { id: 8, seat: 0, type: 'blank', completed: false }
+      }
+    };
+    const next = reduceRoom(room, { type: 'mineFinishEvent', seat: 0, eventId: 8 });
+    expect(next.turn).toBe(1);
+    expect(next.data['stage.mineEvent']).toBeNull();
+
+    const finished = {
+      ...room,
+      data: { ...room.data, 'stage.mineEvent': { id: 9, seat: 0, type: 'blank', completed: true } }
+    };
+    expect(reduceRoom(finished, { type: 'mineFinishEvent', seat: 0, eventId: 9 }).turn).toBe(0);
+  });
+});
+
 describe('optimistic concurrency', () => {
   it('merges stale writes to different keys but rejects a stale write to the same key', () => {
     const base = createRoom('story', ['male', 'female'], 0);

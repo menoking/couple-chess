@@ -1,4 +1,5 @@
-import type { GameMode } from '../types';
+import type { GameMode, MineTile } from '../types';
+import { revealMineBoard, toggleMineFlag } from '../utils/gameLogic';
 import type { RoomAction, RoomSnapshot, Role, Seat } from './types';
 import { enqueueCard, extractCard, projectCards, reduceCard } from './cards';
 import { bothLocked, mergePools } from './lobby';
@@ -422,6 +423,69 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
     case 'setTurn':
       return bump({ ...state, turn: action.turn === 1 ? 1 : 0 });
 
+    case 'mineReveal': {
+      if (state.mode !== 'mine' || state.cards.length > 0) return state;
+      if (state.turn !== action.expectedTurn || action.seat !== state.turn) return state;
+      if (state.data['stage.mineEvent']) return state;
+      const board = state.data['stage.mineBoard'];
+      if (!Array.isArray(board)) return state;
+      const result = revealMineBoard(board as MineTile[], action.index, action.seat);
+      if (!result) return state;
+      const nextSeq = state.seq + 1;
+      return {
+        ...state,
+        seq: nextSeq,
+        data: {
+          ...state.data,
+          'stage.mineBoard': result.board,
+          'stage.mineEvent': {
+            id: nextSeq,
+            seat: action.seat,
+            type: result.type,
+            completed: result.completed
+          }
+        },
+        dataSeq: {
+          ...state.dataSeq,
+          'stage.mineBoard': nextSeq,
+          'stage.mineEvent': nextSeq
+        }
+      };
+    }
+
+    case 'mineToggleFlag': {
+      if (state.mode !== 'mine' || state.cards.length > 0) return state;
+      if (state.turn !== action.expectedTurn || action.seat !== state.turn) return state;
+      if (state.data['stage.mineEvent']) return state;
+      const board = state.data['stage.mineBoard'];
+      if (!Array.isArray(board)) return state;
+      const nextBoard = toggleMineFlag(board as MineTile[], action.index, action.seat);
+      if (!nextBoard) return state;
+      const nextSeq = state.seq + 1;
+      return {
+        ...state,
+        seq: nextSeq,
+        data: { ...state.data, 'stage.mineBoard': nextBoard },
+        dataSeq: { ...state.dataSeq, 'stage.mineBoard': nextSeq }
+      };
+    }
+
+    case 'mineFinishEvent': {
+      if (state.mode !== 'mine' || state.cards.length > 0) return state;
+      const event = state.data['stage.mineEvent'] as { id?: number; seat?: Seat; type?: string; completed?: boolean } | undefined;
+      if (!event || event.id !== action.eventId) return state;
+      const allowed = action.seat === state.hostSeat || (event.type === 'bomb' && action.seat !== event.seat);
+      if (!allowed) return state;
+      const nextSeq = state.seq + 1;
+      return {
+        ...state,
+        seq: nextSeq,
+        turn: event.completed ? state.turn : state.turn === 0 ? 1 : 0,
+        data: { ...state.data, 'stage.mineEvent': null },
+        dataSeq: { ...state.dataSeq, 'stage.mineEvent': nextSeq }
+      };
+    }
+
     case 'enqueueCard':
       return bump(enqueueCard(state, {
         drawerSeat: action.drawerSeat,
@@ -444,7 +508,14 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       // 扫雷：任务卡/炸弹卡确认完就是一次回合，由房主统一交回合，
       // 避免 blank / task / bomb 三条分支各写一次 endTurn 还容易漏
       if (cleared.cards.length === 0 && state.mode === 'mine' && !state.cards[0]?.continuation) {
-        return { ...cleared, turn: cleared.turn === 0 ? 1 : 0 };
+        const event = state.data['stage.mineEvent'] as { completed?: boolean } | undefined;
+        const nextSeq = cleared.seq;
+        return {
+          ...cleared,
+          turn: event?.completed ? cleared.turn : cleared.turn === 0 ? 1 : 0,
+          data: { ...cleared.data, 'stage.mineEvent': null },
+          dataSeq: { ...cleared.dataSeq, 'stage.mineEvent': nextSeq }
+        };
       }
       return cleared;
     }

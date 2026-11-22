@@ -31,7 +31,7 @@ import {
 } from '../rules/modeRules';
 import { loadFromStorage, saveToStorage } from '../utils/localStorage';
 import { taskKeyOf } from '../utils/freshPick';
-import { generateSpiralPath, generateBoardMap, calculateNewPosition, generateMineBoard, generateBingoBoard, BINGO_BOARD_SIZE } from '../utils/gameLogic';
+import { generateSpiralPath, generateBoardMap, calculateNewPosition, generateMineBoard, generateBingoBoard, hydrateMineBoard, revealMineBoard, toggleMineFlag, BINGO_BOARD_SIZE } from '../utils/gameLogic';
 import { DEFAULT_THEMES } from '../data/defaultThemes';
 import { normalizeLegacyTaskExecutor } from '../rules/taskRules';
 
@@ -362,12 +362,15 @@ function normalizeMineBoard(input: unknown): MineTile[] {
       if (!isRecord(tile) || !MINE_TILE_TYPES.has(tile.type as MineTileType)) return null;
       return {
         type: tile.type as MineTileType,
-        revealed: !!tile.revealed
+        revealed: !!tile.revealed,
+        adjacentMines: typeof tile.adjacentMines === 'number' ? tile.adjacentMines : 0,
+        revealedBy: tile.revealedBy === 0 || tile.revealedBy === 1 ? tile.revealedBy : null,
+        flaggedBy: tile.flaggedBy === 0 || tile.flaggedBy === 1 ? tile.flaggedBy : null
       };
     })
     .filter((tile): tile is MineTile => !!tile);
 
-  return mineBoard.length === MINE_BOARD_SIZE ? mineBoard : generateMineBoard();
+  return mineBoard.length === MINE_BOARD_SIZE ? hydrateMineBoard(mineBoard) : generateMineBoard();
 }
 
 
@@ -770,27 +773,28 @@ export function useGameState() {
   }, []);
 
   const revealMineTile = useCallback((index: number): MineRevealResult | null => {
-    const tile = state.mineBoard[index];
     const activePlayer = state.players[state.turn];
+    if (!activePlayer) return null;
+    const revealed = revealMineBoard(state.mineBoard, index, state.turn === 1 ? 1 : 0);
+    if (!revealed) return null;
+    setState(prev => ({ ...prev, mineBoard: revealed.board }));
 
-    if (!tile || tile.revealed || !activePlayer) return null;
-
-    setState(prev => ({
-      ...prev,
-      mineBoard: prev.mineBoard.map((item, itemIndex) =>
-        itemIndex === index ? { ...item, revealed: true } : item
-      )
-    }));
-
-    if (tile.type === 'bomb') return { type: 'bomb' };
-    if (tile.type === 'blank') return { type: 'blank' };
+    if (revealed.type === 'bomb') return { type: 'bomb', completed: revealed.completed };
+    if (revealed.type === 'blank') return { type: 'blank', completed: revealed.completed };
 
     const choice: MineTaskChoice =
-      tile.type === 'truth' ? 'truth' : tile.type === 'dare' ? 'dare' : 'theme';
+      revealed.type === 'truth' ? 'truth' : revealed.type === 'dare' ? 'dare' : 'theme';
     const task = createMineTaskEvent(state.players, state.themes, activePlayer.id, choice, undefined, state.usedCardKeys);
 
-    return task ? { type: 'task', task } : { type: 'blank' };
+    return task ? { type: 'task', task, completed: revealed.completed } : { type: 'blank', completed: revealed.completed };
   }, [state.mineBoard, state.players, state.themes, state.turn, state.usedCardKeys]);
+
+  const toggleMineTileFlag = useCallback((index: number) => {
+    setState(prev => {
+      const board = toggleMineFlag(prev.mineBoard, index, prev.turn === 1 ? 1 : 0);
+      return board ? { ...prev, mineBoard: board } : prev;
+    });
+  }, []);
 
   const chooseMineBombTask = useCallback((choice: MineTaskChoice): TaskEventData | null => {
     const activePlayer = state.players[state.turn];
@@ -1022,6 +1026,7 @@ export function useGameState() {
     drawCardTask,
     noteDrawnTask,
     revealMineTile,
+    toggleMineTileFlag,
     chooseMineBombTask,
     completeBingoCell,
     restartBingo,

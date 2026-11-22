@@ -94,6 +94,12 @@ export type MineTaskChoice = 'truth' | 'dare' | 'theme';
 export interface MineTile {
   type: MineTileType;
   revealed: boolean;
+  /** 周围八格中的炸弹数量；炸弹格本身固定为 0。 */
+  adjacentMines: number;
+  /** 谁翻开了该格，用于终局计分。 */
+  revealedBy: 0 | 1 | null;
+  /** 谁标记了该格；标记不消耗回合。 */
+  flaggedBy: 0 | 1 | null;
 }
 
 export interface Player {
@@ -191,6 +197,6 @@ export type TaskContinuation =
   | { kind: 'auction'; round: number };
 
 export type MineRevealResult =
-  | { type: 'blank' }
-  | { type: 'bomb' }
-  | { type: 'task'; task: TaskEventData };
+  | { type: 'blank'; completed?: boolean }
+  | { type: 'bomb'; completed?: boolean }
+  | { type: 'task'; task: TaskEventData; completed?: boolean };

@@ -6,6 +6,7 @@ interface MineBombChoiceModalProps {
   activePlayer: Player | null;
   selectorPlayer: Player | null;
   onChoose: (choice: MineTaskChoice) => void;
+  canChoose?: boolean;
 }
 
 const choiceItems: Array<{
@@ -42,7 +43,8 @@ export function MineBombChoiceModal({
   isOpen,
   activePlayer,
   selectorPlayer,
-  onChoose
+  onChoose,
+  canChoose = true
 }: MineBombChoiceModalProps) {
   if (!isOpen || !activePlayer || !selectorPlayer) return null;
 
@@ -69,8 +71,9 @@ export function MineBombChoiceModal({
               <button
                 key={item.id}
                 type="button"
+                disabled={!canChoose}
                 onClick={() => onChoose(item.id)}
-                className={`w-full h-[76px] rounded-[20px] border px-4 flex items-center gap-4 text-left ios-btn ${item.className}`}
+                className={`w-full h-[76px] rounded-[20px] border px-4 flex items-center gap-4 text-left ios-btn disabled:opacity-45 ${item.className}`}
               >
                 <div className="w-11 h-11 rounded-full bg-white/10 flex items-center justify-center shrink-0">
                   <Icon size={24} />
@@ -83,6 +86,7 @@ export function MineBombChoiceModal({
             );
           })}
         </div>
+        {!canChoose && <div className="mt-4 text-center text-xs text-gray-500">等待 {selectorPlayer.name} 选择任务类型…</div>}
       </div>
     </div>
   );

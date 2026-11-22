@@ -39,7 +39,7 @@ const CATEGORIES: ModeCategory[] = [
     modes: [
       { id: 'board', title: '飞行棋模式', desc: '投骰子走棋，落格触发任务', icon: Dice5 },
       { id: 'card', title: '任务卡牌', desc: '轮流抽取任务，不用投骰子', icon: Layers3 },
-      { id: 'mine', title: '扫雷模式', desc: '点击方格，触发隐藏事件', icon: Bomb },
+      { id: 'mine', title: '扫雷模式', desc: '看数字推雷，安全格触发隐藏事件', icon: Bomb },
       { id: 'roulette', title: '情侣转盘', desc: '随机组合执行者、动作、部位与时长', icon: Disc3 },
       { id: 'pose', title: '姿势模式', desc: '轮流抽取姿势图片', icon: ImageIcon }
     ]

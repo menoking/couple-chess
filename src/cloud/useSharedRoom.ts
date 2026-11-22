@@ -269,6 +269,7 @@ function rejectionReason(state: RoomSnapshot, action: RoomAction): string {
   }
   if ('cardId' in action && state.cards[0]?.id !== action.cardId) return 'stale-card';
   if (action.type === 'endTurn' && action.expectedTurn !== state.turn) return 'stale-turn';
+  if ((action.type === 'mineReveal' || action.type === 'mineToggleFlag') && action.expectedTurn !== state.turn) return 'stale-turn';
   if (action.type === 'sealBid' && state.data['AuctionModeView.round'] !== action.round) return 'stale-round';
   if ((action.type === 'bluffReady' || action.type === 'bluffChallenge' || action.type === 'bluffNextRound')
     && state.data['BluffDiceModeView.round'] !== action.round) return 'stale-round';

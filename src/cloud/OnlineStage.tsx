@@ -53,6 +53,8 @@ import {
   generateBingoBoard,
   generateBoardMap,
   generateMineBoard,
+  hydrateMineBoard,
+  revealMineBoard,
   generateSpiralPath
 } from '../utils/gameLogic';
 import { completeBingoCellOnBoard, createMineTaskEvent, isThemeAllowed, resolveBoardTile } from '../rules/modeRules';
@@ -482,7 +484,6 @@ export function OnlineStage(props: OnlineStageProps) {
   }, [snap, themes]);
 
   const [selected, setSelected] = useState<string[]>([]);
-  const [bombOpen, setBombOpen] = useState(false);
   const [waitSeconds, setWaitSeconds] = useState(0);
   // 本机点空白收起的那批卡：只影响自己这台设备的显示，不同步给对方。
   // 卡片仍然留在队列里，等确认（ackCard）时才会真正出队并同步两端。
@@ -597,6 +598,60 @@ export function OnlineStage(props: OnlineStageProps) {
     const steps = (snap?.data['stage.steps'] as number[] | undefined) ?? [0, 0];
     return buildOnlinePlayers(roles, MERGED_THEME_ID).map(player => ({ ...player, step: steps[player.id] ?? 0 }));
   }, [roles, snap?.data]);
+
+  // 这些派生值和 Hook 必须位于连接页 / 大厅的提前 return 之前，保证各阶段 Hook 顺序一致。
+  const data = snap?.data ?? {};
+  const poseImage = data['stage.poseImage'] as string | undefined;
+  const boardMap = (data['stage.boardMap'] as TileType[] | undefined) ?? [];
+  const pathCoords = (data['stage.pathCoords'] as PathCoord[] | undefined) ?? [];
+  const mineBoard = useMemo(
+    () => hydrateMineBoard((snap?.data['stage.mineBoard'] as MineTile[] | undefined) ?? []),
+    [snap?.data]
+  );
+  const mineEvent = data['stage.mineEvent'] as { id: number; seat: Seat; type: MineTile['type']; completed: boolean } | null | undefined;
+  const bingoBoard = data['stage.bingoBoard'] as BingoBoard | undefined;
+  const patch = shared.runtime.patch;
+  const drawnTasks = useMemo(
+    () => (snap?.data['cards.drawn'] as string[] | undefined) ?? [],
+    [snap?.data]
+  );
+
+  const enqueue = useCallback((task: TaskEventData | null | undefined) => {
+    const found = extractCard(task ?? null);
+    if (task?.task) {
+      const key = `${task.task}:${task.moveDelta ?? 0}`;
+      const latest = (shared.runtime.get('cards.drawn') as string[] | undefined) ?? drawnTasks;
+      if (!latest.includes(key)) patch('cards.drawn', [...latest, key].slice(-300));
+    }
+    dispatch({
+      type: 'enqueueCard',
+      seat: mySeat,
+      drawerSeat: found?.drawerSeat ?? other(mySeat),
+      executorSeat: found?.executorSeat ?? mySeat,
+      executionMode: found?.executionMode,
+      targetSeat: found?.targetSeat,
+      reason: found?.reason ?? '抽到一张任务卡',
+      card: found?.card,
+      moveDelta: found?.moveDelta ?? 0,
+      continuation: found?.continuation
+    });
+  }, [dispatch, drawnTasks, mySeat, patch, shared.runtime]);
+
+  const handledMineEvent = useRef(0);
+  useEffect(() => {
+    if (!isHost || !snap || !mineEvent || mineEvent.type === 'bomb' || snap.cards.length > 0) return;
+    if (handledMineEvent.current === mineEvent.id) return;
+    handledMineEvent.current = mineEvent.id;
+
+    if (mineEvent.type === 'blank') {
+      dispatch({ type: 'mineFinishEvent', seat: mySeat, eventId: mineEvent.id });
+      return;
+    }
+    const choice: MineTaskChoice = mineEvent.type === 'truth' ? 'truth' : mineEvent.type === 'dare' ? 'dare' : 'theme';
+    const task = createMineTaskEvent(players, onlineThemes, mineEvent.seat, choice, undefined, drawnTasks);
+    if (task) enqueue(task);
+    else dispatch({ type: 'mineFinishEvent', seat: mySeat, eventId: mineEvent.id });
+  }, [dispatch, drawnTasks, enqueue, isHost, mineEvent, mySeat, onlineThemes, players, snap]);
 
   if (!snap || shared.status === 'connecting' || shared.status === 'idle') {
     return (
@@ -828,70 +883,35 @@ export function OnlineStage(props: OnlineStageProps) {
     );
   }
 
-  const data = snap.data;
-  const poseImage = data['stage.poseImage'] as string | undefined;
-  const boardMap = (data['stage.boardMap'] as TileType[] | undefined) ?? [];
-  const pathCoords = (data['stage.pathCoords'] as PathCoord[] | undefined) ?? [];
-  const mineBoard = (data['stage.mineBoard'] as MineTile[] | undefined) ?? [];
-  const bingoBoard = data['stage.bingoBoard'] as BingoBoard | undefined;
-  const patch = shared.runtime.patch;
-  /** 本局已经抽过的任务 key：所有落格 / 抽卡玩法共用，抽过的不会再重复 */
-  const drawnTasks = (data['cards.drawn'] as string[] | undefined) ?? [];
-
-  const enqueue = (task: TaskEventData | null | undefined) => {
-    const found = extractCard(task ?? null);
-    if (task?.task) {
-      // key 与同屏保持一致：任务文本 + 步数
-      const key = `${task.task}:${task.moveDelta ?? 0}`;
-      // 读最新值再写，避免一帧内连抽两张时后一张把前一张的记录覆盖掉
-      const latest = (shared.runtime.get('cards.drawn') as string[] | undefined) ?? drawnTasks;
-      if (!latest.includes(key)) {
-        patch('cards.drawn', [...latest, key].slice(-300));
-      }
-    }
-    dispatch({
-      type: 'enqueueCard',
-      seat: mySeat,
-      drawerSeat: found?.drawerSeat ?? other(mySeat),
-      executorSeat: found?.executorSeat ?? mySeat,
-      executionMode: found?.executionMode,
-      targetSeat: found?.targetSeat,
-      reason: found?.reason ?? '抽到一张任务卡',
-      card: found?.card,
-      moveDelta: found?.moveDelta ?? 0,
-      continuation: found?.continuation
-    });
-  };
-
   const endTurn = () => dispatch({ type: 'endTurn', seat: mySeat, expectedTurn: snap.turn });
   const onBack = onExit;
   const onDrawTask = (excludeKeys: readonly string[] = []) =>
     poolTask({ ...snap, cardPool: resolvedCardPool }, other(mySeat), '抽到一张任务卡', [...drawnTasks, ...excludeKeys]);
   const onTaskTrigger = (task: TaskEventData) => enqueue(task);
-  // 扫雷炸弹：三选一由对方指定（与同屏 chooseMineBombTask 一致）
-  const onBombTrigger = () => setBombOpen(true);
+  // 扫雷炸弹：事件由房主写进共享状态，两端同时看到，且只有对方能指定。
+  const onBombTrigger = () => undefined;
   const onChooseBomb = (choice: MineTaskChoice) => {
-    setBombOpen(false);
-    const turnSeat: Seat = currentTurn === 1 ? 1 : 0;
+    if (!mineEvent || mineEvent.type !== 'bomb' || mySeat === mineEvent.seat) return;
+    const turnSeat = mineEvent.seat;
     const task = createMineTaskEvent(players, onlineThemes, turnSeat, choice, other(turnSeat), drawnTasks);
     if (task) enqueue(task);
-    else endTurn();
+    else dispatch({ type: 'mineFinishEvent', seat: mySeat, eventId: mineEvent.id });
   };
   const onPoseTrigger = (src: string) => patch('stage.poseImage', src);
   const onCheckTile = (landingStep: number, turnSeat: Seat): TaskEventData | 'win' | null =>
     resolveBoardTile({ landingStep, players, themes: onlineThemes, turn: turnSeat, boardMap, usedTasks: drawnTasks });
   const onRevealTile = (index: number): MineRevealResult | null => {
-    const board = [...mineBoard];
-    if (!board[index] || board[index].revealed) return null;
-    board[index] = { ...board[index], revealed: true };
-    patch('stage.mineBoard', board);
-    const type = board[index].type;
-    if (type === 'blank') return { type: 'blank' };
-    if (type === 'bomb') return { type: 'bomb' };
-    const choice: MineTaskChoice = type === 'truth' ? 'truth' : type === 'dare' ? 'dare' : 'theme';
-    const task = createMineTaskEvent(players, onlineThemes, currentTurn, choice, undefined, drawnTasks);
-    return task ? { type: 'task', task } : { type: 'blank' };
+    const predicted = revealMineBoard(mineBoard, index, currentTurn === 1 ? 1 : 0);
+    if (!predicted) return null;
+    dispatch({ type: 'mineReveal', seat: mySeat, index, expectedTurn: currentTurn });
+    return predicted.type === 'bomb'
+      ? { type: 'bomb', completed: predicted.completed }
+      : { type: 'blank', completed: predicted.completed };
   };
+  const onToggleMineFlag = (index: number) => {
+    dispatch({ type: 'mineToggleFlag', seat: mySeat, index, expectedTurn: currentTurn });
+  };
+
   const onCompleteCell = (index: number): BingoCellResult | null => {
     if (!bingoBoard) return null;
     const done = completeBingoCellOnBoard(bingoBoard, index, currentTurn, players, onlineThemes, drawnTasks);
@@ -931,7 +951,7 @@ export function OnlineStage(props: OnlineStageProps) {
         return <CardModeView {...common} onDrawTask={onDrawTask} onTaskTrigger={onTaskTrigger} pendingCards={pendingCount} />;
       case 'mine': {
         if (mineBoard.length === 0) return <StagePreparing />;
-        return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} pendingCards={pendingCount} />;
+        return <MineModeView {...common} mineBoard={mineBoard} onRevealTile={onRevealTile} onToggleFlag={onToggleMineFlag} onTaskTrigger={onTaskTrigger} onBombTrigger={onBombTrigger} pendingCards={pendingCount} resolveEventsExternally />;
       }
       case 'pose':
         return <PoseModeView players={players} currentTurn={currentTurn} onPoseTrigger={onPoseTrigger} onEndTurn={endTurn} pendingCards={pendingCount} onBack={onBack} />;
@@ -1001,10 +1021,11 @@ export function OnlineStage(props: OnlineStageProps) {
           </div>
         )}
         <MineBombChoiceModal
-          isOpen={bombOpen}
-          activePlayer={players[currentTurn] ?? null}
-          selectorPlayer={players[currentTurn === 1 ? 0 : 1] ?? null}
+          isOpen={mineEvent?.type === 'bomb' && snap.cards.length === 0}
+          activePlayer={mineEvent ? players[mineEvent.seat] ?? null : null}
+          selectorPlayer={mineEvent ? players[other(mineEvent.seat)] ?? null : null}
           onChoose={onChooseBomb}
+          canChoose={!!mineEvent && mySeat === other(mineEvent.seat)}
         />
         <CardGate
           snap={snap}

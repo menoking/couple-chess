@@ -2,7 +2,7 @@ import type { GameMode, TaskContinuation, TaskExecutionMode, TaskExecutor } from
 
 export type Seat = 0 | 1;
 export type Role = 'male' | 'female';
-export const ROOM_PROTOCOL_VERSION = 4;
+export const ROOM_PROTOCOL_VERSION = 5;
 
 export interface OnlineCard {
   task: string;
@@ -71,6 +71,10 @@ export type RoomAction =
   | { type: 'patchBatch'; entries: Array<{ key: string; value: unknown }>; baseSeq: number; seat: Seat }
   | { type: 'endTurn'; seat: Seat; expectedTurn: number }
   | { type: 'setTurn'; seat: Seat; turn: number }
+  /** 扫雷翻格和标记必须由房主基于权威棋盘计算，客户端只提交目标格。 */
+  | { type: 'mineReveal'; seat: Seat; index: number; expectedTurn: number }
+  | { type: 'mineToggleFlag'; seat: Seat; index: number; expectedTurn: number }
+  | { type: 'mineFinishEvent'; seat: Seat; eventId: number }
   | { type: 'enqueueCard'; seat: Seat; drawerSeat: Seat; executorSeat: Seat; executionMode?: TaskExecutionMode; targetSeat?: Seat | null; reason: string; card?: OnlineCard; moveDelta?: number; continuation?: TaskContinuation }
   /** reveal=true 时在同一个权威动作里完成抽取和翻开。 */
   | { type: 'drawCard'; seat: Seat; cardId: number; reveal?: boolean }
