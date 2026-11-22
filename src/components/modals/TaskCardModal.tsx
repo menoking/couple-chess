@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { TaskEventData, Player } from '../../types';
 import { ArrowRight, Flame, Heart, Lock, HandshakeIcon, MessageCircleQuestion, Sparkles, X } from 'lucide-react';
+import { getTaskCardIdentity } from './taskCardIdentity';
 
 interface TaskCardModalProps {
   isOpen: boolean;
@@ -8,6 +9,8 @@ interface TaskCardModalProps {
   onAccept: () => void;
   onReject: () => void;
   onClose?: () => void;
+  /** 同一张卡在联机快照重建后仍应保持翻开状态；队列场景可传入更精确的稳定键。 */
+  cardKey?: string | number;
   /** 传入双方信息后，卡片会直接显示玩家名字而不是「男方/女方」 */
   players?: Player[];
   /** 联机时只有执行人能确认；非执行人只看不操作 */
@@ -30,29 +33,56 @@ export function TaskCardModal({
   onAccept,
   onReject,
   onClose,
+  cardKey,
   players,
   readOnly = false,
   readOnlyNote
 }: TaskCardModalProps) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [visibleTaskData, setVisibleTaskData] = useState<TaskEventData | null>(null);
+  const [dismissedIdentity, setDismissedIdentity] = useState<string | null>(null);
+  const taskDataRef = useRef(taskData);
+  taskDataRef.current = taskData;
+  const taskIdentity = cardKey === undefined
+    ? getTaskCardIdentity(taskData)
+    : `key:${String(cardKey)}`;
 
   useEffect(() => {
-    if (isOpen && taskData) {
-      setVisibleTaskData(taskData);
+    const nextTaskData = taskDataRef.current;
+    if (isOpen && nextTaskData) {
+      setVisibleTaskData(nextTaskData);
       setIsFlipped(false);
-      document.body.style.overflow = 'hidden';
     } else {
       setVisibleTaskData(null);
       setIsFlipped(false);
-      document.body.style.overflow = '';
+      setDismissedIdentity(null);
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
+  }, [isOpen, taskIdentity]);
+
+  // 同一张卡的展示字段允许随权威快照更新，但不能因此把卡翻回背面。
+  useEffect(() => {
+    if (isOpen && taskData) setVisibleTaskData(taskData);
   }, [isOpen, taskData]);
 
-  if (!isOpen || !visibleTaskData) return null;
+  const isDismissed = !!onClose && !!taskIdentity && dismissedIdentity === taskIdentity;
+
+  useEffect(() => {
+    if (!isOpen || !visibleTaskData || isDismissed) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isOpen, visibleTaskData, isDismissed]);
+
+  const handleDismiss = () => {
+    if (!onClose || !taskIdentity) return;
+    // 先在本机立即收起；只读端的 onClose 可能按座位校验而不修改共享状态。
+    setDismissedIdentity(taskIdentity);
+    onClose();
+  };
+
+  if (!isOpen || !visibleTaskData || isDismissed) return null;
 
   const isMineTask =
     visibleTaskData.type === 'mineTruth' ||
@@ -115,14 +145,23 @@ export function TaskCardModal({
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto px-4 py-[max(0.5rem,env(safe-area-inset-top))]">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+      {onClose ? (
+        <button
+          type="button"
+          aria-label="收起任务卡"
+          onClick={handleDismiss}
+          className="absolute inset-0 cursor-default bg-black/80 backdrop-blur-md"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+      )}
 
-      <div className="w-full max-w-sm">
-        {onClose && !readOnly && (
+      <div className="relative z-10 w-full max-w-sm">
+        {onClose && (
           <div className="mb-2 flex justify-end">
             <button
               type="button"
-              onClick={onClose}
+              onClick={handleDismiss}
               aria-label="关闭任务卡"
               className="ios-btn flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-[#3A3A3C] text-gray-300 shadow-lg"
             >

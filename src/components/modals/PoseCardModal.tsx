@@ -6,9 +6,10 @@ interface PoseCardModalProps {
   imageSrc: string | null;
   onAccept: () => void;
   onReject: () => void;
+  onClose?: () => void;
 }
 
-export function PoseCardModal({ isOpen, imageSrc, onAccept, onReject }: PoseCardModalProps) {
+export function PoseCardModal({ isOpen, imageSrc, onAccept, onReject, onClose }: PoseCardModalProps) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [visibleImageSrc, setVisibleImageSrc] = useState<string | null>(null);
 
@@ -32,9 +33,18 @@ export function PoseCardModal({ isOpen, imageSrc, onAccept, onReject }: PoseCard
 
   return (
     <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto px-4 py-[max(0.5rem,env(safe-area-inset-top))]">
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+      {onClose ? (
+        <button
+          type="button"
+          aria-label="收起姿势卡"
+          onClick={onClose}
+          className="absolute inset-0 cursor-default bg-black/80 backdrop-blur-md"
+        />
+      ) : (
+        <div className="absolute inset-0 bg-black/80 backdrop-blur-md" />
+      )}
 
-      <div className="mobile-pose-modal-card relative w-full max-w-sm max-h-full perspective-1000 task-card-pop">
+      <div className="mobile-pose-modal-card relative z-10 w-full max-w-sm max-h-full perspective-1000 task-card-pop">
         <div className={`flip-card-inner ${isFlipped ? 'flipped' : ''}`}>
           <div
             className="flip-card-front bg-[#1C1C1E] border border-white/10 p-6 flex flex-col items-center justify-center shadow-2xl cursor-pointer"

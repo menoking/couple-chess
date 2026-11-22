@@ -361,6 +361,7 @@ export function BingoModeView({
         players={players}
         isOpen={!!taskData}
         taskData={taskData}
+        cardKey={pendingIndex ?? undefined}
         onAccept={handleAccept}
         onReject={handleReject}
         onClose={handleClose}

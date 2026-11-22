@@ -623,6 +623,7 @@ function App() {
         taskData={taskData}
         onAccept={handleTaskAccept}
         onReject={handleTaskReject}
+        onClose={handleTaskReject}
       />
 
       <MineBombChoiceModal
@@ -637,6 +638,7 @@ function App() {
         imageSrc={poseImageSrc}
         onAccept={handlePoseDone}
         onReject={handlePoseDone}
+        onClose={handlePoseDone}
       />
 
       <WinModal
