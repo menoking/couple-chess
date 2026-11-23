@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useModeRuntime, useModeState, useMyTurn } from '../../rules/ModeRuntime';
 
 import { ArrowLeft, CircleDot, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
@@ -28,13 +28,16 @@ function DotsAndBoxesGame({
   players,
   themes,
   pendingCards,
+  runId,
   onExit
 }: {
   players: Player[];
   themes: Theme[];
   pendingCards: number;
+  runId: number;
   onExit: () => void;
 }) {
+  const runtime = useModeRuntime();
   const [turn, setTurn] = useModeState('GridChessModeView.turn', 0);
   const canAct = useMyTurn(turn);
   const [horizontal, setHorizontal] = useModeState<GridLineOwner[]>('GridChessModeView.horizontal', () => new Array(GRID_HORIZONTAL_LINES).fill(null).map(() => ({ ownerId: null })));
@@ -59,7 +62,7 @@ function DotsAndBoxesGame({
 
   // 依次弹出队列里的抽卡
   useEffect(() => {
-    if (taskData || cardQueue.length === 0) return;
+    if (runtime || taskData || cardQueue.length === 0) return;
     const [next, ...rest] = cardQueue;
     const token = next.boxIndex === undefined
       ? `legacy:${cardQueue.length}:${next.drawerId}:${next.executorId}:${next.reason}`
@@ -78,19 +81,22 @@ function DotsAndBoxesGame({
         initiatorPlayerId: next.drawerId
       })
     );
-  }, [cardQueue, taskData, players, themes, setCardQueue, setTaskData]);
+  }, [runtime, cardQueue, taskData, players, themes, setCardQueue, setTaskData]);
 
-  // 联机下任务卡会被公共 CardGate 接管，本地 taskData 不落地，
-  // 「闭合最后一格 → 结算」不能只靠弹窗回调，这里按棋盘状态兜底。
+  // 同屏必须等最后一张任务卡处理后再结算；联机由 reducer 在确认时结算。
   useEffect(() => {
-    if (finished) return;
+    if (runtime || finished || taskData || pendingCards > 0) return;
     if (cardQueue.length > 0) return;
     if (boxes.every(owner => owner !== -1)) setFinished(true);
-  }, [boxes, cardQueue.length, finished, setFinished]);
+  }, [runtime, boxes, cardQueue.length, finished, taskData, pendingCards, setFinished]);
 
   const drawLine = (kind: 'h' | 'v', lineIndex: number) => {
     if (!canAct) return;
     if (finished || taskData || cardQueue.length > 0 || pendingCards > 0) return;
+    if (runtime) {
+      runtime.dispatch({ type: 'gridDrawLine', seat: runtime.seat, kind, index: lineIndex, expectedLines: drawnLines, runId });
+      return;
+    }
     const result = applyGridLine({ horizontal, vertical, boxes }, kind, lineIndex, turn);
     if (!result) return;
     const { state: next, newlyClosed } = result;
@@ -245,6 +251,8 @@ function DotsBoard({
   const cells = dots - 1;
   const dotSize = 12;
   const cellSize = 64;
+  // 触控目标与细线分开：直径 44px 的圆形热区，横竖目标不会互相遮挡。
+  const hitSize = 44;
   const boardWidth = cells * cellSize + dotSize;
 
   const renderBoxes = () => {
@@ -287,18 +295,20 @@ function DotsBoard({
           <button
             key={`h-${index}`}
             type="button"
-            disabled={disabled || !!owner}
+            disabled={disabled || line.ownerId !== null}
             onClick={() => onDrawLine('h', index)}
-            aria-label={owner ? `${owner.name}已连接` : '连接横线'}
-            className="absolute z-10 rounded-full transition-all disabled:cursor-default"
+            aria-label={`第${r + 1}行第${c + 1}条横线${owner ? `，${owner.name}已连接` : '，点击连接'}`}
+            className="absolute z-10 touch-manipulation rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:cursor-default"
             style={{
-              left: c * cellSize + dotSize,
-              top: r * cellSize,
-              width: cellSize - 4,
-              height: 6,
-              backgroundColor: owner ? owner.color : 'rgba(255,255,255,0.15)'
+              left: c * cellSize + dotSize / 2 + (cellSize - hitSize) / 2,
+              top: r * cellSize + (dotSize - hitSize) / 2,
+              width: hitSize,
+              height: hitSize
             }}
-          />
+          >
+            <span className="pointer-events-none absolute left-1/2 top-1/2 h-[6px] -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors"
+              style={{ width: cellSize - dotSize, backgroundColor: owner ? owner.color : 'rgba(255,255,255,0.25)' }} />
+          </button>
         );
       }
     }
@@ -316,18 +326,20 @@ function DotsBoard({
           <button
             key={`v-${index}`}
             type="button"
-            disabled={disabled || !!owner}
+            disabled={disabled || line.ownerId !== null}
             onClick={() => onDrawLine('v', index)}
-            aria-label={owner ? `${owner.name}已连接` : '连接竖线'}
-            className="absolute z-10 rounded-full transition-all disabled:cursor-default"
+            aria-label={`第${c + 1}列第${r + 1}条竖线${owner ? `，${owner.name}已连接` : '，点击连接'}`}
+            className="absolute z-10 touch-manipulation rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-white disabled:cursor-default"
             style={{
-              left: c * cellSize,
-              top: r * cellSize + dotSize,
-              width: 6,
-              height: cellSize - 4,
-              backgroundColor: owner ? owner.color : 'rgba(255,255,255,0.15)'
+              left: c * cellSize + (dotSize - hitSize) / 2,
+              top: r * cellSize + dotSize / 2 + (cellSize - hitSize) / 2,
+              width: hitSize,
+              height: hitSize
             }}
-          />
+          >
+            <span className="pointer-events-none absolute left-1/2 top-1/2 w-[6px] -translate-x-1/2 -translate-y-1/2 rounded-full transition-colors"
+              style={{ height: cellSize - dotSize, backgroundColor: owner ? owner.color : 'rgba(255,255,255,0.25)' }} />
+          </button>
         );
       }
     }
@@ -356,7 +368,7 @@ function DotsBoard({
   };
 
   return (
-    <div className="flex justify-center">
+    <div className="flex justify-center py-5">
       <div
         className="relative"
         style={{ width: boardWidth, height: boardWidth }}
@@ -396,7 +408,7 @@ export function GridChessModeView({ players, themes, pendingCards = 0, onBack }:
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 no-scrollbar">
-          <DotsAndBoxesGame key={runId} players={players} themes={themes} pendingCards={pendingCards} onExit={onBack} />
+          <DotsAndBoxesGame key={runId} runId={runId} players={players} themes={themes} pendingCards={pendingCards} onExit={onBack} />
 
           <button
             type="button"

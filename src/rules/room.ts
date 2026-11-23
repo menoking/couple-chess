@@ -1,7 +1,9 @@
 import type { GameMode, MineTile } from '../types';
 import { MINE_TASK_PROGRESS_TARGET, revealMineBoard, toggleMineFlag } from '../utils/gameLogic';
 import type { RoomAction, RoomSnapshot, Role, Seat } from './types';
-import { enqueueCard, extractCard, projectCards, reduceCard } from './cards';
+import { cardFor, enqueueCard, extractCard, projectCards, reduceCard } from './cards';
+import { applyGridLine, type GridLineOwner } from './gridChess';
+import { formatTaskInstruction, resolveTaskRule } from './taskRules';
 import { bothLocked, mergePools } from './lobby';
 import { isAuthorityOnlyState, isRestartState, privateKeyOf, seatScopedKey, turnBoundPrefixOf } from './registry';
 
@@ -195,6 +197,46 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
   };
 
   switch (action.type) {
+    case 'gridDrawLine': {
+      const prefix = 'GridChessModeView.';
+      if (state.mode !== 'gridchess' || !state.data[`${prefix}started`] || state.data[`${prefix}finished`]) return state;
+      if (state.cards.length > 0 || action.seat !== viewTurnOf(state, prefix)) return state;
+      if ((state.data[`${prefix}runId`] ?? 0) !== action.runId) return state;
+      if (action.kind !== 'h' && action.kind !== 'v') return state;
+      const horizontal = state.data[`${prefix}horizontal`] as GridLineOwner[];
+      const vertical = state.data[`${prefix}vertical`] as GridLineOwner[];
+      const boxes = state.data[`${prefix}boxes`] as number[];
+      if (!Array.isArray(horizontal) || !Array.isArray(vertical) || !Array.isArray(boxes)) return state;
+      const drawn = [...horizontal, ...vertical].filter(line => line.ownerId !== null).length;
+      if (drawn !== action.expectedLines) return state;
+      const result = applyGridLine({ horizontal, vertical, boxes }, action.kind, action.index, action.seat);
+      if (!result) return state;
+      const changes = {
+        [`${prefix}horizontal`]: result.state.horizontal,
+        [`${prefix}vertical`]: result.state.vertical,
+        [`${prefix}boxes`]: result.state.boxes,
+        [`${prefix}turn`]: result.newlyClosed.length > 0 ? action.seat : 1 - action.seat
+      };
+      let next: RoomSnapshot = {
+        ...state,
+        data: { ...state.data, ...changes },
+        dataSeq: { ...state.dataSeq, ...Object.fromEntries(Object.keys(changes).map(key => [key, state.seq + 1])) }
+      };
+      // 一次落线及它产生的所有奖励卡原子提交；不再由两端 effect 消费中间队列。
+      for (let reward = 0; reward < result.newlyClosed.length; reward += 1) {
+        const card = cardFor(next.cardPool, next.cardSeq + 1);
+        const rule = resolveTaskRule({ text: card.task, executor: card.executor ?? 'both' }, 1 - action.seat);
+        next = enqueueCard(next, {
+          drawerSeat: action.seat,
+          executorSeat: rule.executorPlayerId,
+          executionMode: rule.executionMode,
+          targetSeat: rule.targetPlayerId,
+          reason: `闭合 ${result.newlyClosed.length} 格 · 对方执行`,
+          card: { ...card, task: formatTaskInstruction(card.task, rule) }
+        });
+      }
+      return bump(next);
+    }
     case 'replace':
       return action.snapshot;
 
@@ -554,6 +596,13 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       const next = reduceCard(state, action);
       if (next === state) return state;
       const cleared = bump(next);
+      if (cleared.cards.length === 0 && state.mode === 'gridchess') {
+        const boxes = cleared.data['GridChessModeView.boxes'];
+        if (Array.isArray(boxes) && boxes.length === 16 && boxes.every(owner => owner !== -1)) {
+          cleared.data = { ...cleared.data, 'GridChessModeView.finished': true };
+          cleared.dataSeq = { ...cleared.dataSeq, 'GridChessModeView.finished': cleared.seq };
+        }
+      }
       // 扫雷：任务卡/炸弹卡确认完就是一次回合，由房主统一交回合，
       // 避免 blank / task / bomb 三条分支各写一次 endTurn 还容易漏
       if (cleared.cards.length === 0 && state.mode === 'mine' && !state.cards[0]?.continuation) {
