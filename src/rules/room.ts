@@ -4,6 +4,7 @@ import type { RoomAction, RoomSnapshot, Role, Seat } from './types';
 import { cardForReward, enqueueCard, extractCard, projectCards, reduceCard } from './cards';
 import { applyGridLine, type GridLineOwner } from './gridChess';
 import { formatTaskInstruction, resolveTaskRule } from './taskRules';
+import { createGoBoard, GO_WINNER_CARDS, goCaptureRewards, goWinner, playMove, scoreGoBoard, type GoBoard } from '../utils/go';
 import { bothLocked, mergePools } from './lobby';
 import { isAuthorityOnlyState, isRestartState, privateKeyOf, seatScopedKey, turnBoundPrefixOf } from './registry';
 
@@ -197,6 +198,70 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
   };
 
   switch (action.type) {
+    case 'goPlay': {
+      const prefix = 'GoModeView.';
+      if (state.mode !== 'go' || state.data[`${prefix}phase`] !== 'play' || state.cards.length > 0) return state;
+      if (action.seat !== viewTurnOf(state, prefix) || action.runId !== (state.data[`${prefix}runId`] ?? 0)) return state;
+      const move = (state.data[`${prefix}moveNumber`] as number | undefined) ?? 0;
+      if (action.expectedMove !== move) return state;
+      const board = (state.data[`${prefix}board`] as GoBoard | undefined) ?? createGoBoard();
+      const captures = (state.data[`${prefix}captures`] as Record<number, number> | undefined) ?? { 0: 0, 1: 0 };
+      const opponent: Seat = action.seat === 0 ? 1 : 0;
+      const changes: Record<string, unknown> = { [`${prefix}moveNumber`]: move + 1 };
+      let rewards = 0;
+      let drawer = action.seat;
+      let reason = '提子奖励 · 对方执行';
+      if (action.kind === 'place') {
+        const koKey = (state.data[`${prefix}koKey`] as string | null | undefined) ?? null;
+        const played = playMove(board, action.index, action.seat, koKey);
+        if (!played) return state;
+        const before = captures[action.seat] ?? 0;
+        rewards = goCaptureRewards(before, played.captured);
+        changes[`${prefix}board`] = played.board;
+        changes[`${prefix}koKey`] = played.koKey;
+        changes[`${prefix}lastMove`] = action.index;
+        changes[`${prefix}captures`] = { ...captures, [action.seat]: before + played.captured };
+        changes[`${prefix}passes`] = 0;
+        changes[`${prefix}turn`] = opponent;
+      } else if (action.kind === 'pass' || action.kind === 'surrender') {
+        const surrender = action.kind === 'surrender' ? action.seat : null;
+        const passes = ((state.data[`${prefix}passes`] as number | undefined) ?? 0) + 1;
+        if (surrender === null) {
+          changes[`${prefix}passes`] = passes;
+          changes[`${prefix}koKey`] = null;
+        }
+        if (surrender !== null || passes >= 2) {
+          changes[`${prefix}phase`] = 'over';
+          changes[`${prefix}surrenderedBy`] = surrender;
+          drawer = goWinner(scoreGoBoard(board), captures, surrender);
+          rewards = GO_WINNER_CARDS;
+          reason = '终局 · 胜方抽卡，败方执行';
+        } else {
+          changes[`${prefix}turn`] = opponent;
+        }
+      } else {
+        return state;
+      }
+      let next: RoomSnapshot = {
+        ...state,
+        data: { ...state.data, ...changes },
+        dataSeq: { ...state.dataSeq, ...Object.fromEntries(Object.keys(changes).map(key => [key, state.seq + 1])) }
+      };
+      const loser: Seat = drawer === 0 ? 1 : 0;
+      for (let i = 0; i < rewards; i++) {
+        const card = cardForReward(next.cardPool, next.cardSeq + 1, drawer, loser);
+        const rule = resolveTaskRule({ text: card.task, executor: card.executor ?? 'both' }, loser);
+        next = enqueueCard(next, {
+          drawerSeat: drawer,
+          executorSeat: rule.executorPlayerId,
+          executionMode: rule.executionMode,
+          targetSeat: rule.targetPlayerId,
+          reason,
+          card: { ...card, task: formatTaskInstruction(card.task, rule) }
+        });
+      }
+      return bump(next);
+    }
     case 'gridDrawLine': {
       const prefix = 'GridChessModeView.';
       if (state.mode !== 'gridchess' || !state.data[`${prefix}started`] || state.data[`${prefix}finished`]) return state;

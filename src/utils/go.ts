@@ -1,5 +1,17 @@
 export const GO_SIZE = 9;
 export const GO_CELLS = GO_SIZE * GO_SIZE;
+export const GO_CAPTURE_PER_CARD = 3;
+export const GO_WINNER_CARDS = 2;
+
+export function goCaptureRewards(before: number, captured: number): number {
+  return Math.floor((before + captured) / GO_CAPTURE_PER_CARD) - Math.floor(before / GO_CAPTURE_PER_CARD);
+}
+
+export function goWinner(score: GoScore, captures: Record<number, number>, surrenderedBy: number | null): 0 | 1 {
+  if (surrenderedBy !== null) return surrenderedBy === 0 ? 1 : 0;
+  if (score.area[0] === score.area[1]) return (captures[0] ?? 0) >= (captures[1] ?? 0) ? 0 : 1;
+  return score.area[0] > score.area[1] ? 0 : 1;
+}
 
 export type GoBoard = Array<number | null>;
 
@@ -87,7 +99,7 @@ export function playMove(
   playerId: number,
   koKey: string | null
 ): GoMoveResult | null {
-  if (index < 0 || index >= GO_CELLS) return null;
+  if (!Number.isInteger(index) || index < 0 || index >= GO_CELLS) return null;
   if (board[index] !== null) return null;
 
   const beforeKey = boardKey(board);

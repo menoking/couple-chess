@@ -990,7 +990,7 @@ export function OnlineStage(props: OnlineStageProps) {
       case 'sudoku':
         return <SudokuModeView {...common} />;
       case 'go':
-        return <GoModeView {...common} />;
+        return <GoModeView {...common} pendingCards={snap.cards.length} />;
       case 'bluff':
         return <BluffDiceModeView {...common} />;
       case 'jungle':

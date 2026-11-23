@@ -1,9 +1,9 @@
-import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
-import { useEffect, useMemo, useRef } from 'react';
+import { useModeRuntime, useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, CircleDot, Flag, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRewardTask } from '../../utils/modeKit';
-import { GoBoard, createGoBoard, playMove, scoreGoBoard } from '../../utils/go';
+import { GoBoard, createGoBoard, GO_CAPTURE_PER_CARD, GO_WINNER_CARDS, goCaptureRewards, goWinner, playMove, scoreGoBoard } from '../../utils/go';
 import { TaskCardModal } from '../modals/TaskCardModal';
 import { DiceRollOff } from '../DiceRollOff';
 
@@ -11,13 +11,12 @@ interface GoModeViewProps {
   players: Player[];
   themes: Theme[];
   currentTurn: number;
+  pendingCards?: number;
   onBack: () => void;
 }
 
-/** 每提满 3 子可抽 1 张卡 */
-const CAPTURE_PER_CARD = 3;
-/** 终局抽卡数：胜方抽 2 张，全部由败方执行 */
-const WINNER_CARDS = 2;
+const CAPTURE_PER_CARD = GO_CAPTURE_PER_CARD;
+const WINNER_CARDS = GO_WINNER_CARDS;
 
 type Phase = 'roll' | 'play' | 'over';
 
@@ -31,7 +30,11 @@ interface PendingCard {
   token?: string;
 }
 
-function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: Theme[]; currentTurn: number }) {
+function GoGame({ players, themes, currentTurn, pendingCards, runId }: Omit<GoModeViewProps, 'onBack' | 'pendingCards'> & {
+  pendingCards: number;
+  runId: number;
+}) {
+  const runtime = useModeRuntime();
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
   const [board, setBoard] = useModeState<GoBoard>('GoModeView.board', () => createGoBoard());
@@ -43,13 +46,15 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
   const [passes, setPasses] = useModeState('GoModeView.passes', 0);
   const [phase, setPhase] = useModeState<Phase>('GoModeView.phase', 'roll');
   const [surrenderedBy, setSurrenderedBy] = useModeState<number | null>('GoModeView.surrenderedBy', null);
-  const [notice, setNotice] = useModeState<string | null>('GoModeView.notice', null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [moveNumber] = useModeState('GoModeView.moveNumber', 0);
 
   const [cardQueue, setCardQueue] = useModeState<PendingCard[]>('GoModeView.cardQueue', []);
   const [taskData, setTaskData] = useModeState<ReturnType<typeof createViewTaskEvent> | null>('GoModeView.taskData', null);
 
   const activePlayer = players[turn] ?? players[0];
   const score = useMemo(() => scoreGoBoard(board), [board]);
+  const blocked = !canAct || !!taskData || pendingCards > 0 || (!runtime && cardQueue.length > 0);
 
   // 按卡片标识消费，避免未来再次出现相同队列长度时误判为已处理。
   // 万一那条 patch 没落地，也不会把同一张卡反复入队（那样卡片永远翻不完）。
@@ -57,7 +62,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
 
   // 依次弹出队列里的抽卡
   useEffect(() => {
-    if (taskData || cardQueue.length === 0) return;
+    if (runtime || taskData || cardQueue.length === 0) return;
     const [next, ...rest] = cardQueue;
     const token = next.token ?? `legacy:${cardQueue.length}:${next.drawerId}:${next.executorId}:${next.reason}`;
     if (consumedCard.current === token) return;
@@ -72,7 +77,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
         initiatorPlayerId: next.drawerId
       })
     );
-  }, [cardQueue, taskData, pool]);
+  }, [runtime, cardQueue, taskData, pool, setCardQueue, setTaskData]);
 
   const enqueueCards = (drawerId: number, executorId: number, count: number, reason: string) => {
     const batchToken = `${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
@@ -88,8 +93,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
   };
 
   const handlePlace = (index: number) => {
-    if (!canAct) return;
-    if (phase !== 'play' || taskData) return;
+    if (blocked || phase !== 'play') return;
 
     const result = playMove(board, index, turn, koKey);
     if (!result) {
@@ -98,18 +102,23 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
       return;
     }
 
+    setNotice(null);
+    if (runtime) {
+      runtime.dispatch({ type: 'goPlay', kind: 'place', index, seat: runtime.seat, runId, expectedMove: moveNumber });
+      return;
+    }
+
     setBoard(result.board);
     setKoKey(result.koKey);
     setLastMove(index);
     setPasses(0);
-    setNotice(null);
 
     if (result.captured > 0) {
       const before = captures[turn] ?? 0;
       const after = before + result.captured;
       setCaptures(prev => ({ ...prev, [turn]: after }));
 
-      const gained = Math.floor(after / CAPTURE_PER_CARD) - Math.floor(before / CAPTURE_PER_CARD);
+      const gained = goCaptureRewards(before, result.captured);
       if (gained > 0) {
         enqueueCards(turn, turn === 0 ? 1 : 0, gained, `提子奖励 · 对方执行`);
       }
@@ -122,22 +131,18 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
     setSurrenderedBy(surrenderId);
     setPhase('over');
 
-    const finalScore = scoreGoBoard(board);
-    const [a, b] = [finalScore.area[0], finalScore.area[1]];
-    let winnerId: number;
-    if (surrenderId !== null) {
-      winnerId = surrenderId === 0 ? 1 : 0;
-    } else {
-      winnerId = a === b ? (captures[0] >= captures[1] ? 0 : 1) : a > b ? 0 : 1;
-    }
+    const winnerId = goWinner(score, captures, surrenderId);
     const loserId = winnerId === 0 ? 1 : 0;
 
     enqueueCards(winnerId, loserId, WINNER_CARDS, '终局 · 胜方抽卡，败方执行');
   };
 
   const handlePass = () => {
-    if (!canAct) return;
-    if (phase !== 'play' || taskData) return;
+    if (blocked || phase !== 'play') return;
+    if (runtime) {
+      runtime.dispatch({ type: 'goPlay', kind: 'pass', seat: runtime.seat, runId, expectedMove: moveNumber });
+      return;
+    }
     const nextPasses = passes + 1;
     setPasses(nextPasses);
     setKoKey(null);
@@ -146,6 +151,15 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
       return;
     }
     setTurn(turn === 0 ? 1 : 0);
+  };
+
+  const handleSurrender = () => {
+    if (blocked || phase !== 'play') return;
+    if (runtime) {
+      runtime.dispatch({ type: 'goPlay', kind: 'surrender', seat: runtime.seat, runId, expectedMove: moveNumber });
+      return;
+    }
+    endGame(turn);
   };
 
   if (phase === 'roll') {
@@ -165,11 +179,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
   }
 
   if (phase === 'over') {
-    const winnerId = surrenderedBy !== null
-      ? (surrenderedBy === 0 ? 1 : 0)
-      : (score.area[0] === score.area[1]
-        ? ((captures[0] ?? 0) >= (captures[1] ?? 0) ? 0 : 1)
-        : (score.area[0] > score.area[1] ? 0 : 1));
+    const winnerId = goWinner(score, captures, surrenderedBy);
     const winner = players.find(player => player.id === winnerId);
 
     return (
@@ -202,7 +212,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-[11px] leading-relaxed text-gray-500">
-          {winner?.name} 拿下本局。抽卡队列里还剩 {cardQueue.length} 张，会依次弹出。
+          {winner?.name} 拿下本局。还有 {runtime ? pendingCards : cardQueue.length + Number(!!taskData)} 张奖励卡待处理。
         </div>
 
         <TaskCardModal
@@ -244,7 +254,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
               key={index}
               type="button"
               onClick={() => handlePlace(index)}
-              disabled={!!taskData}
+              disabled={blocked || value !== null}
               className="go-line relative flex aspect-square items-center justify-center border-l border-t"
             >
               {!owner && STAR_POINTS.has(index) && (
@@ -275,7 +285,8 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
       <div className="flex gap-3">
         <button
           type="button"
-          onClick={() => endGame(turn)}
+          onClick={handleSurrender}
+          disabled={blocked}
           className="ios-btn h-12 flex-1 rounded-full bg-[#3A3A3C] text-sm font-bold text-[#FF453A]"
         >
           认输
@@ -283,6 +294,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
         <button
           type="button"
           onClick={handlePass}
+          disabled={blocked}
           className="ios-btn h-12 flex-1 rounded-full bg-white/10 text-sm font-bold text-white"
         >
           停一手
@@ -305,7 +317,7 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
   );
 }
 
-export function GoModeView({ players, themes, currentTurn, onBack }: GoModeViewProps) {
+export function GoModeView({ players, themes, currentTurn, pendingCards = 0, onBack }: GoModeViewProps) {
   const [runId, setRunId] = useModeState('GoModeView.runId', 0);
 
   return (
@@ -326,7 +338,7 @@ export function GoModeView({ players, themes, currentTurn, onBack }: GoModeViewP
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4 no-scrollbar">
-          <GoGame key={runId} players={players} themes={themes} currentTurn={currentTurn} />
+          <GoGame key={runId} runId={runId} players={players} themes={themes} currentTurn={currentTurn} pendingCards={pendingCards} />
           <button type="button" onClick={() => setRunId(value => value + 1)} className="ios-btn mx-auto mt-6 flex items-center gap-2 rounded-full border border-white/10 px-5 py-2.5 text-xs font-bold text-gray-400">
             <RefreshCw size={13} />重新开局
           </button>

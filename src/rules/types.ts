@@ -2,7 +2,7 @@ import type { GameMode, TaskContinuation, TaskExecutionMode, TaskExecutor } from
 
 export type Seat = 0 | 1;
 export type Role = 'male' | 'female';
-export const ROOM_PROTOCOL_VERSION = 8;
+export const ROOM_PROTOCOL_VERSION = 9;
 
 export interface OnlineCard {
   task: string;
@@ -66,6 +66,8 @@ export interface RoomSnapshot {
 }
 
 export type RoomAction =
+  | ({ type: 'goPlay'; seat: Seat; runId: number; expectedMove: number } &
+      ({ kind: 'place'; index: number } | { kind: 'pass' | 'surrender' }))
   | { type: 'gridDrawLine'; seat: Seat; kind: 'h' | 'v'; index: number; expectedLines: number; runId: number }
   | { type: 'patch'; key: string; value: unknown; baseSeq: number; seat: Seat }
   /** 同一帧内的多个 patch 合并上报：一回合只发一条消息，避免限流丢包 */
