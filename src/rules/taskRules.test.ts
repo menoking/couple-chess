@@ -70,6 +70,34 @@ describe('task execution rules', () => {
     expect(rewardTaskTier(task, 0, 1)).toBe(3);
   });
 
+  it('uses reviewed wording for a flexible reward that was previously excluded', () => {
+    const original = { text: '对方闭上眼睛给你涂口红', executor: 'both' as const };
+    for (const winner of [0, 1]) {
+      const loser = 1 - winner;
+      const rule = resolveTaskRule(original, loser);
+      expect(rewardTaskTier(original, winner, loser)).toBe(1);
+      expect(formatTaskInstruction(original.text, rule)).toBe(
+        winner === 0 ? '女方闭上眼睛，为男方涂口红。' : '男方闭上眼睛，为女方涂口红。'
+      );
+    }
+  });
+
+  it('keeps a reviewed direction in both built-in packs and old online copies', () => {
+    const original = { text: '女方被男方公主抱在房内绕一圈', executor: 'female' as const };
+    const card = DEFAULT_THEMES.find(theme => theme.name === '情侣版')!.tasks[10];
+    for (const task of [original, card]) {
+      expect(rewardTaskTier(task, 0, 1)).toBe(3);
+      expect(rewardTaskTier(task, 1, 0)).toBe(0);
+      expect(formatTaskInstruction(task.text, resolveTaskRule(task, 0))).toBe('男方公主抱起女方，在房间里绕一圈。');
+    }
+  });
+
+  it('leaves unresolved reviewed cards out of both reward directions', () => {
+    const uncertain = { text: '让对方选择一个脸颊或额头亲吻', executor: 'both' as const };
+    expect(rewardTaskTier(uncertain, 0, 1)).toBe(3);
+    expect(rewardTaskTier(uncertain, 1, 0)).toBe(3);
+  });
+
   it('separates the perspective from the provider in requests to the other person', () => {
     const task = { text: '闭眼让对方按摩你的肩膀', executor: 'both' as const };
     const rule = resolveTaskRule(task, 0);

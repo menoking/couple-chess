@@ -1,4 +1,5 @@
 import type { TaskCard, TaskExecutionMode } from '../types';
+import { reviewedTaskOf } from '../data/reviewedTaskDirections';
 
 export interface ResolvedTaskRule {
   executionMode: TaskExecutionMode;
@@ -20,6 +21,8 @@ const NAMES = ['男方', '女方'] as const;
 
 function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' | 'uncertain' | 'perspective' {
   const body = taskBody(text);
+  const reviewed = reviewedTaskOf(body);
+  if (reviewed) return reviewed.direction === 'blocked' ? 'uncertain' : reviewed.direction;
   const provider = body.match(/^(?:男方|女方|男生|女生)(?:闭眼|蒙眼|先)?(?:接受|请|让|由)(男方|女方|男生|女生)/)?.[1];
   if (provider) return provider === '男方' || provider === '男生' ? 'male' : 'female';
   const actor = body.match(EXPLICIT_ACTOR)?.[1];
@@ -36,9 +39,10 @@ function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' |
 export function resolveTaskRule(task: Pick<TaskCard, 'text' | 'executor'>, fallbackExecutorPlayerId: number): ResolvedTaskRule {
   const direction = taskDirection(task.text);
   const fallback = fallbackExecutorPlayerId === 1 ? 1 : 0;
+  const flexible = reviewedTaskOf(taskBody(task.text))?.direction === 'perspective';
   const fixed = direction === 'male' ? 0 : direction === 'female' ? 1
-    : task.executor === 'male' ? 0 : task.executor === 'female' ? 1 : null;
-  if (direction === 'together' || (fixed === null && task.executor === 'together' && direction !== 'other')) {
+    : flexible ? null : task.executor === 'male' ? 0 : task.executor === 'female' ? 1 : null;
+  if (direction === 'together' || (!flexible && fixed === null && task.executor === 'together' && direction !== 'other')) {
     return { executionMode: 'together', executorPlayerId: fallback, targetPlayerId: null, label: '双方一起', perspectivePlayerId: fallback };
   }
   const executorPlayerId = fixed ?? fallback;
@@ -66,6 +70,7 @@ export function rewardTaskTier(
   const rule = resolveTaskRule(task, loserPlayerId);
   if (rule.executionMode === 'together') return 2;
   if (rule.executorPlayerId !== loserPlayerId || rule.targetPlayerId !== winnerPlayerId) return 3;
+  if (reviewedTaskOf(taskBody(task.text))?.direction === 'perspective') return 1;
   return direction === 'male' || direction === 'female' || task.executor === 'male' || task.executor === 'female' ? 0 : 1;
 }
 
@@ -93,7 +98,8 @@ export function createRewardFallbackTask(): TaskCard {
 }
 
 export function formatTaskInstruction(text: string, rule: ResolvedTaskRule): string {
-  const body = taskBody(text);
+  const original = taskBody(text);
+  const body = reviewedTaskOf(original)?.wording ?? original;
   if (rule.executionMode === 'together') {
     return /^(?:双方|两人|你们)/.test(body) ? body : `双方${body}`;
   }
@@ -137,6 +143,14 @@ export function describeStoredTaskRule(task: Pick<TaskCard, 'text' | 'executor'>
 
 export function normalizeLegacyTaskExecutor<T extends Pick<TaskCard, 'text' | 'executor'>>(task: T): T {
   const text = taskBody(task.text);
+  const reviewed = reviewedTaskOf(text);
+  if (reviewed && reviewed.direction !== 'blocked') {
+    return {
+      ...task,
+      text: reviewed.wording ?? text,
+      executor: reviewed.direction === 'perspective' ? 'both' : reviewed.direction
+    };
+  }
   return { ...task, text, executor: task.executor === 'both' && taskDirection(text) === 'together' ? 'together' : task.executor };
 }
 
