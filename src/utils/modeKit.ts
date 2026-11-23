@@ -129,6 +129,7 @@ export function createViewTaskEvent(input: {
     icon: 'sparkles',
     color: rule.executorPlayerId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
     task: formatTaskInstruction(entry.task.text, rule),
+    sourceTaskText: entry.task.text,
     taskSourceId: entry.themeId,
     themeName: entry.themeName,
     moveDelta: 0,

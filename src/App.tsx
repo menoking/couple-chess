@@ -404,7 +404,7 @@ function App() {
 
   const handleTaskTrigger = (data: TaskEventData) => {
     // 记下抽到的任务：飞行棋 / 扫雷 / Bingo / 卡牌共用同一份记录，之后不再重复
-    noteDrawnTask({ text: data.task, moveDelta: data.moveDelta });
+    noteDrawnTask({ text: data.sourceTaskText ?? data.task, moveDelta: data.moveDelta });
     setTaskData(data);
   };
 
@@ -423,7 +423,7 @@ function App() {
       return;
     }
 
-    noteDrawnTask({ text: task.task, moveDelta: task.moveDelta });
+    noteDrawnTask({ text: task.sourceTaskText ?? task.task, moveDelta: task.moveDelta });
     setTaskData(task);
   };
 

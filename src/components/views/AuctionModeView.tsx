@@ -4,7 +4,7 @@ import { ArrowLeft, Coins, Gavel, Lock, RefreshCw, User, UserRound } from 'lucid
 import { Player, TaskCard, TaskEventData, Theme } from '../../types';
 import { ThemeTaskEntry, buildTaskPool, competitionSafePool, createViewTaskEvent, seededShuffle, themeIntensity } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
-import { describeStoredTaskRule, formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
+import { describeStoredTaskRule, formatTaskInstruction, resolveTaskRule, taskBody } from '../../rules/taskRules';
 
 interface AuctionModeViewProps {
   players: Player[];
@@ -20,7 +20,7 @@ const BID_STEP = 5;
 
 function formatAuctionPreview(task: TaskCard): string {
   if (describeStoredTaskRule(task) === '随回合：当前执行方 → 另一方') {
-    return `【男方拍得：女方 → 男方；女方拍得：男方 → 女方】${task.text}`;
+    return taskBody(task.text);
   }
   return formatTaskInstruction(task.text, resolveTaskRule(task, 0));
 }

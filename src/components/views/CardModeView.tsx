@@ -69,7 +69,7 @@ export function CardModeView({
     setDrawnKeys(previous => {
       const next = new Set(freshRound ? [] : previous);
       // 用任务文本 + 步数做 key：联机的 taskSourceId 固定是 online，带它会导致灰卡匹配不上
-      next.add(taskKeyOf({ text: task.task, moveDelta: task.moveDelta }));
+      next.add(taskKeyOf({ text: task.sourceTaskText ?? task.task, moveDelta: task.moveDelta }));
       return next;
     });
     onTaskTrigger(task);

@@ -58,7 +58,7 @@ import {
   generateSpiralPath
 } from '../utils/gameLogic';
 import { completeBingoCellOnBoard, createMineTaskEvent, isThemeAllowed, resolveBoardTile } from '../rules/modeRules';
-import { formatTaskInstruction, resolveTaskRule } from '../rules/taskRules';
+import { displayQueuedTask, formatTaskInstruction, resolveTaskRule } from '../rules/taskRules';
 import { taskKeyOf } from '../utils/freshPick';
 import { loadRoomSnapshot, useSharedRoom } from './useSharedRoom';
 import type { TransportKind } from './transport';
@@ -108,6 +108,7 @@ function poolTask(
     icon: 'sparkles',
     color: rule.executorPlayerId === 0 ? 'text-[#0A84FF]' : 'text-[#FF375F]',
     task: formatTaskInstruction(card.task, rule),
+    sourceTaskText: card.task,
     taskSourceId: 'online',
     themeName: card.themeName,
     moveDelta: 0
@@ -336,7 +337,7 @@ function CardGateBody({
                 <div className="text-base font-bold text-white">{card.reason}</div>
                 <div className="mt-3 w-full">{assignmentStrip}</div>
                 <div className="mt-3 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 py-4 text-center text-base font-medium leading-relaxed text-white">
-                  {face?.task ?? '卡面加载中…'}
+                  {face ? displayQueuedTask(face.task, card.executorSeat, card.executionMode) : '卡面加载中…'}
                 </div>
                 {face && <div className="mt-2 text-[11px] text-gray-500">来自「{face.themeName}」</div>}
                 <div className="mt-3 text-[11px] font-bold text-gray-400">
@@ -620,7 +621,7 @@ export function OnlineStage(props: OnlineStageProps) {
   const enqueue = useCallback((task: TaskEventData | null | undefined) => {
     const found = extractCard(task ?? null);
     if (task?.task) {
-      const key = taskKeyOf({ text: task.task, moveDelta: task.moveDelta });
+      const key = taskKeyOf({ text: task.sourceTaskText ?? task.task, moveDelta: task.moveDelta });
       const latest = (shared.runtime.get('cards.drawn') as string[] | undefined) ?? drawnTasks;
       if (!latest.includes(key)) patch('cards.drawn', [...latest, key].slice(-300));
     }

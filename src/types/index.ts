@@ -187,6 +187,8 @@ export interface TaskEventData {
   icon: string;
   color: string;
   task: string;
+  /** 原题文字，用于抽卡去重，独立于面向当前玩家的正文。 */
+  sourceTaskText?: string;
   taskSourceId: string;
   /** 卡面来源的中文主题名；不再拿 taskSourceId（主题 id）当来源展示 */
   themeName?: string;

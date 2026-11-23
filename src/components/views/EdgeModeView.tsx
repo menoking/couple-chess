@@ -2,10 +2,10 @@ import { useDeckSeed, useModeAuthority, useModeState, useMyTurn } from '../../ru
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Check, Flame, RefreshCw, Timer, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
-import { buildTaskPool, seededShuffle } from '../../utils/modeKit';
+import { buildTaskPool, pickRewardTask, seededShuffle } from '../../utils/modeKit';
 import { pickFresh, taskKeyOf } from '../../utils/freshPick';
 import { EDGE_LADDER } from '../../data/spicyContent';
-import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
+import { formatTaskInstruction, resolveTaskRule, rewardCandidates } from '../../rules/taskRules';
 
 interface EdgeModeViewProps {
   players: Player[];
@@ -80,14 +80,12 @@ function EdgeGame({ players, themes }: { players: Player[]; themes: Theme[] }) {
   };
 
   const rollResultTask = (loserId: number) => {
-    const picked = pickFresh(pool, usedResultTasks, entry => taskKeyOf(entry.task));
-    if (!picked) {
-      setResultTask(null);
-      return;
-    }
-    setUsedResultTasks(picked.used);
-    const rule = resolveTaskRule(picked.item.task, loserId);
-    setResultTask({ text: formatTaskInstruction(picked.item.task.text, rule), themeName: picked.item.themeName });
+    const compatible = rewardCandidates(pool, entry => entry.task, 1 - loserId, loserId);
+    const picked = pickFresh(compatible, usedResultTasks, entry => taskKeyOf(entry.task));
+    if (picked) setUsedResultTasks(picked.used);
+    const entry = picked?.item ?? pickRewardTask(pool, 1 - loserId, loserId);
+    const rule = resolveTaskRule(entry.task, loserId);
+    setResultTask({ text: formatTaskInstruction(entry.task.text, rule), themeName: entry.themeName });
   };
 
   const holdOn = () => {

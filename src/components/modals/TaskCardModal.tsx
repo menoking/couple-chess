@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { TaskEventData, Player } from '../../types';
 import { ArrowRight, Flame, Heart, Lock, HandshakeIcon, MessageCircleQuestion, Sparkles, X } from 'lucide-react';
 import { getTaskCardIdentity } from './taskCardIdentity';
+import { displayQueuedTask } from '../../rules/taskRules';
 
 interface TaskCardModalProps {
   isOpen: boolean;
@@ -211,7 +212,7 @@ export function TaskCardModal({
 
               <div className="w-full bg-[#2C2C2E] rounded-xl p-6 min-h-[120px] flex items-center justify-center border border-white/5 mb-6">
                 <p className="text-lg font-medium text-white text-center leading-relaxed">
-                  {visibleTaskData.task}
+                  {displayQueuedTask(visibleTaskData.task, visibleTaskData.executorPlayerId, visibleTaskData.executionMode)}
                 </p>
               </div>
             </div>

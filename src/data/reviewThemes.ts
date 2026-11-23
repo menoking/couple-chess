@@ -46,7 +46,7 @@ export const REVIEW_THEME_DATA = [
         "moveDelta": 0
       },
       {
-        "text": "让对方用手掌保持固定压力，由被触碰方用数字1—3调整",
+        "text": "执行方用手掌轻按接受方的肩膀，保持均匀的力度。接受方用数字 1 至 3 指示想要的力度",
         "executor": "both",
         "moveDelta": 0
       },
@@ -139,7 +139,7 @@ export const REVIEW_THEME_DATA = [
         "moveDelta": 0
       },
       {
-        "text": "贴耳说出一个具体的触碰地点，但暂时只用眼神确认",
+        "text": "执行方贴近接受方耳边，说出一个想触碰的位置。接受方先用眼神回应，暂时不进行触碰",
         "executor": "both",
         "moveDelta": 0
       },
@@ -272,7 +272,7 @@ export const REVIEW_THEME_DATA = [
         "moveDelta": 0
       },
       {
-        "text": "让对方用慢、中、快三种节奏抚摸手臂和大腿",
+        "text": "执行方用慢、中、快三种节奏依次抚摸接受方的手臂和大腿",
         "executor": "both",
         "moveDelta": 0
       },
@@ -380,7 +380,7 @@ export const REVIEW_THEME_DATA = [
         "moveDelta": 0
       },
       {
-        "text": "闭眼让对方触碰手臂和背部，猜出每次触碰的位置",
+        "text": "接受方闭眼，执行方轻触接受方的手臂和背部。每次触碰后，接受方猜测被碰到的位置",
         "executor": "both",
         "moveDelta": 0
       },
@@ -656,7 +656,7 @@ export const REVIEW_THEME_DATA = [
         "moveDelta": 0
       },
       {
-        "text": "蒙眼让对方用手背描绘肩胛与手臂2分钟",
+        "text": "接受方蒙眼，执行方用手背沿接受方的肩胛与手臂轻轻描画两分钟",
         "executor": "both",
         "moveDelta": 0
       },

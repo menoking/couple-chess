@@ -6,7 +6,6 @@ import { cardForReward } from './cards';
 import { chooseRandomTheme } from './modeRules';
 import { competitionSafePool, pickRewardTask, type ThemeTaskEntry } from '../utils/modeKit';
 import {
-  describeStoredTaskRule,
   formatTaskInstruction,
   resolveTaskRule,
   rewardTaskTier,
@@ -22,12 +21,12 @@ describe('task execution rules', () => {
   ])('resolves $executor into one exact card relation', ({ executor, fallback, label, actor, target }) => {
     const rule = resolveTaskRule({ text: '完成指定任务', executor }, fallback);
     expect(rule).toMatchObject({ label, executorPlayerId: actor, targetPlayerId: target });
-    expect(formatTaskInstruction('完成指定任务', rule)).toBe(`【${label}】完成指定任务`);
+    expect(formatTaskInstruction('完成指定任务', rule)).toBe(`${target === null ? '双方' : actor === 0 ? '男方' : '女方'}完成指定任务`);
   });
 
   it('does not duplicate an assignment prefix when a saved card is rendered again', () => {
     const rule = resolveTaskRule({ text: '任务', executor: 'male' }, 1);
-    expect(formatTaskInstruction('【女方 → 男方】任务', rule)).toBe('【男方 → 女方】任务');
+    expect(formatTaskInstruction('【女方 → 男方】任务', rule)).toBe('男方任务');
   });
 
   it('audits every built-in pack and card into a clear displayed rule', () => {
@@ -40,14 +39,10 @@ describe('task execution rules', () => {
       expect(themeTaskRuleLabels(theme.tasks).length, theme.name).toBeGreaterThan(0);
       for (const task of theme.tasks) {
         expect(['male', 'female', 'both', 'together']).toContain(task.executor);
-        // 内置旧题库中有共同语义的 both 已在加载时升级为 together。
-        if (task.executor === 'both') {
-          expect(describeStoredTaskRule(task)).toBe('随回合：当前执行方 → 另一方');
-        }
         for (const fallback of [0, 1]) {
           const rule = resolveTaskRule(task, fallback);
           expect(['男方 → 女方', '女方 → 男方', '双方一起']).toContain(rule.label);
-          expect(formatTaskInstruction(task.text, rule)).toMatch(/^【(?:男方 → 女方|女方 → 男方|双方一起)】\S/);
+          expect(formatTaskInstruction(task.text, rule)).not.toMatch(/^【(?:男方|女方|双方一起)/);
           if (rule.executionMode === 'together') {
             expect(rule.targetPlayerId).toBeNull();
           } else {
@@ -56,6 +51,31 @@ describe('task execution rules', () => {
         }
       }
     }
+  });
+
+  it.each([0, 1] as const)('spells out both actions in the ear-whisper card for winner %i', winner => {
+    const task = DEFAULT_THEMES.flatMap(theme => theme.tasks).find(card => card.text.startsWith('执行方贴近接受方耳边'))!;
+    const loser = 1 - winner;
+    const rule = resolveTaskRule(task, loser);
+    const names = ['男方', '女方'];
+    expect(rule).toMatchObject({ executorPlayerId: loser, targetPlayerId: winner });
+    expect(formatTaskInstruction(task.text, rule)).toBe(
+      `${names[loser]}贴近${names[winner]}耳边，说出一个想触碰的位置。${names[winner]}先用眼神回应，暂时不进行触碰`
+    );
+  });
+
+  it('follows the provider in the sentence even when a legacy tag conflicts', () => {
+    const task = { text: '女方接受男方的肩部按摩', executor: 'female' as const };
+    expect(rewardTaskTier(task, 1, 0)).toBe(0);
+    expect(rewardTaskTier(task, 0, 1)).toBe(3);
+  });
+
+  it('separates the perspective from the provider in requests to the other person', () => {
+    const task = { text: '闭眼让对方按摩你的肩膀', executor: 'both' as const };
+    const rule = resolveTaskRule(task, 0);
+    expect(rule).toMatchObject({ executorPlayerId: 0, targetPlayerId: 1, perspectivePlayerId: 1 });
+    expect(formatTaskInstruction(task.text, rule)).toBe('女方闭眼让男方按摩女方的肩膀');
+    expect(rewardTaskTier({ text: '先聊一分钟，再由对方决定谁来做', executor: 'both' }, 1, 0)).toBe(3);
   });
 
   it('preserves executor metadata when selected packs become an online pool', () => {

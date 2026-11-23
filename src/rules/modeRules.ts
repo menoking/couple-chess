@@ -96,6 +96,7 @@ export function buildTaskEvent(input: {
     icon: input.icon,
     color: input.color,
     task: formatTaskInstruction(input.task.text, rule),
+    sourceTaskText: input.task.text,
     taskSourceId: input.taskSourceId,
     moveDelta: input.task.moveDelta
   };
