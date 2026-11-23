@@ -2,7 +2,7 @@ import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, CircleDot, Flag, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
-import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
+import { buildTaskPool, createViewTaskEvent, pickRewardTask } from '../../utils/modeKit';
 import { GoBoard, createGoBoard, playMove, scoreGoBoard } from '../../utils/go';
 import { TaskCardModal } from '../modals/TaskCardModal';
 import { DiceRollOff } from '../DiceRollOff';
@@ -62,9 +62,8 @@ function GoGame({ players, themes, currentTurn }: { players: Player[]; themes: T
     const token = next.token ?? `legacy:${cardQueue.length}:${next.drawerId}:${next.executorId}:${next.reason}`;
     if (consumedCard.current === token) return;
     consumedCard.current = token;
-    const entry = pickRandom(pool);
+    const entry = pickRewardTask(pool, next.drawerId, next.executorId);
     setCardQueue(rest);
-    if (!entry) return;
     setTaskData(
       createViewTaskEvent({
         entry,

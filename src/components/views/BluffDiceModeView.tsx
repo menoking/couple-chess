@@ -2,7 +2,7 @@ import { useModeRuntime, useModeState, useMyTurn } from '../../rules/ModeRuntime
 import { useEffect, useMemo, useRef } from 'react';
 import { ArrowLeft, Dices, Eye, RefreshCw, ShieldQuestion, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
-import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
+import { buildTaskPool, createViewTaskEvent, pickRewardTask } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface BluffDiceModeViewProps {
@@ -138,8 +138,7 @@ function BluffDiceGame({
   useEffect(() => {
     if (!runtime?.authority || !reveal || issuedRound.current === round) return;
     issuedRound.current = round;
-    const entry = pickRandom(pool);
-    if (!entry) return;
+    const entry = pickRewardTask(pool, reveal.winnerId, reveal.loserId);
     setTaskData(createViewTaskEvent({
       entry,
       title: '吹牛失败 · 惩罚卡',
@@ -193,18 +192,15 @@ function BluffDiceGame({
     setReveal({ count, bidderWins, loserId, winnerId, dice: [localDice[0], localDice[1]] });
     setPhase('reveal');
 
-    const entry = pickRandom(pool);
-    if (entry) {
-      setTaskData(
-        createViewTaskEvent({
-          entry,
-          title: '吹牛失败 · 惩罚卡',
-          // 胜方抽卡、败方执行：不传 initiator 会默认成败方自己抽
-          executorPlayerId: loserId,
-          initiatorPlayerId: winnerId
-        })
-      );
-    }
+    const entry = pickRewardTask(pool, winnerId, loserId);
+    setTaskData(
+      createViewTaskEvent({
+        entry,
+        title: '吹牛失败 · 惩罚卡',
+        executorPlayerId: loserId,
+        initiatorPlayerId: winnerId
+      })
+    );
   };
 
   // ---------- 传手机：私密查看 ----------

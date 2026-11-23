@@ -2,7 +2,7 @@ import { useDeckSeed, useModeRuntime, useModeState } from '../../rules/ModeRunti
 import { useEffect, useRef, useState } from 'react';
 import { ArrowLeft, Coins, Gavel, Lock, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskCard, TaskEventData, Theme } from '../../types';
-import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, seededShuffle, themeIntensity } from '../../utils/modeKit';
+import { ThemeTaskEntry, buildTaskPool, competitionSafePool, createViewTaskEvent, seededShuffle, themeIntensity } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 import { describeStoredTaskRule, formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
@@ -49,7 +49,7 @@ function AuctionGame({
   // 同一房间 = 同一份拍品顺序，两端算出来一致，不用等同步
   const deckSeed = useDeckSeed();
   const [queue] = useModeState<ThemeTaskEntry[]>('AuctionModeView.queue', () =>
-    seededShuffle(buildTaskPool(players, themes) ?? [], `${deckSeed}:auction`).slice(0, TOTAL_ROUNDS)
+    seededShuffle(competitionSafePool(buildTaskPool(players, themes) ?? []), `${deckSeed}:auction`).slice(0, TOTAL_ROUNDS)
   );
   const [round, setRound] = useModeState('AuctionModeView.round', 0);
   const [coins, setCoins] = useModeState<Record<number, number>>('AuctionModeView.coins', {

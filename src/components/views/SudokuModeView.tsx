@@ -2,7 +2,7 @@ import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useMemo } from 'react';
 import { ArrowLeft, Check, Grid2x2, RefreshCw, Sparkles, User, UserRound, X } from 'lucide-react';
 import { Player, Theme } from '../../types';
-import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
+import { buildTaskPool, createViewTaskEvent, pickRewardTask } from '../../utils/modeKit';
 import { generateSudoku, SudokuPuzzle } from '../../utils/sudoku';
 import { TaskCardModal } from '../modals/TaskCardModal';
 import { DiceRollOff } from '../DiceRollOff';
@@ -90,21 +90,17 @@ function SudokuGame({
       setToast(null);
       setSelected(null);
 
-      const entry = pickRandom(pool);
-      if (entry) {
-        const opponentId = byId === 0 ? 1 : 0;
-        setTaskData(
-          createViewTaskEvent({
-            entry,
-            title: '解格成功 · 对方执行',
-            executorPlayerId: opponentId,
-            initiatorPlayerId: byId,
-            continuation: { kind: 'sudoku', finish: blanksLeft === 1 }
-          })
-        );
-      } else {
-        setTurn(turn === 0 ? 1 : 0);
-      }
+      const opponentId = byId === 0 ? 1 : 0;
+      const entry = pickRewardTask(pool, byId, opponentId);
+      setTaskData(
+        createViewTaskEvent({
+          entry,
+          title: '解格成功 · 对方执行',
+          executorPlayerId: opponentId,
+          initiatorPlayerId: byId,
+          continuation: { kind: 'sudoku', finish: blanksLeft === 1 }
+        })
+      );
       return;
     }
 

@@ -1,7 +1,7 @@
 import type { GameMode, MineTile } from '../types';
 import { MINE_TASK_PROGRESS_TARGET, revealMineBoard, toggleMineFlag } from '../utils/gameLogic';
 import type { RoomAction, RoomSnapshot, Role, Seat } from './types';
-import { cardFor, enqueueCard, extractCard, projectCards, reduceCard } from './cards';
+import { cardForReward, enqueueCard, extractCard, projectCards, reduceCard } from './cards';
 import { applyGridLine, type GridLineOwner } from './gridChess';
 import { formatTaskInstruction, resolveTaskRule } from './taskRules';
 import { bothLocked, mergePools } from './lobby';
@@ -224,7 +224,8 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
       };
       // 一次落线及它产生的所有奖励卡原子提交；不再由两端 effect 消费中间队列。
       for (let reward = 0; reward < result.newlyClosed.length; reward += 1) {
-        const card = cardFor(next.cardPool, next.cardSeq + 1);
+        const loserSeat: Seat = action.seat === 0 ? 1 : 0;
+        const card = cardForReward(next.cardPool, next.cardSeq + 1, action.seat, loserSeat);
         const rule = resolveTaskRule({ text: card.task, executor: card.executor ?? 'both' }, 1 - action.seat);
         next = enqueueCard(next, {
           drawerSeat: action.seat,

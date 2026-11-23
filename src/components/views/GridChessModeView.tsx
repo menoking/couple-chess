@@ -3,7 +3,7 @@ import { useModeRuntime, useModeState, useMyTurn } from '../../rules/ModeRuntime
 
 import { ArrowLeft, CircleDot, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
-import { buildTaskPool, createViewTaskEvent, pickRandom } from '../../utils/modeKit';
+import { buildTaskPool, createViewTaskEvent, pickRewardTask } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 import { DiceRollOff } from '../DiceRollOff';
 import {
@@ -70,9 +70,8 @@ function DotsAndBoxesGame({
     if (consumedCard.current === token) return;
     consumedCard.current = token;
     const pool = buildTaskPool(players, themes) ?? [];
-    const entry = pickRandom(pool);
+    const entry = pickRewardTask(pool, next.drawerId, next.executorId);
     setCardQueue(rest);
-    if (!entry) return;
     setTaskData(
       createViewTaskEvent({
         entry,

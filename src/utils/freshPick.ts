@@ -1,3 +1,5 @@
+import { taskBody } from '../rules/taskRules';
+
 /**
  * 「不可重复抽取」的通用实现。
  *
@@ -23,7 +25,7 @@ export interface FreshPick<T> {
 
 /** 任务卡 key：文本 + 步数。同文本不同步数视为两张不同的卡。 */
 export function taskKeyOf(task: { text: string; moveDelta?: number }): string {
-  return `${task.text}:${task.moveDelta ?? 0}`;
+  return `${taskBody(task.text)}:${task.moveDelta ?? 0}`;
 }
 
 export function pickFresh<T>(

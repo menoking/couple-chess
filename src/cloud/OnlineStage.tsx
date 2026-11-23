@@ -42,7 +42,7 @@ import { BluffDiceModeView } from '../components/views/BluffDiceModeView';
 import { JungleModeView } from '../components/views/JungleModeView';
 
 import type { RoomAction, RoomSnapshot, Role, Seat } from '../rules/types';
-import { cardFor, extractCard } from '../rules/cards';
+import { cardForReward, extractCard } from '../rules/cards';
 import { buildMergedTheme, buildOnlinePlayers, MERGED_THEME_ID, PLAYER_NAME } from '../rules/identity';
 import { mergePools, picksToPool } from '../rules/lobby';
 import { ALL_THEME_MODES, MODE_LABEL, MODE_REGISTRY, THEME_FREE_MODES, themeModeOfGame, turnKeyOfMode } from '../rules/registry';
@@ -59,6 +59,7 @@ import {
 } from '../utils/gameLogic';
 import { completeBingoCellOnBoard, createMineTaskEvent, isThemeAllowed, resolveBoardTile } from '../rules/modeRules';
 import { formatTaskInstruction, resolveTaskRule } from '../rules/taskRules';
+import { taskKeyOf } from '../utils/freshPick';
 import { loadRoomSnapshot, useSharedRoom } from './useSharedRoom';
 import type { TransportKind } from './transport';
 
@@ -88,18 +89,17 @@ const AUDIENCE_LABEL: Record<Theme['audience'], string> = {
 
 function poolTask(
   snap: RoomSnapshot,
-  executorSeat: Seat,
+  winnerSeat: Seat,
+  loserSeat: Seat,
   reason = '抽到一张任务卡',
   excludeKeys: readonly string[] = []
 ): TaskEventData {
   // 本局抽过的卡不再重复下发；整副抽空后自动重新洗牌
-  const remaining = snap.cardPool.filter(card => !excludeKeys.includes(`${card.task}:0`));
-  const pool = remaining.length > 0 ? remaining : snap.cardPool;
-  const card = cardFor(pool, snap.cardSeq + 1);
-  const rule = resolveTaskRule({ text: card.task, executor: card.executor ?? 'both' }, executorSeat);
+  const card = cardForReward(snap.cardPool, snap.cardSeq + 1, winnerSeat, loserSeat, excludeKeys);
+  const rule = resolveTaskRule({ text: card.task, executor: card.executor ?? 'both' }, loserSeat);
   return {
     type: 'card',
-    initiatorPlayerId: other(executorSeat),
+    initiatorPlayerId: winnerSeat,
     executorPlayerId: rule.executorPlayerId,
     targetPlayerId: rule.targetPlayerId,
     executionMode: rule.executionMode,
@@ -620,7 +620,7 @@ export function OnlineStage(props: OnlineStageProps) {
   const enqueue = useCallback((task: TaskEventData | null | undefined) => {
     const found = extractCard(task ?? null);
     if (task?.task) {
-      const key = `${task.task}:${task.moveDelta ?? 0}`;
+      const key = taskKeyOf({ text: task.task, moveDelta: task.moveDelta });
       const latest = (shared.runtime.get('cards.drawn') as string[] | undefined) ?? drawnTasks;
       if (!latest.includes(key)) patch('cards.drawn', [...latest, key].slice(-300));
     }
@@ -887,7 +887,7 @@ export function OnlineStage(props: OnlineStageProps) {
   const endTurn = () => dispatch({ type: 'endTurn', seat: mySeat, expectedTurn: snap.turn });
   const onBack = onExit;
   const onDrawTask = (excludeKeys: readonly string[] = []) =>
-    poolTask({ ...snap, cardPool: resolvedCardPool }, other(mySeat), '抽到一张任务卡', [...drawnTasks, ...excludeKeys]);
+    poolTask({ ...snap, cardPool: resolvedCardPool }, mySeat, other(mySeat), '抽到一张任务卡', [...drawnTasks, ...excludeKeys]);
   const onTaskTrigger = (task: TaskEventData) => enqueue(task);
   // 扫雷炸弹：事件由房主写进共享状态，两端同时看到，且只有对方能指定。
   const onBombTrigger = () => undefined;

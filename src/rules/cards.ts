@@ -3,6 +3,8 @@ import type { OnlineCard, PendingCard, RoomAction, RoomSnapshot, Seat } from './
 import { applyMoveDelta } from './modeRules';
 import { DEFAULT_THEMES } from '../data/defaultThemes';
 import { seatScopedKey } from './registry';
+import { createRewardFallbackTask, formatTaskInstruction, resolveTaskRule, rewardCandidates } from './taskRules';
+import { taskKeyOf } from '../utils/freshPick';
 
 /** 内置主题 id → 中文名，用于把旧数据里的 `mine_dare_default` 这类 id 翻成可读名称。 */
 const DEFAULT_THEME_NAME: Record<string, string> = Object.fromEntries(
@@ -61,6 +63,18 @@ export function cardFor(pool: OnlineCard[], id: number): OnlineCard {
   // 哈希取模在小池子里很容易连续撞到同一张（表现为「翻来覆去都是这条任务」）。
   const index = ((Math.max(0, id - 1) % list.length) + list.length) % list.length;
   return list[index];
+}
+
+/** 权威端按胜负方向选卡，确保固定男女方向的卡不会反向惩罚胜者。 */
+export function cardForReward(pool: OnlineCard[], id: number, winnerSeat: Seat, loserSeat: Seat, used: readonly string[] = []): OnlineCard {
+  const source = rewardCandidates(pool, card => ({ text: card.task, executor: card.executor ?? 'both' }), winnerSeat, loserSeat);
+  const usedKeys = new Set(used);
+  const fresh = source.filter(card => !usedKeys.has(taskKeyOf({ text: card.task })));
+  const selected = source.length > 0
+    ? cardFor(fresh.length > 0 ? fresh : source, id)
+    : { task: createRewardFallbackTask().text, themeName: '胜者奖励', executor: 'both' as const };
+  const rule = resolveTaskRule({ text: selected.task, executor: selected.executor ?? 'both' }, loserSeat);
+  return { ...selected, task: formatTaskInstruction(selected.task, rule) };
 }
 
 /** 入队时只记录归属，不生成卡面；胜方点「抽卡」后才取卡。 */

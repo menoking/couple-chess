@@ -1,5 +1,5 @@
 import { Player, TaskCard, TaskEventData, Theme } from '../types';
-import { formatTaskInstruction, resolveTaskRule } from '../rules/taskRules';
+import { createRewardFallbackTask, formatTaskInstruction, resolveTaskRule, rewardCandidates, rewardTaskTier } from '../rules/taskRules';
 
 export function shuffle<T>(items: T[]): T[] {
   const result = [...items];
@@ -52,6 +52,36 @@ export interface ThemeTaskEntry {
   themeId: string;
   themeName: string;
   playerId: number;
+}
+
+/**
+ * 从玩法卡池中抽取竞技奖励：先选“败方 → 胜方”，没有时选双方共同卡；
+ * 固定为反方向的卡不会进入本次候选。
+ */
+export function pickRewardTask(
+  entries: ThemeTaskEntry[],
+  winnerPlayerId: number,
+  loserPlayerId: number
+): ThemeTaskEntry {
+  return pickRandom(rewardCandidates(entries, entry => entry.task, winnerPlayerId, loserPlayerId)) ?? {
+    task: createRewardFallbackTask(),
+    themeId: '__winner_reward__',
+    themeName: '胜者奖励',
+    playerId: loserPlayerId
+  };
+}
+
+/** 胜负揭晓前就固定卡面的玩法，只能预置对任一胜方都安全的随回合卡或共同卡。 */
+export function competitionSafePool(entries: ThemeTaskEntry[]): ThemeTaskEntry[] {
+  const safe = entries.filter(entry =>
+    rewardTaskTier(entry.task, 0, 1) < 3 && rewardTaskTier(entry.task, 1, 0) < 3
+  );
+  return safe.length > 0 ? safe : [{
+    task: createRewardFallbackTask(),
+    themeId: '__winner_reward__',
+    themeName: '胜者奖励',
+    playerId: 1
+  }];
 }
 
 /** 收集双方所选主题下的全部任务（带来源信息），供各玩法抽取使用。 */

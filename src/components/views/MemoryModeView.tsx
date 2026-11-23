@@ -2,7 +2,8 @@ import { useDeckSeed, useModeRuntime, useModeState, useMyTurn } from '../../rule
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Brain, Check, Crown, Flame, Gift, Heart, RefreshCw, Star, Sun, User, UserRound, Zap } from 'lucide-react';
 import { Player, TaskCard, TaskEventData, Theme } from '../../types';
-import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, seededShuffle } from '../../utils/modeKit';
+import { ThemeTaskEntry, buildTaskPool, createViewTaskEvent, pickRewardTask, seededShuffle } from '../../utils/modeKit';
+import { rewardTaskTier } from '../../rules/taskRules';
 import { TaskCardModal } from '../modals/TaskCardModal';
 
 interface MemoryModeViewProps {
@@ -105,6 +106,12 @@ function MemoryGame({
     if (board[first].pairId === board[second].pairId) {
       const matched = board[first];
       const byId = activePlayer?.id ?? 0;
+      const opponentId = byId === 0 ? 1 : 0;
+      const matchedEntry = { task: matched.task, themeId: matched.themeId, themeName: matched.themeName, playerId: matched.ownerId };
+      const reward = pickRewardTask(pool, byId, opponentId);
+      const entry = rewardTaskTier(matched.task, byId, opponentId) <= rewardTaskTier(reward.task, byId, opponentId)
+        ? matchedEntry
+        : reward;
       setBoard(prev =>
         prev.map((item, i) =>
           i === first || i === second ? { ...item, matchedBy: byId } : item
@@ -114,15 +121,10 @@ function MemoryGame({
       setFlips([]);
       // 标准任务事件会进入联机公共卡片队列；确认后再原子换回合，避免临时遮罩被快照覆盖。
       setMatchTask(createViewTaskEvent({
-        entry: {
-          task: matched.task,
-          themeId: matched.themeId,
-          themeName: matched.themeName,
-          playerId: matched.ownerId
-        },
+        entry,
         title: '记忆配对任务',
         initiatorPlayerId: byId,
-        executorPlayerId: byId === 0 ? 1 : 0,
+        executorPlayerId: opponentId,
         continuation: { kind: 'endTurn' }
       }));
       // 联机最终一对也要先把完成态落盘；CardGate 仍在外层显示，确认后按 continuation 换回合。

@@ -9,7 +9,7 @@ import type {
 } from '../types';
 import { calculateNewPosition, type BingoDeck } from '../utils/gameLogic';
 import { taskKeyOf } from '../utils/freshPick';
-import { formatTaskInstruction, resolveTaskRule } from './taskRules';
+import { createRewardFallbackTask, formatTaskInstruction, resolveTaskRule, rewardCandidates } from './taskRules';
 
 /**
  * 同屏与联机共用的玩法规则纯函数。
@@ -43,6 +43,17 @@ export function chooseRandomTask(theme: Theme | undefined, used?: readonly strin
     : theme.tasks;
   const pool = remaining.length > 0 ? remaining : theme.tasks;
   return pool[Math.floor(Math.random() * pool.length)];
+}
+
+export function chooseRewardTask(
+  theme: Theme | undefined,
+  winnerPlayerId: number,
+  loserPlayerId: number,
+  used?: readonly string[]
+): TaskCard {
+  if (!theme) return createRewardFallbackTask();
+  return chooseRandomTask({ ...theme, tasks: rewardCandidates(theme.tasks, task => task, winnerPlayerId, loserPlayerId) }, used)
+    ?? createRewardFallbackTask();
 }
 
 export function chooseRandomTheme(
@@ -123,14 +134,16 @@ export function createMineTaskEvent(
     choice === 'theme' && player.themeId
       ? themes.find(t => t.id === player.themeId && isThemeAllowed(t, player.role, 'mineTheme')) || null
       : chooseRandomTheme(themes, player.role, mode);
-  const task = chooseRandomTask(theme || undefined, usedTasks);
-  if (!theme || !task) return null;
+  if (!theme) return null;
+  const winnerId = selector?.id ?? player.id;
+  const loserId = selector ? player.id : (player.id === 0 ? 1 : 0);
+  const task = chooseRewardTask(theme, winnerId, loserId, usedTasks);
 
   if (choice === 'truth') {
     return buildTaskEvent({
       type: 'mineTruth',
-      initiatorPlayerId: player.id,
-      fallbackExecutorPlayerId: player.id,
+      initiatorPlayerId: winnerId,
+      fallbackExecutorPlayerId: loserId,
       title: '真心话',
       subtitle: selectedPrefix,
       icon: 'message-question',
@@ -143,8 +156,8 @@ export function createMineTaskEvent(
   if (choice === 'dare') {
     return buildTaskEvent({
       type: 'mineDare',
-      initiatorPlayerId: player.id,
-      fallbackExecutorPlayerId: player.id,
+      initiatorPlayerId: winnerId,
+      fallbackExecutorPlayerId: loserId,
       title: '大冒险',
       subtitle: selectedPrefix,
       icon: 'flame',
@@ -156,8 +169,8 @@ export function createMineTaskEvent(
 
   return buildTaskEvent({
     type: 'mineTheme',
-    initiatorPlayerId: player.id,
-    fallbackExecutorPlayerId: player.id,
+    initiatorPlayerId: winnerId,
+    fallbackExecutorPlayerId: loserId,
     title: '主题任务',
     subtitle: `${selectedPrefix}，任务来自「${theme.name}」`,
     icon: 'sparkles',
@@ -186,7 +199,7 @@ export function resolveBoardTile(input: {
 
   if (landingStep !== 0 && landingStep === opponent.step) {
     const theme = themes.find(t => t.id === activePlayer.themeId);
-    const task = chooseRandomTask(theme, usedTasks);
+    const task = chooseRewardTask(theme, activePlayer.id, opponent.id, usedTasks);
     if (!task) return null;
     return buildTaskEvent({
       type: 'collision',
@@ -204,7 +217,7 @@ export function resolveBoardTile(input: {
   const tileType = boardMap[landingStep];
   if (tileType === 'lucky') {
     const theme = themes.find(t => t.id === activePlayer.themeId);
-    const task = chooseRandomTask(theme, usedTasks);
+    const task = chooseRewardTask(theme, activePlayer.id, opponent.id, usedTasks);
     if (!task) return null;
     return buildTaskEvent({
       type: 'lucky',
@@ -221,7 +234,7 @@ export function resolveBoardTile(input: {
 
   if (tileType === 'trap') {
     const theme = themes.find(t => t.id === opponent.themeId);
-    const task = chooseRandomTask(theme, usedTasks);
+    const task = chooseRewardTask(theme, opponent.id, activePlayer.id, usedTasks);
     if (!task) return null;
     return buildTaskEvent({
       type: 'trap',

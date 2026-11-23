@@ -1,8 +1,8 @@
-import { useDeckSeed, useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
 import { useEffect, useMemo } from 'react';
 import { ArrowLeft, Check, Grid3x3, PackageOpen, Sparkles, Trophy, User, UserRound } from 'lucide-react';
 import { BingoBoard, BingoCellResult, Player, TaskCard, TaskEventData, Theme } from '../../types';
-import { ThemeTaskEntry, buildTaskPool, seededShuffle } from '../../utils/modeKit';
+import { buildTaskPool, pickRewardTask } from '../../utils/modeKit';
 import { TaskCardModal } from '../modals/TaskCardModal';
 import { formatTaskInstruction, resolveTaskRule } from '../../rules/taskRules';
 
@@ -55,16 +55,11 @@ export function BingoModeView({
   }>>('BingoModeView.rewardQueue', []);
   const [finished, setFinished] = useModeState('BingoModeView.finished', false);
 
-  // 有限卡包：只有赢下回合（连成一线）才能从里面抽一张。
-  // 必须进共享状态：用 useMemo 的话，每次快照更新（players 重建）都会重新洗牌，
-  // 两端的卡包还会各不相同。
-  const deckSeed = useDeckSeed();
-  const [cardPack] = useModeState<ThemeTaskEntry[]>('BingoModeView.cardPack', () => {
-    const pool = buildTaskPool(players, themes) ?? [];
-    return seededShuffle(pool, `${deckSeed}:bingo`).slice(0, CARD_PACK_SIZE);
-  });
+  const cardPool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
+  const [drawnTexts, setDrawnTexts] = useModeState<string[]>('BingoModeView.cardPackUsed', []);
   const [drawnCount, setDrawnCount] = useModeState('BingoModeView.drawnCount', 0);
-  const packLeft = cardPack.length - drawnCount;
+  const packSize = Math.min(CARD_PACK_SIZE, cardPool.length);
+  const packLeft = Math.max(0, packSize - drawnCount);
 
   const totalCells = bingoBoard.cells.length;
   const completedCount = bingoBoard.cells.filter(cell => cell.completedBy !== null).length;
@@ -117,20 +112,23 @@ export function BingoModeView({
       return;
     }
 
-    if (result.boardComplete) {
-      setFinished(true);
-      return;
-    }
+    if (result.boardComplete) setFinished(true);
 
     // 只有赢下回合（连成一线）才抽卡：连 N 条线抽 N 张，受卡包剩余限制
-    if (result.newLines > 0 && drawnCount < cardPack.length) {
-      const count = Math.min(result.newLines, cardPack.length - drawnCount);
-      const picks = cardPack.slice(drawnCount, drawnCount + count);
+    if (result.newLines > 0 && packLeft > 0) {
+      const count = Math.min(result.newLines, packLeft);
+      const fallbackExecutor = opponentPlayer?.id ?? (activePlayer.id === 0 ? 1 : 0);
+      const used = new Set(drawnTexts);
+      const picks = Array.from({ length: count }, () => {
+        const entry = pickRewardTask(cardPool.filter(item => !used.has(item.task.text)), activePlayer.id, fallbackExecutor);
+        used.add(entry.task.text);
+        return entry;
+      });
+      setDrawnTexts([...used]);
       setDrawnCount(value => value + count);
       setRewardQueue(prev => [
         ...prev,
         ...picks.map((entry, index) => {
-          const fallbackExecutor = opponentPlayer?.id ?? (activePlayer.id === 0 ? 1 : 0);
           const rule = resolveTaskRule(entry.task, fallbackExecutor);
           return {
             task: { ...entry.task, text: formatTaskInstruction(entry.task.text, rule) },
@@ -147,7 +145,7 @@ export function BingoModeView({
     }
 
     // 卡包抽空后不主动退出，继续交给对方
-    onEndTurn();
+    if (!result.boardComplete) onEndTurn();
   };
 
   const handleReject = () => {
@@ -182,6 +180,7 @@ export function BingoModeView({
     setFinished(false);
     setPendingIndex(null);
     setDrawnCount(0);
+    setDrawnTexts([]);
     onRestart();
   };
 
@@ -230,7 +229,7 @@ export function BingoModeView({
               <div className="text-[10px] text-gray-500">卡包余量</div>
               <div className="mt-1 text-lg font-bold text-[#64D2FF]">
                 {packLeft}
-                <span className="text-xs text-gray-500">/{cardPack.length}</span>
+                <span className="text-xs text-gray-500">/{packSize}</span>
               </div>
             </div>
           </div>

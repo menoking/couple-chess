@@ -2,6 +2,7 @@ import { useModeRuntime, useModeState } from '../../rules/ModeRuntime';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Layers3, User, UserRound, X } from 'lucide-react';
 import { Player, TaskEventData, Theme } from '../../types';
+import { taskKeyOf } from '../../utils/freshPick';
 
 interface CardModeViewProps {
   players: Player[];
@@ -68,7 +69,7 @@ export function CardModeView({
     setDrawnKeys(previous => {
       const next = new Set(freshRound ? [] : previous);
       // 用任务文本 + 步数做 key：联机的 taskSourceId 固定是 online，带它会导致灰卡匹配不上
-      next.add(`${task.task}:${task.moveDelta}`);
+      next.add(taskKeyOf({ text: task.task, moveDelta: task.moveDelta }));
       return next;
     });
     onTaskTrigger(task);
@@ -196,7 +197,7 @@ export function CardModeView({
             <div className="grid grid-cols-4 gap-2">
               {themeDecks.flatMap(({ player, theme }) =>
                 (theme?.tasks || []).map((task, index) => {
-                  const key = `${task.text}:${task.moveDelta}`;
+                  const key = taskKeyOf(task);
                   const isDrawn = drawnKeys.has(key);
                   return (
                     <div

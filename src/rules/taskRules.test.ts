@@ -2,11 +2,14 @@ import { describe, expect, it, vi } from 'vitest';
 import { DEFAULT_THEMES } from '../data/defaultThemes';
 import type { Theme } from '../types';
 import { picksToPool } from './lobby';
+import { cardForReward } from './cards';
 import { chooseRandomTheme } from './modeRules';
+import { competitionSafePool, pickRewardTask, type ThemeTaskEntry } from '../utils/modeKit';
 import {
   describeStoredTaskRule,
   formatTaskInstruction,
   resolveTaskRule,
+  rewardTaskTier,
   themeTaskRuleLabels
 } from './taskRules';
 
@@ -72,6 +75,50 @@ describe('task execution rules', () => {
       { task: '男方任务', themeName: '规则包', executor: 'male' },
       { task: '共同任务', themeName: '规则包', executor: 'together' }
     ]);
+  });
+
+  it.each([
+    { winner: 0, loser: 1, expected: '女方奖励男方' },
+    { winner: 1, loser: 0, expected: '男方奖励女方' }
+  ])('never picks a reverse-direction reward when seat $winner wins', ({ winner, loser, expected }) => {
+    const entries: ThemeTaskEntry[] = [
+      { task: { text: '男方奖励女方', executor: 'male', moveDelta: 0 }, themeId: 't', themeName: 't', playerId: 0 },
+      { task: { text: '女方奖励男方', executor: 'female', moveDelta: 0 }, themeId: 't', themeName: 't', playerId: 1 },
+      { task: { text: '说一句赞美', executor: 'both', moveDelta: 0 }, themeId: 't', themeName: 't', playerId: 1 },
+      { task: { text: '一起散步', executor: 'together', moveDelta: 0 }, themeId: 't', themeName: 't', playerId: 1 }
+    ];
+    const picked = pickRewardTask(entries, winner, loser);
+    expect(picked.task.text).toBe(expected);
+    expect(rewardTaskTier(picked.task, winner, loser)).toBeLessThan(2);
+  });
+
+  it('uses a neutral fallback instead of punishing the winner when a pack only has reverse cards', () => {
+    const reverseOnly: ThemeTaskEntry[] = [{
+      task: { text: '男方服务女方', executor: 'male', moveDelta: 0 },
+      themeId: 'reverse',
+      themeName: '反向包',
+      playerId: 0
+    }];
+    const picked = pickRewardTask(reverseOnly, 0, 1);
+    expect(picked.themeName).toBe('胜者奖励');
+    expect(rewardTaskTier(picked.task, 0, 1)).toBe(1);
+  });
+
+  it('keeps pre-dealt competition decks safe for either winner and filters online rewards by direction', () => {
+    const entries: ThemeTaskEntry[] = DEFAULT_THEMES.flatMap((theme, themeIndex) =>
+      theme.tasks.map(task => ({ task, themeId: theme.id, themeName: theme.name, playerId: themeIndex % 2 }))
+    );
+    const safe = competitionSafePool(entries);
+    expect(safe.length).toBeGreaterThan(0);
+    expect(safe.every(entry => rewardTaskTier(entry.task, 0, 1) < 3)).toBe(true);
+    expect(safe.every(entry => rewardTaskTier(entry.task, 1, 0) < 3)).toBe(true);
+
+    const onlinePool = [
+      { task: '男方服务女方', themeName: '固定男方', executor: 'male' as const },
+      { task: '女方服务男方', themeName: '固定女方', executor: 'female' as const }
+    ];
+    expect(cardForReward(onlinePool, 1, 0, 1)).toMatchObject({ themeName: '固定女方' });
+    expect(cardForReward(onlinePool, 1, 1, 0)).toMatchObject({ themeName: '固定男方' });
   });
 
   it('random selection only picks a pack allowed for the current role and mode', () => {

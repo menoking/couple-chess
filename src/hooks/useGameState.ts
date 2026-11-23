@@ -25,6 +25,7 @@ import {
   buildBingoDecks,
   buildTaskEvent,
   chooseRandomTask,
+  chooseRewardTask,
   createMineTaskEvent,
   isThemeAllowed,
   isThemeAllowedForRole
@@ -515,21 +516,18 @@ function createRandomTaskEvent(
   excludeKeys: readonly string[] = []
 ): TaskEventData | null {
   const player = players.find(p => p.id === playerId);
-  if (!player?.themeId) return null;
+  const opponent = players.find(p => p.id !== playerId);
+  if (!player?.themeId || !opponent) return null;
 
   const theme = themes.find(t => t.id === player.themeId);
   if (!theme || !isThemeAllowed(theme, player.role, 'card') || theme.tasks.length === 0) return null;
   // 本局已经抽过的卡不再出现；整副抽空后自动重新洗牌
-  const remaining = theme.tasks.filter(task => !excludeKeys.includes(taskKeyOf(task)));
-  const candidates = remaining.length > 0 ? remaining : theme.tasks;
-  const task = candidates[Math.floor(Math.random() * candidates.length)];
-
-  if (!task) return null;
+  const task = chooseRewardTask(theme, player.id, opponent.id, excludeKeys);
 
   return buildTaskEvent({
     type: 'card',
     initiatorPlayerId: player.id,
-    fallbackExecutorPlayerId: player.id,
+    fallbackExecutorPlayerId: opponent.id,
     title: '任务卡牌',
     subtitle: `任务来自「${theme.name}」`,
     icon: 'sparkles',
@@ -925,7 +923,7 @@ export function useGameState() {
 
     if (landingStep !== 0 && landingStep === opponent.step) {
       const theme = state.themes.find(t => t.id === activePlayer.themeId);
-      const task = chooseRandomTask(theme, usedTasks);
+      const task = chooseRewardTask(theme, activePlayer.id, opponent.id, usedTasks);
       if (!task) return null;
 
       return buildTaskEvent({
@@ -945,7 +943,7 @@ export function useGameState() {
 
     if (tileType === 'lucky') {
       const theme = state.themes.find(t => t.id === activePlayer.themeId);
-      const task = chooseRandomTask(theme, usedTasks);
+      const task = chooseRewardTask(theme, activePlayer.id, opponent.id, usedTasks);
       if (!task) return null;
 
       return buildTaskEvent({
@@ -963,7 +961,7 @@ export function useGameState() {
 
     if (tileType === 'trap') {
       const theme = state.themes.find(t => t.id === opponent.themeId);
-      const task = chooseRandomTask(theme, usedTasks);
+      const task = chooseRewardTask(theme, opponent.id, activePlayer.id, usedTasks);
       if (!task) return null;
 
       return buildTaskEvent({

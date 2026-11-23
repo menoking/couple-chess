@@ -31,8 +31,50 @@ export function resolveTaskRule(task: Pick<TaskCard, 'text' | 'executor'>, fallb
   };
 }
 
+/**
+ * 竞技奖励卡的适配级别：胜方是受益者，败方是执行者。
+ * 0 = 固定为败方服务胜方；1 = 按回合分配给败方；2 = 双方共同；3 = 反向。
+ */
+export function rewardTaskTier(
+  task: Pick<TaskCard, 'text' | 'executor'>,
+  winnerPlayerId: number,
+  loserPlayerId: number
+): 0 | 1 | 2 | 3 {
+  const rule = resolveTaskRule(task, loserPlayerId);
+  if (rule.executionMode === 'together') return 2;
+  if (rule.executorPlayerId !== loserPlayerId || rule.targetPlayerId !== winnerPlayerId) return 3;
+  return task.executor === 'both' ? 1 : 0;
+}
+
+export function rewardCandidates<T>(
+  items: readonly T[],
+  taskOf: (item: T) => Pick<TaskCard, 'text' | 'executor'>,
+  winner: number,
+  loser: number
+): T[] {
+  const tiers: [T[], T[], T[]] = [[], [], []];
+  for (const item of items) {
+    const tier = rewardTaskTier(taskOf(item), winner, loser);
+    if (tier !== 3) tiers[tier].push(item);
+  }
+  return tiers.find(tier => tier.length > 0) ?? [];
+}
+
+/** 所选卡包没有合适方向时使用，保证奖励永远不会反过来惩罚胜方。 */
+export function createRewardFallbackTask(): TaskCard {
+  return {
+    text: '为胜方提供一次三分钟放松服务，内容由胜方从拥抱、按摩或亲吻中选择',
+    executor: 'both',
+    moveDelta: 0
+  };
+}
+
 export function formatTaskInstruction(text: string, rule: Pick<ResolvedTaskRule, 'label'>): string {
-  return `【${rule.label}】${text.replace(ASSIGNMENT_PREFIX, '').trim()}`;
+  return `【${rule.label}】${taskBody(text)}`;
+}
+
+export function taskBody(text: string): string {
+  return text.replace(ASSIGNMENT_PREFIX, '').trim();
 }
 
 /** 题库列表的静态说明；“随回合”会在出卡时解析成明确的男女方向。 */
