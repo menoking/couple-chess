@@ -14,6 +14,37 @@ import {
 } from './taskRules';
 
 describe('task execution rules', () => {
+  it('assigns the queen and attendant to two distinct players without changing source text', () => {
+    const text = '被女王一边亲吻，一边用手隔着衣服抚摸男仆私处';
+    const copies = DEFAULT_THEMES.flatMap(theme => theme.tasks.filter(task => task.text === text));
+    expect(copies).toHaveLength(2);
+    for (const task of copies) {
+      for (const fallback of [0, 1]) {
+        const rule = resolveTaskRule(task, fallback);
+        expect(rule).toMatchObject({ executorPlayerId: 1, targetPlayerId: 0, perspectivePlayerId: 0 });
+        expect(formatTaskInstruction(text, rule)).toBe(
+          '女方饰演女王，男方饰演男仆。女王亲吻男仆，同时隔着衣服用手抚摸男仆的私处。'
+        );
+      }
+      expect(rewardTaskTier(task, 0, 1)).toBe(0);
+      expect(rewardTaskTier(task, 1, 0)).toBe(3);
+    }
+  });
+
+  it('keeps the source narration when the provider is different from the viewpoint', () => {
+    const text = '为男主捏肩捶背并不断吸吮男主耳垂';
+    const roleplay = { text, executor: 'both' as const };
+    const rule = resolveTaskRule(roleplay, 0);
+    expect(rule).toMatchObject({ executorPlayerId: 1, targetPlayerId: 0 });
+    expect(formatTaskInstruction(text, rule)).toBe(`男方饰演男主，女方饰演女仆。\n原文以女仆的视角叙述。\n${text}`);
+  });
+
+  it('does not invent a subject when the original still leaves the actor unassigned', () => {
+    const text = '先聊一分钟，再由对方决定谁来做';
+    const task = { text, executor: 'both' as const };
+    expect(formatTaskInstruction(text, resolveTaskRule(task, 0))).toBe(text);
+    expect(rewardTaskTier(task, 1, 0)).toBe(3);
+  });
   it('renders the timed challenge card for either assigned player without changing its source text', () => {
     const text = 'TA站着自己跪着帮TA口';
     const cards = DEFAULT_THEMES.flatMap(theme => theme.tasks.filter(task => task.text === text));

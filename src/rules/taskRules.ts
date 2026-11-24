@@ -1,5 +1,6 @@
 import type { TaskCard, TaskExecutionMode } from '../types';
 import { reviewedTaskOf } from '../data/reviewedTaskDirections';
+import { roleplayCardOf } from '../data/roleplayTaskRoles';
 
 export interface ResolvedTaskRule {
   executionMode: TaskExecutionMode;
@@ -22,6 +23,8 @@ const RECEIVES_SERVICE = /^(?:先|闭眼|蒙眼|躺好|坐好)*接受(?:对方|�
 const SHIFTED_ACTOR = /^对方|(?:让|请|叫|由|换|交给)(?:对方|接受方|被触碰方|胜方|败方|男方|女方|男生|女生)|对方(?:来|负责|主动|给你|为你|替你)|(?:由|让|请)其/;
 const FIXED_ROLE = /男方|女方|男生|女生|男朋友|女朋友|胜方|败方|赢家|输家/;
 const NAMES = ['男方', '女方'] as const;
+const ROLEPLAY_NAMES = { queen: ['男仆', '女王'], master: ['男主', '女仆'] } as const;
+const QUEEN_KISS_CARD = '被女王一边亲吻，一边用手隔着衣服抚摸男仆私处';
 const SHARED_SETUP = '(?:牵手坐在一起|手牵手坐好|十指相扣|面对面坐着|面对面坐好|背靠背坐好|对视|相拥)';
 const SHARED_THEN_SPEAK = new RegExp(
   `^(?:双方)?(${SHARED_SETUP})[，。；、]\\s*((?:再|然后|接着)?(?:用一句话)?(?:说出|说一句|描述|分享|回答)[\\s\\S]+)$`
@@ -38,6 +41,8 @@ function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' |
   const body = taskBody(text);
   const reviewed = reviewedTaskOf(body);
   if (reviewed) return reviewed.direction === 'blocked' ? 'uncertain' : reviewed.direction;
+  const roleplay = roleplayCardOf(body);
+  if (roleplay) return roleplay[0] === 'blocked' ? 'uncertain' : roleplay[0];
   const provider = body.match(/^(?:男方|女方|男生|女生)(?:闭眼|蒙眼|先)?(?:接受|请|让|由|被)(男方|女方|男生|女生)/)?.[1];
   if (provider) return provider === '男方' || provider === '男生' ? 'male' : 'female';
   const receiver = body.match(IMPLIED_HUG_PROVIDER)?.[1];
@@ -72,7 +77,7 @@ export function resolveTaskRule(task: Pick<TaskCard, 'text' | 'executor'>, fallb
     executorPlayerId,
     targetPlayerId,
     label: executorPlayerId === 0 ? '男方 → 女方' : '女方 → 男方',
-    perspectivePlayerId: direction === 'other' ? targetPlayerId : executorPlayerId
+    perspectivePlayerId: roleplayCardOf(body)?.[1] ?? (direction === 'other' ? targetPlayerId : executorPlayerId)
   };
 }
 
@@ -120,6 +125,14 @@ export function createRewardFallbackTask(): TaskCard {
 export function formatTaskInstruction(text: string, rule: ResolvedTaskRule): string {
   const original = taskBody(text);
   if (IMPLIED_HUG_PROVIDER.test(original)) return original;
+  if (original === QUEEN_KISS_CARD) return '女方饰演女王，男方饰演男仆。女王亲吻男仆，同时隔着衣服用手抚摸男仆的私处。';
+  const roleplay = roleplayCardOf(original);
+  if (roleplay) {
+    const [, perspective, scene] = roleplay;
+    const [maleRole, femaleRole] = ROLEPLAY_NAMES[scene];
+    const viewpoint = perspective === null ? '' : `原文以${ROLEPLAY_NAMES[scene][perspective]}的视角叙述。\n`;
+    return `男方饰演${maleRole}，女方饰演${femaleRole}。\n${viewpoint}${original}`;
+  }
   const review = reviewedTaskOf(original);
   if (review?.direction === 'blocked') return original;
   const body = review?.wording ?? original;
@@ -128,8 +141,7 @@ export function formatTaskInstruction(text: string, rule: ResolvedTaskRule): str
     return /^(?:双方|两人|你们|(?:由)?一方|第一轮)/.test(body) ? body : `双方${body}`;
   }
   // 没有明确主体时保留原文，不凭空把「一方」改成当前执行人。
-  const direction = taskDirection(original);
-  if (direction === 'uncertain' && (UNASSIGNED_ACTOR.test(original) || PARTICIPANT_PRONOUN.test(original))) return body;
+  if (taskDirection(original) === 'uncertain') return body;
   const speaker = NAMES[rule.perspectivePlayerId];
   const partner = NAMES[1 - rule.perspectivePlayerId];
   if (QUESTION_CARD.test(body)) return `${speaker}向${partner}回答：“${body.replace(/^回答\s*[：:]\s*/, '')}”`;
