@@ -14,6 +14,26 @@ import {
 } from './taskRules';
 
 describe('task execution rules', () => {
+  it('renders the timed challenge card for either assigned player without changing its source text', () => {
+    const text = 'TA站着自己跪着帮TA口';
+    const cards = DEFAULT_THEMES.flatMap(theme => theme.tasks.filter(task => task.text === text));
+    expect(cards).toHaveLength(2);
+    for (const task of cards) {
+      for (const seat of [0, 1]) {
+        const rule = resolveTaskRule(task, seat);
+        const [actor, receiver] = seat === 0 ? ['男方', '女方'] : ['女方', '男方'];
+        expect(rule).toMatchObject({ executorPlayerId: seat, targetPlayerId: 1 - seat });
+        expect(formatTaskInstruction(task.text, rule)).toBe(`${receiver}站着。${actor}跪着，为${receiver}口交。`);
+      }
+    }
+  });
+
+  it('resolves unambiguous partner pronouns without turning mutual actions into solo tasks', () => {
+    const direct = { text: '吻一下TA的嘴唇', executor: 'both' as const };
+    const mutual = { text: '跟TA舌吻一分钟', executor: 'both' as const };
+    expect(formatTaskInstruction(direct.text, resolveTaskRule(direct, 1))).toBe('女方吻一下男方的嘴唇');
+    expect(formatTaskInstruction(mutual.text, resolveTaskRule(mutual, 1))).toBe('双方舌吻一分钟');
+  });
   it('treats role-play setup followed by a reciprocal action as a public card', () => {
     const text = '用服务员和客人的身份互相递水或递零食';
     const task = DEFAULT_THEMES.find(theme => theme.name === '角色与命令')!.tasks.find(card => card.text === text)!;

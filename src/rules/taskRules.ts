@@ -27,7 +27,8 @@ const SHARED_THEN_SPEAK = new RegExp(
   `^(?:双方)?(${SHARED_SETUP})[，。；、]\\s*((?:再|然后|接着)?(?:用一句话)?(?:说出|说一句|描述|分享|回答)[\\s\\S]+)$`
 );
 const JOINT_ONLY = /^(?:(?:手牵手|牵手|对视|拥抱|相拥|相互拥抱)(?:[\d一二三四五六七八九十半两]+\s*(?:秒钟?|分钟))?[。！]?$|相互)/;
-const MUTUAL_KISS = /^(?:和|与)(?:对方|对手)(?:深情接吻|法式湿吻|湿吻|舌吻|亲吻)[\d一二三四五六七八九十半两]+\s*(?:秒钟?|分钟)[。！]?$/;
+const MUTUAL_KISS = /^(?:和|与|跟)(?:对方|对手|ta)(?:深情接吻|法式湿吻|湿吻|舌吻|亲吻)[\d一二三四五六七八九十半两]+\s*(?:秒钟?|分钟)[。！]?$/i;
+const PARTICIPANT_PRONOUN = /\bta\b|他（她）|他\/她/i;
 const PROVIDER_ROLE = /^(?:执行方|主动方|主导方)$/;
 const RECEIVER_ROLE = /^(?:接受方|被动方|接受者)$/;
 const QUESTION_CARD = /^(?:回答\s*[：:]|你[^。！]*[？?]$)/;
@@ -127,14 +128,15 @@ export function formatTaskInstruction(text: string, rule: ResolvedTaskRule): str
     return /^(?:双方|两人|你们|(?:由)?一方|第一轮)/.test(body) ? body : `双方${body}`;
   }
   // 没有明确主体时保留原文，不凭空把「一方」改成当前执行人。
-  if (taskDirection(original) === 'uncertain' && UNASSIGNED_ACTOR.test(original)) return body;
+  const direction = taskDirection(original);
+  if (direction === 'uncertain' && (UNASSIGNED_ACTOR.test(original) || PARTICIPANT_PRONOUN.test(original))) return body;
   const speaker = NAMES[rule.perspectivePlayerId];
   const partner = NAMES[1 - rule.perspectivePlayerId];
   if (QUESTION_CARD.test(body)) return `${speaker}向${partner}回答：“${body.replace(/^回答\s*[：:]\s*/, '')}”`;
   // 引号里的台词保持原样，代词仍以实际说话者的视角理解。
   const explicit = body.split(/(「[^」]*」|“[^”]*”|「[^」]*$)/).map((part, index) =>
-    index % 2 === 1 ? part : part.replace(/对方|接受方|被动方|接受者|执行方|主动方|主导方|你的|你(?!们)/g, word => {
-      if (word === '对方') return partner;
+    index % 2 === 1 ? part : part.replace(/对方|\bta\b|他（她）|他\/她|接受方|被动方|接受者|执行方|主动方|主导方|你的|你(?!们)/gi, word => {
+      if (word === '对方' || PARTICIPANT_PRONOUN.test(word)) return partner;
       if (RECEIVER_ROLE.test(word)) return NAMES[rule.targetPlayerId ?? (1 - rule.executorPlayerId)];
       if (PROVIDER_ROLE.test(word)) return NAMES[rule.executorPlayerId];
       return word === '你的' ? `${speaker}的` : speaker;
@@ -183,7 +185,7 @@ export function normalizeLegacyTaskExecutor<T extends Pick<TaskCard, 'text' | 'e
   if (reviewed && reviewed.direction !== 'blocked') {
     return {
       ...task,
-      text: reviewed.wording ?? text,
+      text: reviewed.displayOnly ? text : reviewed.wording ?? text,
       executor: reviewed.direction === 'perspective' ? 'both' : reviewed.direction
     };
   }

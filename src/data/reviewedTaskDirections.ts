@@ -2,7 +2,7 @@
  * 以完整原文匹配，让旧卡包、离线副本与联机合并池使用相同判断。
  */
 type Direction = 'male' | 'female' | 'perspective' | 'together' | 'blocked';
-type ReviewedTask = { direction: Direction; wording?: string };
+type ReviewedTask = { direction: Direction; wording?: string; displayOnly?: boolean };
 
 const entries: ReadonlyArray<readonly [text: string, direction: Direction, wording?: string]> = [
   // 只纠正角色分类，原文仍用于题库。
@@ -176,6 +176,17 @@ for (const [original, direction, wording] of entries) {
   const review = { direction, wording };
   reviewedTasks.set(original, review);
   if (wording) reviewedTasks.set(wording, review);
+}
+
+// 只在卡面补齐人称和句子结构，旧卡包原文仍用于存储和去重。
+const displayWording = [
+  ["TA站着自己跪着帮TA口", "接受方站着。执行方跪着，为接受方口交。"],
+  ["给TA捶背按肩1分钟", "执行方为接受方捶背、按肩，共一分钟。"],
+  ["帮TA胸部推油一分钟", "执行方为接受方的胸部做一分钟精油按摩。"],
+  ["喂TA吃零食3次", "执行方喂接受方吃三次零食。"]
+] as const;
+for (const [original, wording] of displayWording) {
+  reviewedTasks.set(original, { direction: 'perspective', wording, displayOnly: true });
 }
 
 export function reviewedTaskOf(text: string): ReviewedTask | undefined {
