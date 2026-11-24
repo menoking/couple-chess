@@ -133,6 +133,25 @@ describe('task execution rules', () => {
     }
   });
 
+  it('keeps passive hug wording and assigns the unnamed provider to the other player', () => {
+    const text = '男生被公主抱';
+    const cards = DEFAULT_THEMES.flatMap(theme => theme.tasks.filter(task => task.text === text));
+    expect(cards).toHaveLength(2);
+    for (const task of [...cards, { text, executor: 'male' as const }]) {
+      const rule = resolveTaskRule(task, 0);
+      expect(rule).toMatchObject({ executorPlayerId: 1, targetPlayerId: 0 });
+      expect(formatTaskInstruction(text, rule)).toBe(text);
+      expect(rewardTaskTier(task, 0, 1)).toBe(0);
+      expect(rewardTaskTier(task, 1, 0)).toBe(3);
+    }
+    const reversed = { text: '女方被对方公主抱', executor: 'both' as const };
+    const reversedRule = resolveTaskRule(reversed, 1);
+    expect(reversedRule).toMatchObject({ executorPlayerId: 0, targetPlayerId: 1 });
+    expect(formatTaskInstruction(reversed.text, reversedRule)).toBe(reversed.text);
+    const unrelated = { text: '男方被要求说一句感谢', executor: 'male' as const };
+    expect(resolveTaskRule(unrelated, 1).executorPlayerId).toBe(0);
+  });
+
   it.each([0, 1] as const)('lets the winner choose where the loser kisses them (%i)', winner => {
     const original = { text: '让对方选择一个脸颊或额头亲吻', executor: 'both' as const };
     const current = DEFAULT_THEMES.find(theme => theme.id === 'mine_dare_default')!.tasks

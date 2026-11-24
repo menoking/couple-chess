@@ -13,6 +13,8 @@ export interface ResolvedTaskRule {
 const TOGETHER_CUES = /^(?:双方|两人|你们|一起|共同|互相|彼此|轮流|各自|背靠背|面对面|对视时各)|[，、；。](?:双方|两人|互相|彼此|轮流|各自|再交换角色)|交换角色|一人.{0,8}另一人/;
 const ASSIGNMENT_PREFIX = /^\s*【\s*(?:男方\s*(?:→|->|对)\s*女方|女方\s*(?:→|->|对)\s*男方|双方一起)\s*】/;
 const EXPLICIT_ACTOR = /^(?:(?:由|让|请)\s*)?(男方|女方|男生|女生)(?!的)(?=\S)/;
+// 双人卡里，「男生被公主抱」的句首是接受者，而不是抱人的一方。
+const IMPLIED_HUG_PROVIDER = /^(男方|女方|男生|女生)\s*被\s*(?:(?:对方|对手|另一方)\s*)?公主抱/;
 const OTHER_PROVIDES = /^(?:先|闭眼|蒙眼|躺好|坐好)*(?:(?:让|请|由)对方(?:先|再|用|给|为|对|来|替|贴耳|亲|揉|按|抚|触|抱|说)|对方(?:给你|为你|替你))/;
 const RECEIVES_SERVICE = /^(?:先|闭眼|蒙眼|躺好|坐好)*接受(?:对方|三种|来自)/;
 const SHIFTED_ACTOR = /^对方|(?:让|请|叫|由|换|交给)(?:对方|接受方|被触碰方|胜方|败方|男方|女方|男生|女生)|对方(?:来|负责|主动|给你|为你|替你)|(?:由|让|请)其/;
@@ -32,6 +34,8 @@ function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' |
   if (reviewed) return reviewed.direction === 'blocked' ? 'uncertain' : reviewed.direction;
   const provider = body.match(/^(?:男方|女方|男生|女生)(?:闭眼|蒙眼|先)?(?:接受|请|让|由|被)(男方|女方|男生|女生)/)?.[1];
   if (provider) return provider === '男方' || provider === '男生' ? 'male' : 'female';
+  const receiver = body.match(IMPLIED_HUG_PROVIDER)?.[1];
+  if (receiver) return receiver === '男方' || receiver === '男生' ? 'female' : 'male';
   const actor = body.match(EXPLICIT_ACTOR)?.[1];
   if (actor && !/(?:再|然后|接着)(?:由|让|请|换)?(?:男方|女方|男生|女生)|[，；]\s*(?:男方|女方|男生|女生)(?!的)/.test(body)) {
     return actor === '男方' || actor === '男生' ? 'male' : 'female';
@@ -109,6 +113,7 @@ export function createRewardFallbackTask(): TaskCard {
 
 export function formatTaskInstruction(text: string, rule: ResolvedTaskRule): string {
   const original = taskBody(text);
+  if (IMPLIED_HUG_PROVIDER.test(original)) return original;
   const body = reviewedTaskOf(original)?.wording ?? original;
   if (rule.executionMode === 'together') {
     if (MUTUAL_KISS.test(body)) return `双方${body.slice(3)}`;
