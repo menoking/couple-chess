@@ -27,7 +27,7 @@ describe('task execution rules', () => {
   it('treats reciprocal action, alternation, and an ambiguous pronoun differently', () => {
     const reciprocal = { text: '和对方深情接吻30秒', executor: 'both' as const };
     const alternate = { text: '一方蒙眼接受亲吻、手部刺激和口交，结束后交换角色', executor: 'both' as const };
-    const ambiguous = { text: '让TA带上眼罩舔自己任意部位', executor: 'both' as const };
+    const ambiguous = { text: '让TA替自己挑一项活动', executor: 'both' as const };
     expect(rewardTaskTier(reciprocal, 1, 0)).toBe(2);
     expect(formatTaskInstruction(reciprocal.text, resolveTaskRule(reciprocal, 0))).toBe('双方深情接吻30秒');
     expect(formatTaskInstruction(alternate.text, resolveTaskRule(alternate, 0))).toMatch(/^第一轮由一方/);
@@ -147,10 +147,19 @@ describe('task execution rules', () => {
     }
   });
 
-  it('leaves unresolved reviewed cards out of both reward directions', () => {
-    const uncertain = { text: '让对方平躺，把腿架在肩膀上，仔细观察私密部位10秒', executor: 'both' as const };
+  it('leaves genuinely unresolved custom cards out of both reward directions', () => {
+    const uncertain = { text: '让对方决定谁来做', executor: 'both' as const };
     expect(rewardTaskTier(uncertain, 0, 1)).toBe(3);
     expect(rewardTaskTier(uncertain, 1, 0)).toBe(3);
+  });
+
+  it('gives each built-in card at least one eligible direction after editorial review', () => {
+    const excluded = DEFAULT_THEMES.flatMap(theme => theme.tasks.flatMap((task, index) =>
+      rewardTaskTier(task, 0, 1) === 3 && rewardTaskTier(task, 1, 0) === 3
+        ? [`${theme.name} #${index + 1}`]
+        : []
+    ));
+    expect(excluded).toEqual([]);
   });
 
   it.each([0, 1] as const)('applies confirmed roles to all three cards for winner %i', winner => {
