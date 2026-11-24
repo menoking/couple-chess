@@ -23,12 +23,14 @@ const SHARED_THEN_SPEAK = new RegExp(
   `^(?:双方)?(${SHARED_SETUP})[，。；、]\\s*((?:再|然后|接着)?(?:用一句话)?(?:说出|说一句|描述|分享|回答)[\\s\\S]+)$`
 );
 const JOINT_ONLY = /^(?:(?:手牵手|牵手|对视|拥抱|相拥|相互拥抱)(?:[\d一二三四五六七八九十半两]+\s*(?:秒钟?|分钟))?[。！]?$|相互)/;
+const MUTUAL_KISS = /^(?:和|与)(?:对方|对手)(?:深情接吻|法式湿吻|湿吻|舌吻|亲吻)[\d一二三四五六七八九十半两]+\s*(?:秒钟?|分钟)[。！]?$/;
+const UNASSIGNED_ACTOR = /^(?:一方|另一方|接受者|主导者|主动方)|(?:让|由|请)(?:ta|他\/她|他（她）)|(?:被|任由)(?:对方|对手|男仆|男主|女仆|女主)/i;
 
 function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' | 'uncertain' | 'perspective' {
   const body = taskBody(text);
   const reviewed = reviewedTaskOf(body);
   if (reviewed) return reviewed.direction === 'blocked' ? 'uncertain' : reviewed.direction;
-  const provider = body.match(/^(?:男方|女方|男生|女生)(?:闭眼|蒙眼|先)?(?:接受|请|让|由)(男方|女方|男生|女生)/)?.[1];
+  const provider = body.match(/^(?:男方|女方|男生|女生)(?:闭眼|蒙眼|先)?(?:接受|请|让|由|被)(男方|女方|男生|女生)/)?.[1];
   if (provider) return provider === '男方' || provider === '男生' ? 'male' : 'female';
   const actor = body.match(EXPLICIT_ACTOR)?.[1];
   if (actor && !/(?:再|然后|接着)(?:由|让|请|换)?(?:男方|女方|男生|女生)|[，；]\s*(?:男方|女方|男生|女生)(?!的)/.test(body)) {
@@ -36,9 +38,9 @@ function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' |
   }
   if (SHARED_THEN_SPEAK.test(body) && !FIXED_ROLE.test(body)) return 'perspective';
   if (/^(?:执行方|接受方)/.test(body) && /执行方/.test(body) && /接受方/.test(body)) return 'perspective';
-  if (TOGETHER_CUES.test(body) || JOINT_ONLY.test(body)) return 'together';
+  if (TOGETHER_CUES.test(body) || JOINT_ONLY.test(body) || MUTUAL_KISS.test(body)) return 'together';
   if (OTHER_PROVIDES.test(body) || RECEIVES_SERVICE.test(body)) return 'other';
-  if (SHIFTED_ACTOR.test(body) || FIXED_ROLE.test(body)) return 'uncertain';
+  if (SHIFTED_ACTOR.test(body) || FIXED_ROLE.test(body) || UNASSIGNED_ACTOR.test(body)) return 'uncertain';
   return 'perspective';
 }
 
@@ -109,8 +111,11 @@ export function formatTaskInstruction(text: string, rule: ResolvedTaskRule): str
   const original = taskBody(text);
   const body = reviewedTaskOf(original)?.wording ?? original;
   if (rule.executionMode === 'together') {
-    return /^(?:双方|两人|你们)/.test(body) ? body : `双方${body}`;
+    if (MUTUAL_KISS.test(body)) return `双方${body.slice(3)}`;
+    return /^(?:双方|两人|你们|一方|第一轮)/.test(body) ? body : `双方${body}`;
   }
+  // 没有明确主体时保留原文，不凭空把「一方」改成当前执行人。
+  if (taskDirection(original) === 'uncertain' && UNASSIGNED_ACTOR.test(original)) return body;
   const speaker = NAMES[rule.perspectivePlayerId];
   const partner = NAMES[1 - rule.perspectivePlayerId];
   // 引号里的台词保持原样，代词仍以实际说话者的视角理解。

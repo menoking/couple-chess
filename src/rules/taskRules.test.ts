@@ -14,6 +14,26 @@ import {
 } from './taskRules';
 
 describe('task execution rules', () => {
+  it.each([0, 1] as const)('assigns the person providing guidance independently from the person directing it (%i)', executor => {
+    const task = { text: '让对方用语言指导你的手，完成一次边缘刺激', executor: 'both' as const };
+    const rule = resolveTaskRule(task, executor);
+    const [actor, recipient] = executor === 0 ? ['男方', '女方'] : ['女方', '男方'];
+    expect(rule).toMatchObject({ executorPlayerId: executor, targetPlayerId: 1 - executor });
+    expect(formatTaskInstruction(task.text, rule)).toBe(
+      `${actor}用手为${recipient}提供刺激。${recipient}用语言告诉${actor}如何调整节奏。`
+    );
+  });
+
+  it('treats reciprocal action, alternation, and an ambiguous pronoun differently', () => {
+    const reciprocal = { text: '和对方深情接吻30秒', executor: 'both' as const };
+    const alternate = { text: '一方蒙眼接受亲吻、手部刺激和口交，结束后交换角色', executor: 'both' as const };
+    const ambiguous = { text: '让TA带上眼罩舔自己任意部位', executor: 'both' as const };
+    expect(rewardTaskTier(reciprocal, 1, 0)).toBe(2);
+    expect(formatTaskInstruction(reciprocal.text, resolveTaskRule(reciprocal, 0))).toBe('双方深情接吻30秒');
+    expect(formatTaskInstruction(alternate.text, resolveTaskRule(alternate, 0))).toMatch(/^第一轮由一方/);
+    expect(rewardTaskTier(ambiguous, 1, 0)).toBe(3);
+    expect(rewardTaskTier(ambiguous, 0, 1)).toBe(3);
+  });
   it.each([0, 1] as const)('keeps shared setup separate from the assigned speaker (executor %s)', executor => {
     const original = '牵手坐在一起，用一句话描述此刻最想靠近的地方';
     const speaker = executor === 0 ? '男方' : '女方';
