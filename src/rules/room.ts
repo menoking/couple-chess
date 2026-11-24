@@ -4,6 +4,7 @@ import type { RoomAction, RoomSnapshot, Role, Seat } from './types';
 import { cardForReward, enqueueCard, extractCard, projectCards, reduceCard } from './cards';
 import { applyGridLine, type GridLineOwner } from './gridChess';
 import { formatTaskInstruction, resolveTaskRule } from './taskRules';
+import { applyMove as applyJungleMove, cellMeta, createJungleBoard, PIECE_NAMES, type JungleBoard } from '../utils/jungle';
 import { createGoBoard, GO_WINNER_CARDS, goCaptureRewards, goWinner, playMove, scoreGoBoard, type GoBoard } from '../utils/go';
 import { bothLocked, mergePools } from './lobby';
 import { isAuthorityOnlyState, isRestartState, privateKeyOf, seatScopedKey, turnBoundPrefixOf } from './registry';
@@ -198,6 +199,54 @@ export function reduceRoom(state: RoomSnapshot, action: RoomAction): RoomSnapsho
   };
 
   switch (action.type) {
+    case 'jungleMove': {
+      const prefix = 'JungleModeView.';
+      if (state.mode !== 'jungle' || state.data[`${prefix}phase`] !== 'play' || state.cards.length > 0) return state;
+      if (action.seat !== viewTurnOf(state, prefix) || action.runId !== (state.data[`${prefix}runId`] ?? 0)) return state;
+      const move = Number(state.data[`${prefix}moveNumber`] ?? 0);
+      if (action.expectedMove !== move || !Number.isInteger(action.from) || !Number.isInteger(action.to)) return state;
+      const board = (state.data[`${prefix}board`] as JungleBoard | undefined) ?? createJungleBoard();
+      if (board[action.from]?.owner !== action.seat) return state;
+      const result = applyJungleMove(board, action.from, action.to);
+      if (!result) return state;
+      const peer: Seat = action.seat === 0 ? 1 : 0;
+      const changes: Record<string, unknown> = {
+        [`${prefix}board`]: result.board,
+        [`${prefix}lastMove`]: { from: action.from, to: action.to },
+        [`${prefix}moveNumber`]: move + 1,
+        [`${prefix}turn`]: result.winner === null ? peer : action.seat
+      };
+      const reasons: string[] = [];
+      if (result.captured) {
+        const captured = (state.data[`${prefix}captured`] as Record<number, number> | undefined) ?? { 0: 0, 1: 0 };
+        changes[`${prefix}captured`] = { ...captured, [action.seat]: (captured[action.seat] ?? 0) + 1 };
+        reasons.push(`吃掉对方的${PIECE_NAMES[result.captured.rank]} · 对方执行`);
+      }
+      if (result.winner !== null) {
+        changes[`${prefix}phase`] = 'over';
+        changes[`${prefix}winnerId`] = result.winner;
+        changes[`${prefix}notice`] = cellMeta(action.to).den ? '攻入对方兽穴' : '吃光对方棋子';
+        reasons.push('终局 · 胜方抽卡，败方执行');
+      }
+      let next: RoomSnapshot = {
+        ...state,
+        data: { ...state.data, ...changes },
+        dataSeq: { ...state.dataSeq, ...Object.fromEntries(Object.keys(changes).map(key => [key, state.seq + 1])) }
+      };
+      for (const reason of reasons) {
+        const card = cardForReward(next.cardPool, next.cardSeq + 1, action.seat, peer);
+        const rule = resolveTaskRule({ text: card.task, executor: card.executor ?? 'both' }, peer);
+        next = enqueueCard(next, {
+          drawerSeat: action.seat,
+          executorSeat: rule.executorPlayerId,
+          executionMode: rule.executionMode,
+          targetSeat: rule.targetPlayerId,
+          reason,
+          card: { ...card, task: formatTaskInstruction(card.task, rule) }
+        });
+      }
+      return bump(next);
+    }
     case 'goPlay': {
       const prefix = 'GoModeView.';
       if (state.mode !== 'go' || state.data[`${prefix}phase`] !== 'play' || state.cards.length > 0) return state;

@@ -994,7 +994,7 @@ export function OnlineStage(props: OnlineStageProps) {
       case 'bluff':
         return <BluffDiceModeView {...common} />;
       case 'jungle':
-        return <JungleModeView {...common} />;
+        return <JungleModeView {...common} pendingCards={snap.cards.length} />;
       default:
         return null;
     }

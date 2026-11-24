@@ -183,9 +183,11 @@ export function getLegalMoves(board: JungleBoard, from: number): number[] {
   const moves = new Set<number>();
 
   for (const to of orthogonalNeighbors(from)) {
+    if (DEN_OWNER.get(to) === piece.owner) continue;
+    if (isWater(to) && piece.rank !== 1) continue;
     const target = board[to];
     if (!target) {
-      if (!cellMeta(to).den || cellMeta(to).denOwner !== piece.owner) moves.add(to);
+      moves.add(to);
       continue;
     }
     if (target.owner === piece.owner) continue;
@@ -195,11 +197,12 @@ export function getLegalMoves(board: JungleBoard, from: number): number[] {
   // 跳河：沿四个方向找更远的落点
   const { row, col } = posOf(from);
   for (const [dr, dc] of [[-1, 0], [1, 0], [0, -1], [0, 1]] as const) {
-    for (let step = 2; step <= 3; step++) {
+    for (let step = 2; step <= 4; step++) {
       const toRow = row + dr * step;
       const toCol = col + dc * step;
       if (!inBoard(toRow, toCol)) break;
       const to = index(toRow, toCol);
+      if (DEN_OWNER.get(to) === piece.owner) continue;
       const landing = jumpTarget(board, from, to, piece.rank);
       if (landing === null || landing !== to) continue;
       const target = board[to];

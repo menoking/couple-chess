@@ -1,5 +1,5 @@
-import { useModeState, useMyTurn } from '../../rules/ModeRuntime';
-import { useEffect, useMemo, useRef } from 'react';
+import { useModeRuntime, useModeState, useMyTurn } from '../../rules/ModeRuntime';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, PawPrint, RefreshCw, User, UserRound } from 'lucide-react';
 import { Player, Theme } from '../../types';
 import { buildTaskPool, createViewTaskEvent, pickRewardTask } from '../../utils/modeKit';
@@ -18,6 +18,7 @@ interface JungleModeViewProps {
   players: Player[];
   themes: Theme[];
   currentTurn: number;
+  pendingCards?: number;
   onBack: () => void;
 }
 
@@ -33,32 +34,41 @@ interface PendingCard {
 function JungleGame({
   players,
   themes,
-  currentTurn
+  currentTurn,
+  runId,
+  pendingCards
 }: {
   players: Player[];
   themes: Theme[];
   currentTurn: number;
+  runId: number;
+  pendingCards: number;
 }) {
+  const runtime = useModeRuntime();
   const pool = useMemo(() => buildTaskPool(players, themes) ?? [], [players, themes]);
 
   const [phase, setPhase] = useModeState<Phase>('JungleModeView.phase', 'roll');
   const [board, setBoard] = useModeState<JungleBoard>('JungleModeView.board', () => createJungleBoard());
   const [turn, setTurn] = useModeState('JungleModeView.turn', currentTurn === 1 ? 1 : 0);
   const canAct = useMyTurn(turn);
-  const [selected, setSelected] = useModeState<number | null>('JungleModeView.selected', null);
+  const [selected, setSelected] = useState<number | null>(null);
   const [lastMove, setLastMove] = useModeState<{ from: number; to: number } | null>('JungleModeView.lastMove', null);
   const [captured, setCaptured] = useModeState<Record<number, number>>('JungleModeView.captured', { 0: 0, 1: 0 });
   const [winnerId, setWinnerId] = useModeState<number | null>('JungleModeView.winnerId', null);
-  const [notice, setNotice] = useModeState<string | null>('JungleModeView.notice', null);
+  const [resultNotice, setResultNotice] = useModeState<string | null>('JungleModeView.notice', null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [moveNumber] = useModeState('JungleModeView.moveNumber', 0);
 
   const [cardQueue, setCardQueue] = useModeState<PendingCard[]>('JungleModeView.cardQueue', []);
   const [taskData, setTaskData] = useModeState<ReturnType<typeof createViewTaskEvent> | null>('JungleModeView.taskData', null);
 
   const activePlayer = players[turn] ?? players[0];
   const opponentId = turn === 0 ? 1 : 0;
+  const waitingForCards = pendingCards > 0 || !!taskData || (!runtime && cardQueue.length > 0);
+  const blocked = !canAct || waitingForCards;
   const legalMoves = useMemo(
-    () => (selected === null ? [] : getLegalMoves(board, selected)),
-    [board, selected]
+    () => (blocked || selected === null || board[selected]?.owner !== turn ? [] : getLegalMoves(board, selected)),
+    [blocked, board, selected, turn]
   );
 
   // 按卡片标识消费，避免未来再次出现相同队列长度时误判为已处理。
@@ -66,7 +76,7 @@ function JungleGame({
   const consumedCard = useRef<string | null>(null);
 
   useEffect(() => {
-    if (taskData || cardQueue.length === 0) return;
+    if (runtime || taskData || cardQueue.length === 0) return;
     const [next, ...rest] = cardQueue;
     const token = next.token ?? `legacy:${cardQueue.length}:${next.drawerId}:${next.executorId}:${next.reason}`;
     if (consumedCard.current === token) return;
@@ -81,7 +91,7 @@ function JungleGame({
         initiatorPlayerId: next.drawerId
       })
     );
-  }, [cardQueue, taskData, pool]);
+  }, [runtime, cardQueue, taskData, pool, setCardQueue, setTaskData]);
 
   const enqueueCards = (drawerId: number, executorId: number, count: number, reason: string) => {
     const batchToken = `${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 8)}`;
@@ -99,14 +109,13 @@ function JungleGame({
   const endGame = (winner: number, reason: string) => {
     setWinnerId(winner);
     setPhase('over');
-    setNotice(reason);
+    setResultNotice(reason);
     const loser = winner === 0 ? 1 : 0;
     enqueueCards(winner, loser, 1, '终局 · 胜方抽卡，败方执行');
   };
 
   const handleCellClick = (cellIndex: number) => {
-    if (!canAct) return;
-    if (phase !== 'play' || taskData) return;
+    if (blocked || phase !== 'play') return;
     const piece = board[cellIndex];
 
     if (piece && piece.owner === turn) {
@@ -114,12 +123,19 @@ function JungleGame({
       return;
     }
 
-    if (selected === null) return;
+    if (selected === null || board[selected]?.owner !== turn) return;
 
     const result = applyMove(board, selected, cellIndex);
     if (!result) {
       setNotice('这一步走不了');
       window.setTimeout(() => setNotice(null), 1100);
+      return;
+    }
+
+    setNotice(null);
+    if (runtime) {
+      runtime.dispatch({ type: 'jungleMove', from: selected, to: cellIndex, seat: runtime.seat, runId, expectedMove: moveNumber });
+      setSelected(null);
       return;
     }
 
@@ -135,7 +151,7 @@ function JungleGame({
     }
 
     if (result.winner !== null) {
-      endGame(result.winner, result.winner === turn ? '你攻入兽穴，获胜' : '对方棋子被吃光，获胜');
+      endGame(result.winner, cellMeta(cellIndex).den ? '攻入对方兽穴' : '吃光对方棋子');
       return;
     }
 
@@ -143,6 +159,10 @@ function JungleGame({
   };
 
   const startGame = (firstPlayerId: number) => {
+    if (runtime) {
+      setPhase('play');
+      return;
+    }
     setBoard(createJungleBoard());
     setTurn(firstPlayerId === 1 ? 1 : 0);
     setSelected(null);
@@ -175,7 +195,7 @@ function JungleGame({
         <div className="rounded-3xl border border-[#FFD60A]/30 bg-[#FFD60A]/10 p-6 text-center">
           <PawPrint size={34} className="mx-auto text-[#FFD60A]" />
           <div className="mt-3 text-xl font-bold text-white">{winner?.name} 获胜</div>
-          <div className="mt-1 text-xs text-gray-500">{notice}</div>
+          <div className="mt-1 text-xs text-gray-500">{resultNotice}</div>
           <div className="mt-4 space-y-2">
             {players.map(player => (
               <div key={player.id} className="flex items-center justify-between rounded-2xl bg-white/5 px-4 py-3">
@@ -187,7 +207,7 @@ function JungleGame({
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-center text-[11px] text-gray-500">
-          剩余抽卡 {cardQueue.length} 张，会依次弹出
+          还有 {runtime ? pendingCards : cardQueue.length + Number(!!taskData)} 张奖励卡待处理
         </div>
 
         <TaskCardModal
@@ -215,13 +235,13 @@ function JungleGame({
 
       <div className="flex items-center justify-center gap-2 rounded-2xl bg-white/5 py-2.5 text-sm font-bold text-white">
         {activePlayer?.id === 0 ? <User size={15} className="text-[#0A84FF]" /> : <UserRound size={15} className="text-[#FF375F]" />}
-        {activePlayer?.name} 走棋
+        {waitingForCards ? '请先处理奖励卡' : canAct ? `${activePlayer?.name}走棋` : `等待${activePlayer?.name}走棋`}
       </div>
 
-      <div className={`grid grid-cols-7 overflow-hidden rounded-2xl border border-white/10 transition-opacity ${canAct ? '' : 'pointer-events-none opacity-60'}`}>
+      <div className="grid grid-cols-7 overflow-hidden rounded-2xl border border-white/10">
         {board.map((piece, cellIndex) => {
           const meta = cellMeta(cellIndex);
-          const isSelected = selected === cellIndex;
+          const isSelected = !blocked && selected === cellIndex;
           const isLegal = legalMoves.includes(cellIndex);
           const isLast = lastMove?.to === cellIndex;
           const owner = piece ? players.find(player => player.id === piece.owner) : undefined;
@@ -231,7 +251,7 @@ function JungleGame({
               key={cellIndex}
               type="button"
               onClick={() => handleCellClick(cellIndex)}
-              disabled={!!taskData}
+              disabled={blocked}
               className={`jungle-cell relative flex aspect-square items-center justify-center border-l border-t border-white/[0.06] ${
                 meta.water ? 'bg-[#0A84FF]/15' : meta.trap ? 'bg-[#FF9F0A]/12' : meta.den ? 'bg-[#FFD60A]/15' : 'bg-white/[0.02]'
               }`}
@@ -292,7 +312,7 @@ function JungleGame({
   );
 }
 
-export function JungleModeView({ players, themes, currentTurn, onBack }: JungleModeViewProps) {
+export function JungleModeView({ players, themes, currentTurn, pendingCards = 0, onBack }: JungleModeViewProps) {
   const [runId, setRunId] = useModeState('JungleModeView.runId', 0);
 
   return (
@@ -313,7 +333,7 @@ export function JungleModeView({ players, themes, currentTurn, onBack }: JungleM
         </header>
 
         <main className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-3 no-scrollbar">
-          <JungleGame key={runId} players={players} themes={themes} currentTurn={currentTurn} />
+          <JungleGame key={runId} runId={runId} players={players} themes={themes} currentTurn={currentTurn} pendingCards={pendingCards} />
           <button type="button" onClick={() => setRunId(value => value + 1)} className="ios-btn mx-auto mt-5 flex items-center gap-2 rounded-full border border-white/10 px-5 py-2.5 text-xs font-bold text-gray-400">
             <RefreshCw size={13} />重新开局
           </button>
