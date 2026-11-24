@@ -148,9 +148,38 @@ describe('task execution rules', () => {
   });
 
   it('leaves unresolved reviewed cards out of both reward directions', () => {
-    const uncertain = { text: '让对方选一件饰品或袜子先取下，并说明理由', executor: 'both' as const };
+    const uncertain = { text: '让对方平躺，把腿架在肩膀上，仔细观察私密部位10秒', executor: 'both' as const };
     expect(rewardTaskTier(uncertain, 0, 1)).toBe(3);
     expect(rewardTaskTier(uncertain, 1, 0)).toBe(3);
+  });
+
+  it.each([0, 1] as const)('applies confirmed roles to all three cards for winner %i', winner => {
+    const loser = 1 - winner;
+    const actor = loser === 0 ? '男方' : '女方';
+    const receiver = winner === 0 ? '男方' : '女方';
+    const cases = [
+      ['让对方选一件饰品或袜子先取下，并说明理由', `${actor}从自己身上的饰品或袜子中选一件，取下来，并向${receiver}说明选择它的理由。`],
+      ['对方坐下，自己躺下，将头枕在对方腿上，对视15秒', `${actor}坐好。${receiver}把头枕在${actor}腿上，双方对视15秒。`],
+      ['把下一分钟的主动权交给对方安排', `${receiver}安排接下来一分钟的活动。双方确认都愿意后，由${actor}按约定完成。`]
+    ];
+    for (const [text, expected] of cases) {
+      const task = { text, executor: 'both' as const };
+      const rule = resolveTaskRule(task, loser);
+      expect(rule).toMatchObject({ executorPlayerId: loser, targetPlayerId: winner });
+      expect(rewardTaskTier(task, winner, loser)).toBe(1);
+      expect(formatTaskInstruction(text, rule)).toBe(expected);
+    }
+  });
+
+  it('allows a reviewed public card for either winner without inferring a single recipient', () => {
+    const task = { text: '你更喜欢自己主导高潮，还是把节奏完全交给对方？', executor: 'both' as const };
+    for (const winner of [0, 1]) {
+      const loser = 1 - winner;
+      expect(rewardTaskTier(task, winner, loser)).toBe(2);
+      const rule = resolveTaskRule(task, loser);
+      expect(rule).toMatchObject({ executionMode: 'together', targetPlayerId: null });
+      expect(formatTaskInstruction(task.text, rule)).toBe('双方轮流说说，自己更喜欢掌握节奏，还是由对方引导。');
+    }
   });
 
   it('separates the perspective from the provider in requests to the other person', () => {
