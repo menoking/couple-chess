@@ -14,6 +14,23 @@ import {
 } from './taskRules';
 
 describe('task execution rules', () => {
+  it('treats role-play setup followed by a reciprocal action as a public card', () => {
+    const text = '用服务员和客人的身份互相递水或递零食';
+    const task = DEFAULT_THEMES.find(theme => theme.name === '角色与命令')!.tasks.find(card => card.text === text)!;
+    expect(task.executor).toBe('together');
+    for (const winner of [0, 1]) {
+      const loser = 1 - winner;
+      const rule = resolveTaskRule({ text, executor: 'male' }, loser);
+      expect(rule).toMatchObject({ executionMode: 'together', targetPlayerId: null });
+      expect(formatTaskInstruction(text, rule)).toBe(`双方${text}`);
+      expect(rewardTaskTier(task, winner, loser)).toBe(2);
+    }
+
+    const facing = { text: '跪姿面对面互相用手背触碰脸颊30秒', executor: 'both' as const };
+    const question = { text: '你愿意尝试互相交换零食吗？', executor: 'both' as const };
+    expect(resolveTaskRule(facing, 1).executionMode).toBe('together');
+    expect(resolveTaskRule(question, 1).executionMode).toBe('directed');
+  });
   it.each([0, 1] as const)('assigns the person providing guidance independently from the person directing it (%i)', executor => {
     const task = { text: '让对方用语言指导你的手，完成一次边缘刺激', executor: 'both' as const };
     const rule = resolveTaskRule(task, executor);

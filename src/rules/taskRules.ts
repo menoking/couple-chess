@@ -11,6 +11,8 @@ export interface ResolvedTaskRule {
 }
 
 const TOGETHER_CUES = /^(?:双方|两人|你们|一起|共同|互相|彼此|轮流|各自|背靠背|面对面|对视时各)|[，、；。](?:双方|两人|互相|彼此|轮流|各自|再交换角色)|交换角色|一人.{0,8}另一人/;
+// 只有明确的场景开头才把后续「互相」视为指令，避免把偏好提问或台词误判成共同动作。
+const MUTUAL_AFTER_SETUP = /^(?:用[^，。！？“”「」]{1,20}和[^，。！？“”「」]{1,20}的身份|(?:跪姿)?面对面(?:坐好|坐着)?|结束后|赤裸上半身|69式|扮演陌生人只用三句台词完成)(?:[，、]\s*)?(?:互相|相互)(?=\S)/;
 const ASSIGNMENT_PREFIX = /^\s*【\s*(?:男方\s*(?:→|->|对)\s*女方|女方\s*(?:→|->|对)\s*男方|双方一起)\s*】/;
 const EXPLICIT_ACTOR = /^(?:(?:由|让|请)\s*)?(男方|女方|男生|女生)(?!的)(?=\S)/;
 // 双人卡里，「男生被公主抱」的句首是接受者，而不是抱人的一方。
@@ -42,7 +44,7 @@ function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' |
   }
   if (SHARED_THEN_SPEAK.test(body) && !FIXED_ROLE.test(body)) return 'perspective';
   if (/^(?:执行方|接受方)/.test(body) && /执行方/.test(body) && /接受方/.test(body)) return 'perspective';
-  if (TOGETHER_CUES.test(body) || JOINT_ONLY.test(body) || MUTUAL_KISS.test(body)) return 'together';
+  if (TOGETHER_CUES.test(body) || JOINT_ONLY.test(body) || MUTUAL_KISS.test(body) || MUTUAL_AFTER_SETUP.test(body)) return 'together';
   if (OTHER_PROVIDES.test(body) || RECEIVES_SERVICE.test(body)) return 'other';
   if (SHIFTED_ACTOR.test(body) || FIXED_ROLE.test(body) || UNASSIGNED_ACTOR.test(body)) return 'uncertain';
   return 'perspective';
