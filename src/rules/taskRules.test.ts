@@ -133,8 +133,22 @@ describe('task execution rules', () => {
     }
   });
 
+  it.each([0, 1] as const)('lets the winner choose where the loser kisses them (%i)', winner => {
+    const original = { text: '让对方选择一个脸颊或额头亲吻', executor: 'both' as const };
+    const current = DEFAULT_THEMES.find(theme => theme.id === 'mine_dare_default')!.tasks
+      .find(task => task.text === '接受方选择脸颊或额头。执行方亲吻接受方选的位置。')!;
+    const loser = winner === 0 ? 1 : 0;
+    const [receiver, giver] = winner === 0 ? ['男方', '女方'] : ['女方', '男方'];
+    for (const task of [original, current]) {
+      expect(rewardTaskTier(task, winner, loser)).toBe(1);
+      const rule = resolveTaskRule(task, loser);
+      expect(rule).toMatchObject({ executorPlayerId: loser, targetPlayerId: winner });
+      expect(formatTaskInstruction(task.text, rule)).toBe(`${receiver}选择脸颊或额头。${giver}亲吻${receiver}选的位置。`);
+    }
+  });
+
   it('leaves unresolved reviewed cards out of both reward directions', () => {
-    const uncertain = { text: '让对方选择一个脸颊或额头亲吻', executor: 'both' as const };
+    const uncertain = { text: '让对方选一件饰品或袜子先取下，并说明理由', executor: 'both' as const };
     expect(rewardTaskTier(uncertain, 0, 1)).toBe(3);
     expect(rewardTaskTier(uncertain, 1, 0)).toBe(3);
   });
