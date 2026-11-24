@@ -6,6 +6,7 @@ import { cardForReward } from './cards';
 import { chooseRandomTheme } from './modeRules';
 import { competitionSafePool, pickRewardTask, type ThemeTaskEntry } from '../utils/modeKit';
 import {
+  displayQueuedTask,
   formatTaskInstruction,
   resolveTaskRule,
   rewardTaskTier,
@@ -13,6 +14,26 @@ import {
 } from './taskRules';
 
 describe('task execution rules', () => {
+  it.each([0, 1] as const)('keeps shared setup separate from the assigned speaker (executor %s)', executor => {
+    const original = '牵手坐在一起，用一句话描述此刻最想靠近的地方';
+    const speaker = executor === 0 ? '男方' : '女方';
+    const listener = executor === 0 ? '女方' : '男方';
+    const expected = `双方牵手坐在一起。${speaker}用一句话向${listener}描述此刻最想靠近的地方。`;
+    const current = DEFAULT_THEMES.find(theme => theme.name === '暧昧开场')!.tasks[2];
+    for (const task of [current, { text: original, executor: 'together' as const }]) {
+      expect(rewardTaskTier(task, 1 - executor, executor)).toBe(1);
+      expect(formatTaskInstruction(task.text, resolveTaskRule(task, executor))).toBe(expected);
+    }
+    expect(displayQueuedTask(speaker + original, executor, 'directed')).toBe(expected);
+    expect(displayQueuedTask(expected, executor, 'directed')).toBe(expected);
+  });
+
+  it('distinguishes a wholly shared activity from one with an assigned speaker', () => {
+    const mutual = { text: '手牵手30秒', executor: 'both' as const };
+    const mixed = { text: '面对面坐好，然后说一句感谢', executor: 'together' as const };
+    expect(formatTaskInstruction(mutual.text, resolveTaskRule(mutual, 1))).toBe('双方手牵手30秒');
+    expect(formatTaskInstruction(mixed.text, resolveTaskRule(mixed, 1))).toBe('双方面对面坐好。女方说一句感谢');
+  });
   it.each([
     { executor: 'male' as const, fallback: 1, label: '男方 → 女方', actor: 0, target: 1 },
     { executor: 'female' as const, fallback: 0, label: '女方 → 男方', actor: 1, target: 0 },

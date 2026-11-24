@@ -6,6 +6,9 @@ type ReviewedTask = { direction: Direction; wording?: string };
 
 const entries: ReadonlyArray<readonly [text: string, direction: Direction, wording?: string]> = [
   // 已明确两个角色各自的动作
+  ["牵手坐在一起，用一句话描述此刻最想靠近的地方", "perspective", "双方牵手坐在一起。执行方用一句话向接受方描述此刻最想靠近的地方。"],
+  ["面无表情的捧着对方的脸对视 1 分钟", "perspective", "执行方捧着接受方的脸。双方保持面无表情，对视一分钟。"],
+  ["双方十指相扣，深情对视，朗诵骆宾王的《鹅》", "perspective", "双方十指相扣，深情对视。执行方向接受方朗诵骆宾王的《鹅》。"],
   ["从肩膀一路亲到腰侧，最后让对方说出想停的位置", "perspective", "执行方从接受方的肩膀一路亲到腰侧。接受方说出希望停下的位置。"],
   ["脱下下装后先用手背描绘大腿外侧，再由对方决定下一步", "perspective", "执行方褪下自己的下装，用手背沿接受方的大腿外侧轻轻移动。接受方决定下一步。"],
   ["用手掌固定在对方腰侧，由对方口头指挥压力和速度", "perspective", "执行方把手掌放在接受方腰侧。接受方用语言指示执行方调整力度和速度。"],

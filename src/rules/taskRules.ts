@@ -18,6 +18,11 @@ const RECEIVES_SERVICE = /^(?:先|闭眼|蒙眼|躺好|坐好)*接受(?:对方|�
 const SHIFTED_ACTOR = /^对方|(?:让|请|叫|由|换|交给)(?:对方|接受方|被触碰方|胜方|败方|男方|女方|男生|女生)|对方(?:来|负责|主动|给你|为你|替你)|(?:由|让|请)其/;
 const FIXED_ROLE = /男方|女方|男生|女生|男朋友|女朋友|胜方|败方|赢家|输家/;
 const NAMES = ['男方', '女方'] as const;
+const SHARED_SETUP = '(?:牵手坐在一起|手牵手坐好|十指相扣|面对面坐着|面对面坐好|背靠背坐好|对视|相拥)';
+const SHARED_THEN_SPEAK = new RegExp(
+  `^(?:双方)?(${SHARED_SETUP})[，。；、]\\s*((?:再|然后|接着)?(?:用一句话)?(?:说出|说一句|描述|分享|回答)[\\s\\S]+)$`
+);
+const JOINT_ONLY = /^(?:(?:手牵手|牵手|对视|拥抱|相拥|相互拥抱)(?:[\d一二三四五六七八九十半两]+\s*(?:秒钟?|分钟))?[。！]?$|相互)/;
 
 function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' | 'uncertain' | 'perspective' {
   const body = taskBody(text);
@@ -29,8 +34,9 @@ function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' |
   if (actor && !/(?:再|然后|接着)(?:由|让|请|换)?(?:男方|女方|男生|女生)|[，；]\s*(?:男方|女方|男生|女生)(?!的)/.test(body)) {
     return actor === '男方' || actor === '男生' ? 'male' : 'female';
   }
+  if (SHARED_THEN_SPEAK.test(body) && !FIXED_ROLE.test(body)) return 'perspective';
   if (/^(?:执行方|接受方)/.test(body) && /执行方/.test(body) && /接受方/.test(body)) return 'perspective';
-  if (TOGETHER_CUES.test(body)) return 'together';
+  if (TOGETHER_CUES.test(body) || JOINT_ONLY.test(body)) return 'together';
   if (OTHER_PROVIDES.test(body) || RECEIVES_SERVICE.test(body)) return 'other';
   if (SHIFTED_ACTOR.test(body) || FIXED_ROLE.test(body)) return 'uncertain';
   return 'perspective';
@@ -39,7 +45,9 @@ function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' |
 export function resolveTaskRule(task: Pick<TaskCard, 'text' | 'executor'>, fallbackExecutorPlayerId: number): ResolvedTaskRule {
   const direction = taskDirection(task.text);
   const fallback = fallbackExecutorPlayerId === 1 ? 1 : 0;
-  const flexible = reviewedTaskOf(taskBody(task.text))?.direction === 'perspective';
+  const body = taskBody(task.text);
+  const flexible = reviewedTaskOf(body)?.direction === 'perspective'
+    || (direction === 'perspective' && SHARED_THEN_SPEAK.test(body) && task.executor === 'together');
   const fixed = direction === 'male' ? 0 : direction === 'female' ? 1
     : flexible ? null : task.executor === 'male' ? 0 : task.executor === 'female' ? 1 : null;
   if (direction === 'together' || (!flexible && fixed === null && task.executor === 'together' && direction !== 'other')) {
@@ -114,7 +122,10 @@ export function formatTaskInstruction(text: string, rule: ResolvedTaskRule): str
       return word === '你的' ? `${speaker}的` : speaker;
     })
   ).join('');
-  if (EXPLICIT_ACTOR.test(body) || /^(?:男方|女方)(?!的)/.test(explicit)) return explicit;
+  // 改写稿已逐句标明角色，可能以双方的准备动作开头。
+  if (reviewedTaskOf(original)?.wording || EXPLICIT_ACTOR.test(body) || /^(?:男方|女方)(?!的)/.test(explicit)) return explicit;
+  const mixed = explicit.match(SHARED_THEN_SPEAK);
+  if (mixed) return `双方${mixed[1]}。${speaker}${mixed[2].replace(/^(?:再|然后|接着)/, '')}`;
   if (/^贴耳说出/.test(explicit)) return `${speaker}贴近${partner}耳边${explicit.slice(2)}`;
   if (/^(?:说出|说一句|告诉|描述|询问|回答|分享)/.test(explicit) && !explicit.includes(partner)) {
     return `${speaker}向${partner}${explicit}`;
@@ -128,7 +139,14 @@ export function taskBody(text: string): string {
 
 /** 兼容已入队的旧卡，只在有旧前缀时重排正文。 */
 export function displayQueuedTask(text: string, executor: number, mode: TaskExecutionMode): string {
-  if (!ASSIGNMENT_PREFIX.test(text)) return text;
+  if (!ASSIGNMENT_PREFIX.test(text)) {
+    const oldMixed = text.match(/^(男方|女方|双方)(.+)$/);
+    if (oldMixed && SHARED_THEN_SPEAK.test(oldMixed[2])) {
+      const body = oldMixed[2];
+      return formatTaskInstruction(body, resolveTaskRule({ text: body, executor: 'both' }, executor));
+    }
+    return text;
+  }
   const tag = mode === 'together' ? 'together' : executor === 1 ? 'female' : 'male';
   return formatTaskInstruction(text, resolveTaskRule({ text, executor: tag }, executor));
 }
