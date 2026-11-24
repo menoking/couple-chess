@@ -28,6 +28,9 @@ const SHARED_THEN_SPEAK = new RegExp(
 );
 const JOINT_ONLY = /^(?:(?:手牵手|牵手|对视|拥抱|相拥|相互拥抱)(?:[\d一二三四五六七八九十半两]+\s*(?:秒钟?|分钟))?[。！]?$|相互)/;
 const MUTUAL_KISS = /^(?:和|与)(?:对方|对手)(?:深情接吻|法式湿吻|湿吻|舌吻|亲吻)[\d一二三四五六七八九十半两]+\s*(?:秒钟?|分钟)[。！]?$/;
+const PROVIDER_ROLE = /^(?:执行方|主动方|主导方)$/;
+const RECEIVER_ROLE = /^(?:接受方|被动方|接受者)$/;
+const QUESTION_CARD = /^(?:回答\s*[：:]|你[^。！]*[？?]$)/;
 const UNASSIGNED_ACTOR = /^(?:一方|另一方|接受者|主导者|主动方)|(?:让|由|请)(?:ta|他\/她|他（她）)|(?:被|任由)(?:对方|对手|男仆|男主|女仆|女主)/i;
 
 function taskDirection(text: string): 'male' | 'female' | 'other' | 'together' | 'uncertain' | 'perspective' {
@@ -116,26 +119,29 @@ export function createRewardFallbackTask(): TaskCard {
 export function formatTaskInstruction(text: string, rule: ResolvedTaskRule): string {
   const original = taskBody(text);
   if (IMPLIED_HUG_PROVIDER.test(original)) return original;
-  const body = reviewedTaskOf(original)?.wording ?? original;
+  const review = reviewedTaskOf(original);
+  if (review?.direction === 'blocked') return original;
+  const body = review?.wording ?? original;
   if (rule.executionMode === 'together') {
     if (MUTUAL_KISS.test(body)) return `双方${body.slice(3)}`;
-    return /^(?:双方|两人|你们|一方|第一轮)/.test(body) ? body : `双方${body}`;
+    return /^(?:双方|两人|你们|(?:由)?一方|第一轮)/.test(body) ? body : `双方${body}`;
   }
   // 没有明确主体时保留原文，不凭空把「一方」改成当前执行人。
   if (taskDirection(original) === 'uncertain' && UNASSIGNED_ACTOR.test(original)) return body;
   const speaker = NAMES[rule.perspectivePlayerId];
   const partner = NAMES[1 - rule.perspectivePlayerId];
+  if (QUESTION_CARD.test(body)) return `${speaker}向${partner}回答：“${body.replace(/^回答\s*[：:]\s*/, '')}”`;
   // 引号里的台词保持原样，代词仍以实际说话者的视角理解。
   const explicit = body.split(/(「[^」]*」|“[^”]*”|「[^」]*$)/).map((part, index) =>
-    index % 2 === 1 ? part : part.replace(/对方|接受方|执行方|你的|你(?!们)/g, word => {
+    index % 2 === 1 ? part : part.replace(/对方|接受方|被动方|接受者|执行方|主动方|主导方|你的|你(?!们)/g, word => {
       if (word === '对方') return partner;
-      if (word === '接受方') return NAMES[rule.targetPlayerId ?? (1 - rule.executorPlayerId)];
-      if (word === '执行方') return NAMES[rule.executorPlayerId];
+      if (RECEIVER_ROLE.test(word)) return NAMES[rule.targetPlayerId ?? (1 - rule.executorPlayerId)];
+      if (PROVIDER_ROLE.test(word)) return NAMES[rule.executorPlayerId];
       return word === '你的' ? `${speaker}的` : speaker;
     })
   ).join('');
   // 改写稿已逐句标明角色，可能以双方的准备动作开头。
-  if (reviewedTaskOf(original)?.wording || EXPLICIT_ACTOR.test(body) || /^(?:男方|女方)(?!的)/.test(explicit)) return explicit;
+  if (review?.wording || EXPLICIT_ACTOR.test(body) || /^(?:由)?(?:男方|女方)(?!的)/.test(explicit)) return explicit;
   const mixed = explicit.match(SHARED_THEN_SPEAK);
   if (mixed) return `双方${mixed[1]}。${speaker}${mixed[2].replace(/^(?:再|然后|接着)/, '')}`;
   if (/^贴耳说出/.test(explicit)) return `${speaker}贴近${partner}耳边${explicit.slice(2)}`;

@@ -5,6 +5,27 @@ type Direction = 'male' | 'female' | 'perspective' | 'together' | 'blocked';
 type ReviewedTask = { direction: Direction; wording?: string };
 
 const entries: ReadonlyArray<readonly [text: string, direction: Direction, wording?: string]> = [
+  // 只纠正角色分类，原文仍用于题库。
+  ["只穿内衣背靠背坐着，用呼吸带动身体轻轻贴合1分钟", "together"],
+  ["保持内衣不动，用手指沿腰带外缘描一圈，再交换", "together"],
+  ["隔着内衣用两种不同压力交替触碰30秒，结束后交换", "together"],
+  ["进入后每十次动作交换一次报数者，完成两轮", "together"],
+  ["选择体位后每次动作前交换一句状态词", "together"],
+  ["三轮命令分别控制呼吸、视线和手部位置，最后交换", "together"],
+  ["选择体位后只做五次动作，每次交换一次主导权", "together"],
+  ["用被子把两人裹成一个“寿司卷”拥抱30秒", "together"],
+  ["只穿内裤，模仿摔跤动作纠缠在一起", "together"],
+  ["尝试“剪刀式”体位（双方腿部交叉）", "together"],
+  ["当天一起洗澡", "together"],
+  ["结束后拥抱10分钟，不许玩手机", "together"],
+  ["交换内衣", "together"],
+  ["交杯酒和对手一起喝半杯", "together"],
+  ["结束后各说一个刚才最有效的沟通暗号", "together"],
+  ["如果是周末，约定明天谁做早餐", "together"],
+  ["由一方发出三个脱衣或亲吻指令，另一方可随时跳过", "together"],
+  ["被动方闭眼，主动方每30秒用一句话确认边界后再换触碰部位", "perspective"],
+  ["由被动方选体位，主导方只能按三个固定节奏动作", "perspective"],
+  ["你愿意尝试口交、互相自慰或69中的哪一种？", "perspective"],
   // 逐句分清准备动作、服务动作和回应
   ["让对方坐在你腿上，双方只用额头相触并调整呼吸30秒", "together", "一方坐到另一方腿上。双方轻抵额头，一起调整呼吸，持续30秒。"],
   ["接受者只能用手势表示压力，主导者每15秒复述确认", "perspective", "接受方用手势表示感受到的力度。执行方每15秒复述一次并请接受方确认。"],

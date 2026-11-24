@@ -31,6 +31,23 @@ describe('task execution rules', () => {
     expect(resolveTaskRule(facing, 1).executionMode).toBe('together');
     expect(resolveTaskRule(question, 1).executionMode).toBe('directed');
   });
+
+  it('separates shared activities, role-specific actions and quoted questions', () => {
+    const shared = { text: '结束后各说一个刚才最有效的沟通暗号', executor: 'both' as const };
+    const roles = { text: '被动方闭眼，主动方每30秒用一句话确认边界后再换触碰部位', executor: 'both' as const };
+    const question = { text: '回答：你最希望对方今晚主动做的一件小事是什么？', executor: 'both' as const };
+    for (const seat of [0, 1]) {
+      expect(rewardTaskTier(shared, 1 - seat, seat)).toBe(2);
+      expect(formatTaskInstruction(shared.text, resolveTaskRule(shared, seat))).toBe('双方结束后各说一个刚才最有效的沟通暗号');
+      const [actor, receiver] = seat === 0 ? ['男方', '女方'] : ['女方', '男方'];
+      const rule = resolveTaskRule(roles, seat);
+      expect(rule).toMatchObject({ executorPlayerId: seat, targetPlayerId: 1 - seat });
+      expect(formatTaskInstruction(roles.text, rule)).toBe(`${receiver}闭眼，${actor}每30秒用一句话确认边界后再换触碰部位`);
+      expect(formatTaskInstruction(question.text, resolveTaskRule(question, seat))).toBe(
+        `${actor}向${receiver}回答：“你最希望对方今晚主动做的一件小事是什么？”`
+      );
+    }
+  });
   it.each([0, 1] as const)('assigns the person providing guidance independently from the person directing it (%i)', executor => {
     const task = { text: '让对方用语言指导你的手，完成一次边缘刺激', executor: 'both' as const };
     const rule = resolveTaskRule(task, executor);
